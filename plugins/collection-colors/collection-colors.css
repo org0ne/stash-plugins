@@ -33,20 +33,11 @@
   transform: scale(0.97) !important;
 }
 
-/* Wrapper inserted around the card pill (see decorateCard() in the JS) —
-   forces the pill onto its own guaranteed line within the native
-   `.card-popovers` flex-wrap bar, left-aligned, regardless of how many
-   other icons that bar holds or how narrow the card is. Fixes a real bug
-   found on a second stash instance with a different plugin set: without
-   this, the pill sometimes wrapped unpredictably depending on available
-   width, and native `.card-popovers { justify-content: center }` then
-   centered that lone wrapped item, reading as a misaligned floating badge
-   instead of a normal part of the row. */
-.stash-collection-pill-row {
-  flex-basis: 100% !important;
-  display: flex !important;
-  justify-content: flex-start !important;
-}
+/* The .stash-collection-pill-row wrapper that used to live here (forcing
+   the pill onto its own line) is gone — reverted in favor of a bare pill
+   that dracula-layout's own popover priority/overflow-hide system (if
+   that plugin is installed) can anchor and reorder like any native icon.
+   See decorateCard() in the JS for the full history. */
 
 /* The fps/resolution readout and Director row that used to live here
    (HEADER TECH READOUT / HEADER DIRECTOR ROW) moved to dracula-layout's
