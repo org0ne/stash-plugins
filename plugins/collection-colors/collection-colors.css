@@ -50,6 +50,35 @@
   padding: 0 14px !important;
 }
 
+/* Force the popover bar to a single row, independent of the host theme.
+   Confirmed live on the standalone verification instance (192.168.11.109,
+   no dracula-layout — see project memory) that stash's own native rule for
+   this bar is `flex-wrap: wrap; height: auto; overflow: visible` — nothing
+   in this plugin's own CSS constrained that before, since it was written
+   assuming the JS overflow-hide logic alone was enough.
+
+   It isn't: anchorButtonsRight() in the JS detects overflow by checking
+   whether an item's right edge exceeds the bar's right edge. An item that
+   *wraps* to a second row keeps the same horizontal span as one that
+   fits — wrapping only moves it down, not right — so its right edge never
+   exceeds the bar's, and the hide logic silently never triggers for it.
+   With native wrap+auto-height, a card with enough native icons (plus the
+   pill) simply grows a second row instead of ever asking the JS to hide
+   anything.
+
+   `flex-wrap: nowrap` alone is enough to fix it: a nowrap flex row is
+   exactly one line tall by definition (sized to its tallest single-line
+   child), so this needs no fixed height of its own to still guarantee one
+   row — items that don't fit now overflow horizontally instead of
+   wrapping down, which is exactly what the JS's right-edge overflow check
+   is built to catch and hide. `overflow: hidden` on top clips that
+   horizontal overflow from ever bleeding past the card's own edge in the
+   single frame before the JS's ResizeObserver callback runs. */
+.scene-card .card-popovers.btn-group {
+  flex-wrap: nowrap !important;
+  overflow: hidden !important;
+}
+
 /* .stash-collection-pill-row (a wrapper forcing the pill onto its own
    line) doesn't exist any more — this plugin now runs its own complete
    popover priority/anchor/overflow-hide system (see "POPOVER REORDERING"
