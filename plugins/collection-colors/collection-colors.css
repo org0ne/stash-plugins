@@ -79,6 +79,46 @@
   overflow: hidden !important;
 }
 
+/* Anchor the bar's content to the left, independent of host theme.
+   Confirmed live on the standalone verification instance that stash's own
+   native `justify-content` for this bar is `center`, not `flex-start`.
+   That's invisible while everything fits, but the moment total content
+   (pill + native icons, even the visibility:hidden ones — they still take
+   up layout space) exceeds the bar's width, a centered nowrap row
+   overflows equally on BOTH sides, not just the trailing edge the JS
+   overflow-hide logic (anchorButtonsRight()) was built to watch. The
+   result: the pill — the bar's first child, at the row's leading edge —
+   gets its own left portion clipped by this rule's own `overflow: hidden`,
+   while the native icons at the trailing edge stay fully visible, which is
+   backwards from the intended "hide lowest-priority icons first, pill
+   always fully visible" behavior. Reproduced live: at a 600px viewport a
+   "Supjav" pill clipped 22px off its own left edge, rendering as "pjav".
+   `justify-content: flex-start` pins the row's start to the bar's own left
+   padding edge regardless of overflow, so any leftover overflow is pushed
+   to the trailing edge only — where natives[0]'s own `margin-left: auto`
+   and the hide-lowest-priority-first logic already expect it. */
+.scene-card .card-popovers.btn-group {
+  justify-content: flex-start !important;
+}
+
+/* Keep each native icon's count number beside its icon, never wrapped
+   below it. Confirmed live that stash's native markup for these buttons
+   (e.g. `<button class="minimal btn btn-primary"><svg/><span>1</span>
+   </button>`) is plain `display: inline-block` with no flex/nowrap of its
+   own — the icon and count are just ordinary inline content. That's fine
+   at rest, but the moment this plugin's own overflow-hide logic or a
+   narrow card squeezes the button below its content's natural width,
+   inline content can wrap like text, dropping the count onto its own line
+   under the icon — a real second row inside a single icon, not just the
+   bar-level wrap already fixed above. `display: flex` turns icon+count
+   into flex siblings (no wrapping by default) instead of invisible inline
+   boxes that can break like a paragraph. */
+.scene-card .card-popovers.btn-group > * > button {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+}
+
 /* .stash-collection-pill-row (a wrapper forcing the pill onto its own
    line) doesn't exist any more — this plugin now runs its own complete
    popover priority/anchor/overflow-hide system (see "POPOVER REORDERING"
