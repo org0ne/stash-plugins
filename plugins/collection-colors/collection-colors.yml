@@ -1,0 +1,20 @@
+name: Collection Colors
+description: >
+  Colors scene cards by which configured Library path they live under —
+  auto-discovered from Settings > Library, no hardcoded paths. Per-folder
+  colors are editable via a picker injected into this plugin's own
+  Settings > Plugins section.
+version: 1.0.0
+settings:
+  collectionColors:
+    displayName: Collection colors (raw JSON)
+    description: >
+      Auto-generated JSON mapping each configured Library path to a hex
+      color. Edit via the color picker in this section instead of this
+      raw field directly — it's kept in sync automatically.
+    type: STRING
+ui:
+  javascript:
+    - collection-colors.js
+  css:
+    - collection-colors.css

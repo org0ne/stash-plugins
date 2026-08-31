@@ -1,0 +1,228 @@
+/* ============================
+ *  CARD PILL
+ *  Ported from dracula-layout/clean-cards.css's .stash-collection-pill —
+ *  same look/behaviour, now this plugin's own so it works standalone
+ *  without dracula-layout installed. Color itself is set inline per-pill
+ *  from the plugin's saved (or default) color, not here.
+ * ============================ */
+.stash-collection-pill {
+  margin-right: 4px !important;
+  margin-left: 0 !important;
+  padding: 0 7px !important;
+  height: 24px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  align-self: center !important;
+  flex-shrink: 0 !important;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.8px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+  opacity: 0.92 !important;
+  cursor: pointer !important;
+  transition: opacity 0.15s ease, transform 0.1s ease !important;
+}
+.stash-collection-pill:hover {
+  opacity: 1 !important;
+  transform: scale(1.06) !important;
+}
+.stash-collection-pill:active {
+  transform: scale(0.97) !important;
+}
+
+/* The fps/resolution readout and Director row that used to live here
+   (HEADER TECH READOUT / HEADER DIRECTOR ROW) moved to dracula-layout's
+   scene-dashboard.css — see .dl-scene-tech/.dl-scene-director there.
+   Neither was actually collection data; dracula-layout already had both
+   natively for its own Metadata mirrors, so building them here meant a
+   second GraphQL fetch and a dependency on this plugin knowing dracula-
+   layout's exact header layout, not just its documented badge slot. */
+
+/* Disabled 2026-08-30: pill moved to between Original Title and the
+   toolbar instead (see collection-colors.js, trySetupHeaderPill()).
+   Left commented, not deleted, in case this placement is restored.
+
+ *  METADATA PILL
+ *  Reaches into dracula-layout's Metadata card, if present, adding a
+ *  "Collection:" row (see trySetupMetadataPill() in the JS) alongside
+ *  the card's own native rows. The selector simply matches nothing when
+ *  dracula-layout isn't installed.
+ *
+ *  The row is `display: grid` (dracula-layout's own rule, shared by every
+ *  [data-dl-item="scenedetails"] row) with an 84px label column then
+ *  `1fr` for the value — and grid's default justify-items is `stretch`,
+ *  so without this the pill would stretch to fill that entire 1fr
+ *  column instead of hugging the collection name's own width.
+.dl-scene-collection-pill {
+  justify-self: start;
+}
+*/
+
+/* ============================
+ *  SETTINGS PANEL (Settings > Plugins)
+ *  A native <details>/<summary> — closed by default (see
+ *  buildSettingsPanel() in the JS) so the color grid doesn't add height to
+ *  the plugin's settings block until someone actually opens it.
+ * ============================ */
+.collection-colors-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.collection-colors-panel > summary {
+  cursor: pointer;
+  list-style: none;
+}
+/* Hide both browsers' native disclosure triangle so the custom ::before
+   arrow below is the only one — Chromium's ::-webkit-details-marker and
+   Firefox's ::marker (list-style: none alone doesn't reach Firefox's). */
+.collection-colors-panel > summary::-webkit-details-marker {
+  display: none;
+}
+.collection-colors-panel > summary::marker {
+  content: '';
+}
+.collection-colors-panel > summary > h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.collection-colors-panel > summary > h3::before {
+  content: '▸';
+  display: inline-block;
+  font-size: 0.7em;
+  transition: transform 0.15s ease;
+}
+.collection-colors-panel[open] > summary > h3::before {
+  transform: rotate(90deg);
+}
+.collection-colors-panel > .sub-heading,
+.collection-colors-panel > .collection-colors-grid {
+  display: none;
+}
+.collection-colors-panel[open] > .sub-heading,
+.collection-colors-panel[open] > .collection-colors-grid {
+  display: flex;
+}
+
+.collection-colors-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 640px;
+}
+
+.collection-colors-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.collection-colors-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.collection-colors-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.collection-colors-swatch {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+/* Native <input type=color> swatch has its own inset padding by default
+   in most browsers; strip it so the full 32px reads as solid color. */
+.collection-colors-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.collection-colors-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.collection-colors-hex {
+  flex: 0 0 auto;
+  width: 74px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--dl-fg, #f8f8f2);
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 12px;
+}
+.collection-colors-hex:focus {
+  outline: none;
+  border-color: rgba(255, 128, 191, 0.55);
+  background: rgba(255, 255, 255, 0.07);
+}
+.collection-colors-hex.is-invalid {
+  border-color: rgba(248, 113, 113, 0.7);
+  color: #f87171;
+}
+
+.collection-colors-copy {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: rgba(248, 248, 242, 0.6);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.collection-colors-copy:hover {
+  color: #f8f8f2;
+  background: rgba(255, 255, 255, 0.06);
+}
+/* Swap glyph on copy instead of two buttons — default shows the copy
+   icon, .is-copied (set briefly by the click handler) flips to a
+   checkmark for feedback, then reverts on its own. */
+.collection-colors-copy .icon-check {
+  display: none;
+  color: #34d399;
+}
+.collection-colors-copy.is-copied .icon-copy {
+  display: none;
+}
+.collection-colors-copy.is-copied .icon-check {
+  display: block;
+}
+
+.collection-colors-label {
+  flex: 0 0 160px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-colors-path {
+  flex: 1 1 auto;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 12px;
+  opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
