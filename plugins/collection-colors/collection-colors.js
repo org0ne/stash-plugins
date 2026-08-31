@@ -325,7 +325,19 @@
       // hidden item now fits again. The loop below only ever *sets* the
       // hidden state; without this it would never unset one.
       natives.forEach(el => el.style.removeProperty('display'));
-      const barRight = bar.getBoundingClientRect().right;
+      // The threshold is the bar's *content*-box right edge (border-box
+      // minus its own right padding), not the bare border-box edge.
+      // Found live: comparing against the raw border-box edge only
+      // guarantees content won't get clipped by this bar's own
+      // `overflow: hidden` — it lets kept icons poke up to a full
+      // padding-width into the 14px inset before the hide-cascade
+      // triggers, which defeats the point of that padding (see the
+      // symmetric-inset rule in collection-colors.css). Subtracting the
+      // bar's own computed padding-right makes the threshold the actual
+      // visual boundary icons are meant to respect.
+      const barRect = bar.getBoundingClientRect();
+      const barPadRight = parseFloat(getComputedStyle(bar).paddingRight) || 0;
+      const barRight = barRect.right - barPadRight;
       let clipping = false;
       for (const el of natives) {
         if (clipping) {
