@@ -206,7 +206,38 @@
       const collection = deriveCollection(collections, filePath || '');
       card.dataset.collectionColors = collection ? collection.label : 'none';
       if (!collection) return;
-      bar.insertBefore(buildPill(collection), bar.firstChild);
+
+      // Native `.card-popovers` is `display: flex; flex-wrap: wrap;
+      // justify-content: center`, and its exact set of children (tag/
+      // performer/marker counts, O-counter, organized, duplicate-finder,
+      // plus whatever any *other* installed plugin also adds to this same
+      // bar) isn't something this plugin controls or can predict — on a
+      // narrow enough card, or with enough other icons crowding the bar,
+      // that combined width overflows and *something* wraps to its own
+      // line. Because of justify-content: center, a lone wrapped item
+      // renders centered/detached rather than continuing the row —
+      // confirmed live on a real second stash instance (different plugin
+      // set, narrower card grid) where this pill was the item that
+      // wrapped, looking like a misaligned floating badge below the icon
+      // row, not a bug that ever showed up in this project's own testing
+      // against its own wider default card width.
+      //
+      // Rather than try to predict/avoid that threshold (impossible in
+      // general — the available width and the *other* icons present are
+      // both outside this plugin's control), the pill gets its own
+      // guaranteed line unconditionally: a wrapper with `flex-basis: 100%`
+      // takes a full flex-wrap line by itself, so from the bar's
+      // perspective there's nothing left to conditionally overflow.
+      // `justify-content: flex-start` on that wrapper (not the bar) keeps
+      // the pill left-aligned on its own line rather than inheriting the
+      // bar's center alignment for a lone wrapped item — same two-node
+      // "control this item's own alignment independent of the parent's"
+      // technique documented in dracula-layout's own CLAUDE.md for
+      // exactly this class of flex-wrap alignment problem.
+      const row = document.createElement('div');
+      row.className = 'stash-collection-pill-row';
+      row.appendChild(buildPill(collection));
+      bar.insertBefore(row, bar.firstChild);
     });
   }
 
