@@ -8,7 +8,17 @@
 .stash-collection-pill {
   margin-right: 4px !important;
   margin-left: 0 !important;
-  padding: 0 7px !important;
+  /* Asymmetric vertical padding (0 top, 2px bottom), not a symmetric
+     "0 7px" — the label text is centered by the flex align-items rule
+     below, and this pill's fixed 24px height/1px border/line-height:1
+     combination leaves the rendered glyphs sitting about 1px low of true
+     optical center (confirmed live: measured the text's own rendered
+     bounding box vs the pill's box before/after — this shifts it up
+     exactly 1px with zero change to the pill's own box, border, or
+     height). Shrinking available content height from the bottom only is
+     what moves the flex-centered line up; shrinking evenly (adding equal
+     top+bottom padding) wouldn't move anything. */
+  padding: 0 7px 2px 7px !important;
   height: 24px !important;
   display: inline-flex !important;
   align-items: center !important;
