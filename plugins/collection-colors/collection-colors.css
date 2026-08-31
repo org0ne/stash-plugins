@@ -33,15 +33,21 @@
   transform: scale(0.97) !important;
 }
 
-/* Extra breathing room specifically when the pill is the fixed left
-   anchor of the card popover bar (see reorderPopoverBar()/
-   anchorButtonsRight() in the JS) — on top of that bar's own native
-   12px left padding, for ~16px total, matching this project's usual
-   inset convention. Scoped to this one context (not the base rule
-   above) so the scene-detail header placement — a different parent,
-   `.dl-scene-badge-slot` — is unaffected. */
-.card-popovers.btn-group > .stash-collection-pill {
-  margin-left: 4px !important;
+/* Symmetric 14px inset on both sides of the card popover bar — matches
+   the scene card's own title/text left inset exactly (measured live:
+   .card-section-title sits 14px right of .card-popovers' own left edge),
+   so the pill's left edge lines up with the title above it, and the
+   native icon group's right edge gets the same treatment on the other
+   side. Bar-level padding rather than a margin on any specific child:
+   the pill is always first (see reorderPopoverBar() in the JS) so the
+   left side is straightforward, but which native icon ends up *last* on
+   the right varies with priority/overflow-hiding — padding on the bar
+   itself is correct regardless of which child that happens to be.
+   Overrides that bar's own native `padding: 0 8px 0 12px !important`
+   (same selector, so this wins on source order — this plugin's CSS
+   loads after — confirmed live, not assumed). */
+.scene-card .card-popovers.btn-group {
+  padding: 0 14px !important;
 }
 
 /* .stash-collection-pill-row (a wrapper forcing the pill onto its own
