@@ -266,17 +266,36 @@
     Array.from(bar.children).forEach(el => {
       el.style.removeProperty('margin-left');
       el.style.removeProperty('visibility');
+      el.style.removeProperty('display');
     });
   }
 
   /* Push native buttons right as their own group, then hide any that
    * overflow the bar. The pill (if present) is excluded entirely — it's
    * a fixed left anchor, always visible, never touched here beyond a
-   * one-time reset of any margin/visibility a prior version of this
-   * logic might have left on it. Single persistent ResizeObserver per
+   * one-time reset of any margin/visibility/display a prior version of
+   * this logic might have left on it. Single persistent ResizeObserver per
    * bar so getBoundingClientRect() is always post-layout, and keeps
    * tracking the bar across future resizes instead of measuring once and
    * going stale.
+   *
+   * Overflow is hidden with `display: none`, not `visibility: hidden` —
+   * found live (192.168.11.109) that visibility alone left the icon group
+   * floating well short of the bar's right edge on any card with the full
+   * native icon set present. Root cause: `visibility: hidden` still
+   * reserves its element's box in layout — the flex line's total content
+   * width never actually shrinks just because some of it turned invisible.
+   * natives[0]'s `margin-left: auto` only has a positive value to resolve
+   * to when there's real free space in that line; if the *un-hidden*
+   * content already overflowed the bar (true for any card with every
+   * priority key present), the free space is zero and stays zero no
+   * matter how many of those still-space-occupying items get hidden
+   * afterward — the margin permanently resolves to 0, and the visible
+   * icons sit wherever they landed before hiding, nowhere near the right
+   * edge. `display: none` actually removes a hidden item from the line's
+   * width contribution, so once enough are removed for the rest to fit,
+   * the auto margin has real free space again and correctly pushes the
+   * remaining icons flush right.
    *
    * SCENE-CARD ONLY — see reorderPopoverBar()'s own performer-card
    * bail-out; callers must route those bars to clearAnchorState() instead. */
@@ -285,6 +304,7 @@
     if (pill) {
       pill.style.removeProperty('margin-left');
       pill.style.removeProperty('visibility');
+      pill.style.removeProperty('display');
     }
     const natives = Array.from(bar.children).filter(el => el !== pill);
 
@@ -292,21 +312,29 @@
     natives.forEach(el => {
       el.style.removeProperty('margin-left');
       el.style.removeProperty('visibility');
+      el.style.removeProperty('display');
     });
     if (!natives[0]) return;
     natives[0].style.setProperty('margin-left', 'auto', 'important');
 
     const recompute = () => {
+      // Reset every pass, not just the first — display:none actually
+      // removes an item from the line's content width (that's the whole
+      // point, see above), so a later pass triggered by a real resize
+      // needs a clean slate to correctly re-discover that a previously-
+      // hidden item now fits again. The loop below only ever *sets* the
+      // hidden state; without this it would never unset one.
+      natives.forEach(el => el.style.removeProperty('display'));
       const barRight = bar.getBoundingClientRect().right;
       let clipping = false;
       for (const el of natives) {
         if (clipping) {
-          el.style.setProperty('visibility', 'hidden', 'important');
+          el.style.setProperty('display', 'none', 'important');
         } else {
           const elRight = el.getBoundingClientRect().right;
           if (elRight > barRight - 1) {
             clipping = true;
-            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('display', 'none', 'important');
           }
         }
       }
