@@ -207,18 +207,37 @@
       card.dataset.collectionColors = collection ? collection.label : 'none';
       if (!collection) return;
 
-      // Bare pill, no wrapper — a wrapper (flex-basis: 100%, forcing the
-      // pill onto its own guaranteed line) was tried here first, to fix a
-      // real wrap/alignment bug on a second stash instance whose
-      // `.card-popovers` allows flex-wrap. Reverted: the actual fix
-      // belongs one layer up, in whichever plugin owns that bar's layout
-      // (dracula-layout, if installed) — its own popover priority/
-      // overflow-hide system now treats this pill as one more prioritized
-      // item (same row as every native icon, lowest-priority items hidden
-      // instead of wrapped when a card is too narrow), which is what
-      // actually keeps everything vertically aligned. A bare pill is what
-      // that system expects to find and anchor/reorder.
-      bar.insertBefore(buildPill(collection), bar.firstChild);
+      // Bare pill first — a host plugin (dracula-layout or similar) that
+      // runs its own popover priority/overflow-hide system for this bar
+      // is the *preferred* way this gets vertically aligned with the
+      // native icons: it reacts to this insertion via its own
+      // MutationObserver and treats the pill as one more prioritized
+      // item, exactly like a native icon (lowest-priority items hidden,
+      // not wrapped, on a narrow card). That system marks the bar
+      // (`bar.dataset.dlPopoverManaged = 'true'`) as it claims it.
+      //
+      // But this plugin has to work standalone too, with no such host
+      // present — and on a theme whose `.card-popovers` allows
+      // flex-wrap, a bare pill with nothing managing the bar can wrap to
+      // its own centered/detached line unpredictably (the original bug
+      // this whole mechanism exists to fix — confirmed live on a second
+      // stash instance with no dracula-layout equivalent installed). So:
+      // wait one short beat for a host to claim the bar, then fall back
+      // to the guaranteed-own-line wrapper ONLY if nothing did. The delay
+      // has to be long enough that a host's own MutationObserver reliably
+      // gets a turn first (its reaction to this same insertion is what
+      // sets the marker) without being so long a user watching the page
+      // load would see a visible jump if the fallback ever does kick in.
+      const pill = buildPill(collection);
+      bar.insertBefore(pill, bar.firstChild);
+      setTimeout(() => {
+        if (!document.contains(pill)) return;
+        if (bar.dataset.dlPopoverManaged === 'true') return;
+        const row = document.createElement('div');
+        row.className = 'stash-collection-pill-row';
+        bar.insertBefore(row, pill);
+        row.appendChild(pill);
+      }, 150);
     });
   }
 
