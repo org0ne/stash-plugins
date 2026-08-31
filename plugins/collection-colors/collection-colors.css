@@ -33,6 +33,17 @@
   transform: scale(0.97) !important;
 }
 
+/* Extra breathing room specifically when the pill is the fixed left
+   anchor of the card popover bar (see reorderPopoverBar()/
+   anchorButtonsRight() in the JS) — on top of that bar's own native
+   12px left padding, for ~16px total, matching this project's usual
+   inset convention. Scoped to this one context (not the base rule
+   above) so the scene-detail header placement — a different parent,
+   `.dl-scene-badge-slot` — is unaffected. */
+.card-popovers.btn-group > .stash-collection-pill {
+  margin-left: 4px !important;
+}
+
 /* .stash-collection-pill-row (a wrapper forcing the pill onto its own
    line) doesn't exist any more — this plugin now runs its own complete
    popover priority/anchor/overflow-hide system (see "POPOVER REORDERING"

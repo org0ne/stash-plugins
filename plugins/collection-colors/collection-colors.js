@@ -181,27 +181,33 @@
    *  POPOVER REORDERING
    *  Ported in from dracula-layout's clean-cards.js (originally the
    *  user's own customJavaScript.js) — this plugin is meant to be fully
-   *  independent, producing a correct result (the collection pill
-   *  vertically aligned with every native popover icon, on one row, with
-   *  the lowest-priority items hidden rather than wrapped when a card is
-   *  too narrow) with no other plugin installed. dracula-layout, if
-   *  present, no longer knows anything about this plugin's pill beyond
-   *  excluding it by class name from its OWN, separate reordering of the
-   *  native icons — so without this section duplicating that whole
-   *  system, this plugin's pill would go back to being a bare, unmanaged
-   *  element that can wrap unpredictably on any theme whose
-   *  `.card-popovers` allows flex-wrap (the original bug this whole
-   *  mechanism exists to fix).
+   *  independent, producing a correct result with no other plugin
+   *  installed. dracula-layout, if present, no longer knows anything
+   *  about this plugin's pill beyond excluding it by class name from its
+   *  OWN, separate reordering of the native icons — so without this
+   *  section duplicating that whole system, this plugin's pill would go
+   *  back to being a bare, unmanaged element that can wrap unpredictably
+   *  on any theme whose `.card-popovers` allows flex-wrap (the original
+   *  bug this whole mechanism exists to fix).
+   *
+   *  Layout: the pill is a fixed, always-visible anchor at the bar's
+   *  left edge; every native icon is right-justified as its own group,
+   *  reordered among themselves by priority, with the lowest-priority
+   *  ones hidden (never wrapped) when the card is too narrow to fit
+   *  them all. The pill itself never competes for that space or gets
+   *  hidden — it's structurally separate from the natives' priority
+   *  competition now, not just first among equals in it (an earlier,
+   *  same-day version of this had `collection` as a normal priority
+   *  key, pushing the *whole* row — pill included — flush right as one
+   *  group; reverted per request for two distinct left/right zones).
    *
    *  Applies to EVERY scene-card popover bar, not just ones this plugin
    *  adds a pill to — a card with no matching collection still gets its
    *  native icons reordered/anchored/overflow-managed, matching how this
-   *  worked before the pill even existed as a separate concern (one
-   *  unified system for the whole bar, not two competing ones).
+   *  worked before the pill even existed as a separate concern.
    * ============================ */
 
   const POPOVER_KEY_CLASSES = {
-    collection:        ["stash-collection-pill"],
     "performer-count": ["performer-count"],
     "count-button":    ["count-button", "increment-only"],
     "marker-count":    ["marker-count"],
@@ -212,7 +218,7 @@
   };
 
   const DEFAULT_POPOVER_PRIORITY = [
-    "collection", "performer-count", "count-button", "marker-count",
+    "performer-count", "count-button", "marker-count",
     "tag-count", "group-count", "organized", "other-copies",
   ];
 
@@ -263,15 +269,24 @@
     });
   }
 
-  /* Push native buttons (and this plugin's own pill) right, then hide any
-   * that overflow the bar. Single persistent ResizeObserver per bar so
-   * getBoundingClientRect() is always post-layout, and keeps tracking the
-   * bar across future resizes instead of measuring once and going stale.
+  /* Push native buttons right as their own group, then hide any that
+   * overflow the bar. The pill (if present) is excluded entirely — it's
+   * a fixed left anchor, always visible, never touched here beyond a
+   * one-time reset of any margin/visibility a prior version of this
+   * logic might have left on it. Single persistent ResizeObserver per
+   * bar so getBoundingClientRect() is always post-layout, and keeps
+   * tracking the bar across future resizes instead of measuring once and
+   * going stale.
    *
    * SCENE-CARD ONLY — see reorderPopoverBar()'s own performer-card
    * bail-out; callers must route those bars to clearAnchorState() instead. */
   function anchorButtonsRight(bar) {
-    const natives = Array.from(bar.children);
+    const pill = bar.querySelector(':scope > .stash-collection-pill');
+    if (pill) {
+      pill.style.removeProperty('margin-left');
+      pill.style.removeProperty('visibility');
+    }
+    const natives = Array.from(bar.children).filter(el => el !== pill);
 
     // Reset all state from any prior call
     natives.forEach(el => {
@@ -314,14 +329,31 @@
     const isPerformerCard = !!bar.closest('.performer-card');
     if (isPerformerCard) { clearAnchorState(bar); return; }
 
-    const reorderKids = Array.from(bar.children);
-    if (!reorderKids.length) return;
+    const allKids = Array.from(bar.children);
+    if (!allKids.length) return;
+
+    // The pill always leads, unconditionally — not part of the priority
+    // list at all any more (see POPOVER REORDERING's own comment above).
+    // insertBefore() on a node that's already bar.firstElementChild is a
+    // safe no-op, not a real move, so this doesn't cause a mutation (and
+    // therefore doesn't self-trigger the observer watching this bar) once
+    // it's already in place.
+    const pill = allKids.find(el => el.classList.contains('stash-collection-pill'));
+    if (pill && bar.firstElementChild !== pill) {
+      bar.insertBefore(pill, bar.firstElementChild);
+    }
+
+    const reorderKids = allKids.filter(el => el !== pill);
+    if (!reorderKids.length) { anchorButtonsRight(bar); return; }
 
     reorderKids.forEach((el, i) => {
       if (!el.dataset._stashPid) el.dataset._stashPid = String(i);
     });
     const sig = reorderKids.map(el => el.dataset._stashPid).join('|');
-    if (bar.dataset._stashPopoverSig === sig) return;
+    if (bar.dataset._stashPopoverSig === sig) {
+      anchorButtonsRight(bar);
+      return;
+    }
 
     const used = new Set();
     const out = [];
@@ -339,6 +371,9 @@
       return;
     }
 
+    // Appending after the pill (still bar's first child, untouched above)
+    // lands this group right after it, which is exactly where it already
+    // was — this only ever reorders the natives *among themselves*.
     const frag = document.createDocumentFragment();
     out.forEach(el => frag.appendChild(el));
     bar.appendChild(frag);
