@@ -33,22 +33,13 @@
   transform: scale(0.97) !important;
 }
 
-/* Standalone fallback ONLY — applied by decorateCard() in the JS, and
-   only when nothing claims the bar (`bar.dataset.dlPopoverManaged`)
-   within a short delay after the bare pill is inserted. When a host
-   plugin (dracula-layout or similar) IS managing the bar, this class is
-   never added — the pill stays bare and that system anchors/reorders it
-   like any native icon instead. See decorateCard()'s own comment for the
-   full reasoning: a bare, unmanaged pill can wrap unpredictably on any
-   theme whose `.card-popovers` allows flex-wrap, so this row forces it
-   onto its own guaranteed, left-aligned line as a safe default when no
-   better system is present to keep it vertically aligned with the rest
-   of the bar. */
-.stash-collection-pill-row {
-  flex-basis: 100% !important;
-  display: flex !important;
-  justify-content: flex-start !important;
-}
+/* .stash-collection-pill-row (a wrapper forcing the pill onto its own
+   line) doesn't exist any more — this plugin now runs its own complete
+   popover priority/anchor/overflow-hide system (see "POPOVER REORDERING"
+   in the JS) for every scene-card bar, so the pill just needs to be a
+   normal bare item in that bar; that system keeps it vertically aligned
+   with the native icons and hides the lowest-priority item first when a
+   card is too narrow, rather than ever letting anything wrap. */
 
 /* The fps/resolution readout and Director row that used to live here
    (HEADER TECH READOUT / HEADER DIRECTOR ROW) moved to dracula-layout's

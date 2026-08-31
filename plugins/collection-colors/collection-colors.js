@@ -178,6 +178,233 @@
   }
 
   /* ============================
+   *  POPOVER REORDERING
+   *  Ported in from dracula-layout's clean-cards.js (originally the
+   *  user's own customJavaScript.js) — this plugin is meant to be fully
+   *  independent, producing a correct result (the collection pill
+   *  vertically aligned with every native popover icon, on one row, with
+   *  the lowest-priority items hidden rather than wrapped when a card is
+   *  too narrow) with no other plugin installed. dracula-layout, if
+   *  present, no longer knows anything about this plugin's pill beyond
+   *  excluding it by class name from its OWN, separate reordering of the
+   *  native icons — so without this section duplicating that whole
+   *  system, this plugin's pill would go back to being a bare, unmanaged
+   *  element that can wrap unpredictably on any theme whose
+   *  `.card-popovers` allows flex-wrap (the original bug this whole
+   *  mechanism exists to fix).
+   *
+   *  Applies to EVERY scene-card popover bar, not just ones this plugin
+   *  adds a pill to — a card with no matching collection still gets its
+   *  native icons reordered/anchored/overflow-managed, matching how this
+   *  worked before the pill even existed as a separate concern (one
+   *  unified system for the whole bar, not two competing ones).
+   * ============================ */
+
+  const POPOVER_KEY_CLASSES = {
+    collection:        ["stash-collection-pill"],
+    "performer-count": ["performer-count"],
+    "count-button":    ["count-button", "increment-only"],
+    "marker-count":    ["marker-count"],
+    "tag-count":       ["tag-count"],
+    "group-count":     ["group-count", "tag-tooltip"],
+    organized:         ["organized"],
+    "other-copies":    ["other-copies", "extra-scene-info"],
+  };
+
+  const DEFAULT_POPOVER_PRIORITY = [
+    "collection", "performer-count", "count-button", "marker-count",
+    "tag-count", "group-count", "organized", "other-copies",
+  ];
+
+  let POPOVER_ORDER_PARSED = DEFAULT_POPOVER_PRIORITY.map(key => POPOVER_KEY_CLASSES[key]);
+
+  (async () => {
+    try {
+      const data = await gql(`{ configuration { plugins } }`);
+      const raw = data?.configuration?.plugins?.[PLUGIN_ID]?.popoverPriority;
+      if (!raw) return;
+      const listed = raw.split(',').map(s => s.trim()).filter(Boolean).filter(k => POPOVER_KEY_CLASSES[k]);
+      if (!listed.length) return;
+      // Any known key the user's list omitted still appears, just last —
+      // after every key they did list — same "unrecognized item lands
+      // last" rule reorderPopoverBar() already applies one level down, to
+      // DOM children it can't match against any key at all.
+      const keys = listed.slice();
+      for (const key of DEFAULT_POPOVER_PRIORITY) {
+        if (!keys.includes(key)) keys.push(key);
+      }
+      POPOVER_ORDER_PARSED = keys.map(key => POPOVER_KEY_CLASSES[key]);
+      // Invalidate every bar's cached reorder signature so the next pass
+      // re-applies the newly-loaded priority — reorderPopoverBar() below
+      // otherwise trusts a signature computed under the default order and
+      // silently no-ops.
+      const bars = document.querySelectorAll('.card-popovers.btn-group');
+      bars.forEach(bar => { delete bar.dataset._stashPopoverSig; });
+      bars.forEach(reorderPopoverBar);
+    } catch (e) {
+      console.error('[CollectionColors] popover priority setting fetch failed', e);
+    }
+  })();
+
+  function matchesClassSpec(el, classes) {
+    if (classes.length === 1) return el.classList.contains(classes[0]);
+    return classes.every(cls => el.classList.contains(cls));
+  }
+
+  /* Remove any anchor/overflow state a bar may have picked up and stop
+   * watching it. Used for .performer-card bars, which must never get the
+   * scene-card-only anchoring/clipping treatment below — see clearAnchorState
+   * call sites in reorderPopoverBar. */
+  function clearAnchorState(bar) {
+    if (bar._stashRO) { bar._stashRO.disconnect(); bar._stashRO = null; }
+    Array.from(bar.children).forEach(el => {
+      el.style.removeProperty('margin-left');
+      el.style.removeProperty('visibility');
+    });
+  }
+
+  /* Push native buttons (and this plugin's own pill) right, then hide any
+   * that overflow the bar. Single persistent ResizeObserver per bar so
+   * getBoundingClientRect() is always post-layout, and keeps tracking the
+   * bar across future resizes instead of measuring once and going stale.
+   *
+   * SCENE-CARD ONLY — see reorderPopoverBar()'s own performer-card
+   * bail-out; callers must route those bars to clearAnchorState() instead. */
+  function anchorButtonsRight(bar) {
+    const natives = Array.from(bar.children);
+
+    // Reset all state from any prior call
+    natives.forEach(el => {
+      el.style.removeProperty('margin-left');
+      el.style.removeProperty('visibility');
+    });
+    if (!natives[0]) return;
+    natives[0].style.setProperty('margin-left', 'auto', 'important');
+
+    const recompute = () => {
+      const barRight = bar.getBoundingClientRect().right;
+      let clipping = false;
+      for (const el of natives) {
+        if (clipping) {
+          el.style.setProperty('visibility', 'hidden', 'important');
+        } else {
+          const elRight = el.getBoundingClientRect().right;
+          if (elRight > barRight - 1) {
+            clipping = true;
+            el.style.setProperty('visibility', 'hidden', 'important');
+          }
+        }
+      }
+    };
+
+    if (!bar._stashRO) {
+      bar._stashRO = new ResizeObserver(() => recompute());
+      bar._stashRO.observe(bar);
+    } else {
+      recompute();
+    }
+  }
+
+  function reorderPopoverBar(bar) {
+    if (!bar) return;
+
+    // Performer-card bars rely on pure CSS flex-stretch for their 2-button
+    // layout and must never receive the scene-card anchoring/overflow-
+    // clipping treatment — see anchorButtonsRight's doc comment for why.
+    const isPerformerCard = !!bar.closest('.performer-card');
+    if (isPerformerCard) { clearAnchorState(bar); return; }
+
+    const reorderKids = Array.from(bar.children);
+    if (!reorderKids.length) return;
+
+    reorderKids.forEach((el, i) => {
+      if (!el.dataset._stashPid) el.dataset._stashPid = String(i);
+    });
+    const sig = reorderKids.map(el => el.dataset._stashPid).join('|');
+    if (bar.dataset._stashPopoverSig === sig) return;
+
+    const used = new Set();
+    const out = [];
+
+    for (const classes of POPOVER_ORDER_PARSED) {
+      const found = reorderKids.find(el => !used.has(el) && matchesClassSpec(el, classes));
+      if (found) { used.add(found); out.push(found); }
+    }
+    for (const el of reorderKids) if (!used.has(el)) out.push(el);
+
+    const changed = out.length === reorderKids.length && out.some((el, i) => el !== reorderKids[i]);
+    if (!changed) {
+      bar.dataset._stashPopoverSig = sig;
+      anchorButtonsRight(bar);
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    out.forEach(el => frag.appendChild(el));
+    bar.appendChild(frag);
+
+    bar.dataset._stashPopoverSig = out.map(el => el.dataset._stashPid).join('|');
+    anchorButtonsRight(bar);
+  }
+
+  // Two-tier observer, matching dracula-layout's original design: a
+  // lightweight "boot" observer watches the whole body just for NEW
+  // `.card-popovers.btn-group` bars appearing (new cards mounting) and
+  // registers each with the shared live observer below, plus reorders it
+  // immediately; the live observer then only watches the (comparatively
+  // few) bars actually registered with it for later changes — a rating
+  // click, an async duplicate-finder icon appearing, this plugin's own
+  // pill insertion, etc — rather than one giant subtree observer
+  // reacting to every DOM mutation on the whole page.
+  const popoverObserver = new MutationObserver(muts => {
+    const bars = new Set();
+    for (const m of muts) {
+      const t = m.target;
+      if (!(t instanceof Element)) continue;
+      const bar = t.matches('.card-popovers.btn-group') ? t : t.closest?.('.card-popovers.btn-group');
+      if (bar) bars.add(bar);
+    }
+    if (!bars.size) return;
+    requestAnimationFrame(() => bars.forEach(reorderPopoverBar));
+  });
+
+  let popoverBootPending = [];
+  let popoverBootScheduled = false;
+  const popoverBootObserver = new MutationObserver(muts => {
+    for (const m of muts) {
+      for (const node of m.addedNodes) {
+        if (node instanceof Element) popoverBootPending.push(node);
+      }
+    }
+    if (popoverBootScheduled) return;
+    popoverBootScheduled = true;
+    queueMicrotask(() => {
+      const nodes = popoverBootPending;
+      popoverBootPending = [];
+      popoverBootScheduled = false;
+      nodes.forEach(node => {
+        if (node.matches?.('.card-popovers.btn-group')) {
+          popoverObserver.observe(node, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+          reorderPopoverBar(node);
+        } else {
+          node.querySelectorAll?.('.card-popovers.btn-group').forEach(bar => {
+            popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+            reorderPopoverBar(bar);
+          });
+        }
+      });
+    });
+  });
+
+  function initPopoverReordering() {
+    popoverBootObserver.observe(document.body, { childList: true, subtree: true });
+    document.querySelectorAll('.card-popovers.btn-group').forEach(bar => {
+      popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+      reorderPopoverBar(bar);
+    });
+  }
+
+  /* ============================
    *  CARD DECORATION
    *  Same insertion point/UX as the pill this replaces in clean-cards.js
    *  (dracula-layout): a clickable pill in `.card-popovers.btn-group`,
@@ -207,37 +434,17 @@
       card.dataset.collectionColors = collection ? collection.label : 'none';
       if (!collection) return;
 
-      // Bare pill first — a host plugin (dracula-layout or similar) that
-      // runs its own popover priority/overflow-hide system for this bar
-      // is the *preferred* way this gets vertically aligned with the
-      // native icons: it reacts to this insertion via its own
-      // MutationObserver and treats the pill as one more prioritized
-      // item, exactly like a native icon (lowest-priority items hidden,
-      // not wrapped, on a narrow card). That system marks the bar
-      // (`bar.dataset.dlPopoverManaged = 'true'`) as it claims it.
-      //
-      // But this plugin has to work standalone too, with no such host
-      // present — and on a theme whose `.card-popovers` allows
-      // flex-wrap, a bare pill with nothing managing the bar can wrap to
-      // its own centered/detached line unpredictably (the original bug
-      // this whole mechanism exists to fix — confirmed live on a second
-      // stash instance with no dracula-layout equivalent installed). So:
-      // wait one short beat for a host to claim the bar, then fall back
-      // to the guaranteed-own-line wrapper ONLY if nothing did. The delay
-      // has to be long enough that a host's own MutationObserver reliably
-      // gets a turn first (its reaction to this same insertion is what
-      // sets the marker) without being so long a user watching the page
-      // load would see a visible jump if the fallback ever does kick in.
-      const pill = buildPill(collection);
-      bar.insertBefore(pill, bar.firstChild);
-      setTimeout(() => {
-        if (!document.contains(pill)) return;
-        if (bar.dataset.dlPopoverManaged === 'true') return;
-        const row = document.createElement('div');
-        row.className = 'stash-collection-pill-row';
-        bar.insertBefore(row, pill);
-        row.appendChild(pill);
-      }, 150);
+      // Bare pill, no wrapper, no "is someone else managing this bar"
+      // detection — this plugin now runs its own complete popover
+      // priority/overflow-hide system (see POPOVER REORDERING above) for
+      // every scene-card bar, whether or not it ends up adding a pill to
+      // it, so it's always the one thing anchoring/reordering/hiding
+      // items in this bar. The live popoverObserver reacts to this
+      // insertion on its own (it's a childList mutation on a bar that
+      // observer is already watching), but reorder immediately too rather
+      // than waiting on that round trip.
+      bar.insertBefore(buildPill(collection), bar.firstChild);
+      reorderPopoverBar(bar);
     });
   }
 
@@ -599,4 +806,5 @@
   trySetupSettingsPanel();
   // trySetupMetadataPill(); // disabled — see note above its definition
   trySetupHeaderPill();
+  initPopoverReordering();
 })();

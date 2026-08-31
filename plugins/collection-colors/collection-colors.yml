@@ -13,6 +13,19 @@ settings:
       color. Edit via the color picker in this section instead of this
       raw field directly — it's kept in sync automatically.
     type: STRING
+  popoverPriority:
+    displayName: Scene card popover button priority
+    description: >
+      Comma-separated priority order for the scene-card popover row
+      (rating/tag/performer counts, organized flag, the collection pill,
+      etc). On a card too narrow to show everything on one line, the
+      lowest-priority items are hidden first rather than wrapping to a
+      second line. Known keys: collection, performer-count, count-button,
+      marker-count, tag-count, group-count, organized, other-copies.
+      Unknown keys are ignored; omitted known keys still appear, just
+      last, after every key you listed. Default:
+      collection,performer-count,count-button,marker-count,tag-count,group-count,organized,other-copies
+    type: STRING
 ui:
   javascript:
     - collection-colors.js
