@@ -8,24 +8,21 @@
 .stash-collection-pill {
   margin-right: 4px !important;
   margin-left: 0 !important;
-  /* Vertical: asymmetric (0 top, 2px bottom), not symmetric — the label
-     text is centered by the flex align-items rule below, and this pill's
-     fixed 24px height/line-height:1 combination leaves the rendered
-     glyphs sitting about 1px low of true optical center (confirmed live:
-     measured the text's own rendered bounding box vs the pill's box
-     before/after — this shifts it up exactly 1px). Shrinking available
-     content height from the bottom only is what moves the flex-centered
-     line up; shrinking evenly (equal top+bottom padding) wouldn't move
-     anything. This math is border-width-independent (border is
-     symmetric top/bottom, so it cancels out of where the center sits) —
-     confirmed it still holds after the border below went from 1px to
-     1.5px, no retuning needed.
+  /* Symmetric vertical padding — the 1px-optical-centering nudge this
+     used to carry (0 top / 2px bottom, shifting the flex-centered text
+     up 1px) was tuned against the card-popover-bar context only and
+     read wrong once seen live in the scene-detail sidebar (the pill's
+     other placement, via .dl-scene-badge-slot — see trySetupHeaderPill()
+     in the JS). Reverted rather than given a second, context-specific
+     value: one pill style, used in two places, shouldn't carry two
+     different paddings for the same visual element.
 
      Horizontal: 10px, not the 7px this had as a 4px-radius rectangle —
-     bumped when the shape went fully round below. A stadium end reads as
-     visually tighter against the same text than a soft rectangle's does,
-     so the round shape needs more room to keep from looking cramped. */
-  padding: 0 10px 2px 10px !important;
+     bumped when the shape went fully round (see border-radius below). A
+     stadium end reads as visually tighter against the same text than a
+     soft rectangle's does, so the round shape needs more room to keep
+     from looking cramped. */
+  padding: 0 10px !important;
   height: 24px !important;
   display: inline-flex !important;
   align-items: center !important;
