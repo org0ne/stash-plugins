@@ -62,6 +62,50 @@
     return DEFAULT_PALETTE[hashString(path) % DEFAULT_PALETTE.length];
   }
 
+  /* ============================
+   *  PILL TEXT CONTRAST
+   *  Collection colors span the whole hash-derived DEFAULT_PALETTE plus
+   *  whatever a user picks by hand in the settings panel — fixed white
+   *  text (the solid-fill "native tag" look, see buildPill()) reads fine
+   *  on most of those but noticeably weaker on the brighter ones (spotted
+   *  live: '#facc15', a bright gold, next to a pink collection using the
+   *  identical white). WCAG relative luminance + contrast ratio, not a
+   *  rough "brightness > 128" guess — picks whichever of two fixed
+   *  candidates actually contrasts better against this specific
+   *  background, per-pill, rather than one fixed color for all of them.
+   * ============================ */
+  function srgbToLinear(c) {
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
+  function relativeLuminance(hex) {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    const [rl, gl, bl] = [r, g, b].map(srgbToLinear);
+    return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
+  }
+  function contrastRatio(l1, l2) {
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+  // Dracula's own foreground/background pair, not a plain white/black
+  // guess — #f8f8f2 is the exact color stash's own native tag chips use
+  // (see buildPill()'s own comment), so the "light" candidate already
+  // matches what's elsewhere on screen; #282a36 is Dracula's canonical
+  // background, dark enough for strong contrast without being a stark
+  // pure #000 that would clash with the theme everywhere else.
+  const PILL_TEXT_LIGHT = '#f8f8f2';
+  const PILL_TEXT_DARK = '#282a36';
+  const PILL_TEXT_LIGHT_LUM = relativeLuminance(PILL_TEXT_LIGHT);
+  const PILL_TEXT_DARK_LUM = relativeLuminance(PILL_TEXT_DARK);
+  function pickPillTextColor(bgHex) {
+    const bgLum = relativeLuminance(bgHex);
+    const withLight = contrastRatio(bgLum, PILL_TEXT_LIGHT_LUM);
+    const withDark = contrastRatio(bgLum, PILL_TEXT_DARK_LUM);
+    return withLight >= withDark ? PILL_TEXT_LIGHT : PILL_TEXT_DARK;
+  }
+
   function readSavedColors(pluginsConfig) {
     const raw = pluginsConfig?.[PLUGIN_ID]?.collectionColors;
     if (!raw) return {};
@@ -172,14 +216,16 @@
     // pill.style.color = collection.color;
     // pill.style.backgroundColor = 'transparent';
     // pill.style.border = '1.5px solid ' + collection.color;
-    // v3 (current): solid fill + off-white text, matching stash's own
-    // native tag chips (`.tag-item.badge.badge-secondary` — confirmed
-    // live: solid slate background, `#f8f8f2` text, no border) rather
-    // than this plugin's own invented outline treatment. `#f8f8f2` is
-    // the exact color native tags use, not a plain `#fff` — same
-    // reasoning as `--dl-fg` elsewhere in this codebase: genuinely
-    // neutral, and matches what's already on screen right next to it.
-    pill.style.color = '#f8f8f2';
+    // v3 (current): solid fill, matching stash's own native tag chips
+    // (`.tag-item.badge.badge-secondary` — confirmed live: solid slate
+    // background, `#f8f8f2` text, no border) rather than this plugin's
+    // own invented outline treatment. Text color isn't fixed to that
+    // same `#f8f8f2` any more, though — see pickPillTextColor() above:
+    // collections span the whole default palette plus whatever a user
+    // picks by hand, and fixed white read poorly against the brighter
+    // ones (spotted live: a bright-gold collection next to a pink one
+    // using the identical white). Per-pill contrast pick instead.
+    pill.style.color = pickPillTextColor(collection.color);
     pill.style.backgroundColor = collection.color;
     pill.style.border = 'none';
     pill.title = 'Filter: ' + collection.label;
