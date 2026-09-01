@@ -27,6 +27,16 @@ settings:
       last, after every key you listed. Default:
       performer-count,count-button,marker-count,tag-count,group-count,organized,other-copies
     type: STRING
+  pillStyle:
+    displayName: Collection pill style
+    description: >
+      How the collection pill is drawn: "solid" (default) fills the pill
+      with the collection's color and picks black or white text
+      automatically for contrast, matching stash's own native tag chips.
+      "outline" instead leaves the pill transparent with just a colored
+      border and text, so it can never be mistaken for a themed action
+      button. Any other value falls back to solid.
+    type: STRING
 ui:
   javascript:
     - collection-colors.js

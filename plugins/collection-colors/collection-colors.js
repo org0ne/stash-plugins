@@ -131,13 +131,29 @@
     return collectionsPromise;
   }
 
+  // `configurePlugin` REPLACES the plugin's entire settings object with
+  // whatever `input` map is given — it does not merge. Confirmed live,
+  // the hard way: writing `{ pillStyle: "outline" }` alone wiped out an
+  // already-saved `popoverPriority` on the standalone verification
+  // instance (a real, user-set value, not a default). Every write needs
+  // to fetch the current full config first and merge into it, or it
+  // silently destroys whichever other settings weren't part of that
+  // particular save — this is what saveColors() should have been doing
+  // from the start, not something new pillStyle introduced.
+  async function configurePluginMerged(partial) {
+    const data = await gql(`{ configuration { plugins } }`);
+    const current = data?.configuration?.plugins?.[PLUGIN_ID] || {};
+    const merged = { ...current, ...partial };
+    await gql(
+      `mutation($input: Map!) { configurePlugin(plugin_id: "${PLUGIN_ID}", input: $input) }`,
+      { input: merged }
+    );
+  }
+
   async function saveColors(collections) {
     const colors = {};
     for (const c of collections) colors[c.path] = c.color;
-    await gql(
-      `mutation($input: Map!) { configurePlugin(plugin_id: "${PLUGIN_ID}", input: $input) }`,
-      { input: { collectionColors: JSON.stringify(colors) } }
-    );
+    await configurePluginMerged({ collectionColors: JSON.stringify(colors) });
   }
 
   function collectionFilterURL(path) {
@@ -205,29 +221,45 @@
     if (highPriority.size) batchTimeout = setTimeout(runBatchQuery, 30);
   }
 
+  /* ============================
+   *  PILL VISUAL STYLE
+   *  Two looks, user-selectable via the popoverPriority-style plugin
+   *  setting `pillStyle` fetched below: 'solid' (default — matches
+   *  stash's own native tag chips, `.tag-item.badge.badge-secondary`:
+   *  solid background, contrast-picked text, no border) or 'outline'
+   *  (transparent background, full-opacity colored border/text — this
+   *  plugin's own earlier v2 look, distinguishing the pill from buttons/
+   *  mode-pills' shared wash mechanic rather than matching native).
+   *
+   *  applyPillStyle() is the single place either look is actually
+   *  applied, called both from buildPill() (new pills) and from the
+   *  settings-fetch IIFE below (already-inserted pills, once the saved
+   *  choice loads — see that IIFE for why this can't just be decided
+   *  once at build time). `pill.dataset.collectionColor` stores the raw
+   *  hex so a pill can be restyled later without needing its original
+   *  `collection` object back in scope.
+   * ============================ */
+  const PILL_STYLES = ['solid', 'outline'];
+  let PILL_STYLE = 'solid';
+
+  function applyPillStyle(pill, colorHex) {
+    pill.dataset.collectionColor = colorHex;
+    if (PILL_STYLE === 'outline') {
+      pill.style.color = colorHex;
+      pill.style.backgroundColor = 'transparent';
+      pill.style.border = '1.5px solid ' + colorHex;
+    } else {
+      pill.style.color = pickPillTextColor(colorHex);
+      pill.style.backgroundColor = colorHex;
+      pill.style.border = 'none';
+    }
+  }
+
   function buildPill(collection, extraClass) {
     const pill = document.createElement('span');
     pill.className = extraClass ? `stash-collection-pill ${extraClass}` : 'stash-collection-pill';
     pill.textContent = collection.label;
-    // v2, 2026-09-01: outline only, no fill — kept here commented out
-    // rather than deleted, in case this direction is revisited. See git
-    // history for the reasoning at the time (distinguishing this pill
-    // from buttons/mode-pills' shared wash mechanic).
-    // pill.style.color = collection.color;
-    // pill.style.backgroundColor = 'transparent';
-    // pill.style.border = '1.5px solid ' + collection.color;
-    // v3 (current): solid fill, matching stash's own native tag chips
-    // (`.tag-item.badge.badge-secondary` — confirmed live: solid slate
-    // background, `#f8f8f2` text, no border) rather than this plugin's
-    // own invented outline treatment. Text color isn't fixed to that
-    // same `#f8f8f2` any more, though — see pickPillTextColor() above:
-    // collections span the whole default palette plus whatever a user
-    // picks by hand, and fixed white read poorly against the brighter
-    // ones (spotted live: a bright-gold collection next to a pink one
-    // using the identical white). Per-pill contrast pick instead.
-    pill.style.color = pickPillTextColor(collection.color);
-    pill.style.backgroundColor = collection.color;
-    pill.style.border = 'none';
+    applyPillStyle(pill, collection.color);
     pill.title = 'Filter: ' + collection.label;
     pill.addEventListener('click', e => {
       e.stopPropagation();
@@ -284,31 +316,55 @@
 
   let POPOVER_ORDER_PARSED = DEFAULT_POPOVER_PRIORITY.map(key => POPOVER_KEY_CLASSES[key]);
 
+  // One combined fetch for both user-configurable settings
+  // (popoverPriority and pillStyle) rather than two separate GraphQL
+  // round trips — both live under the same `configuration.plugins`
+  // query. Each is applied independently (no early-return after the
+  // first), so setting only one of the two still works correctly.
   (async () => {
     try {
       const data = await gql(`{ configuration { plugins } }`);
-      const raw = data?.configuration?.plugins?.[PLUGIN_ID]?.popoverPriority;
-      if (!raw) return;
-      const listed = raw.split(',').map(s => s.trim()).filter(Boolean).filter(k => POPOVER_KEY_CLASSES[k]);
-      if (!listed.length) return;
-      // Any known key the user's list omitted still appears, just last —
-      // after every key they did list — same "unrecognized item lands
-      // last" rule reorderPopoverBar() already applies one level down, to
-      // DOM children it can't match against any key at all.
-      const keys = listed.slice();
-      for (const key of DEFAULT_POPOVER_PRIORITY) {
-        if (!keys.includes(key)) keys.push(key);
+      const cfg = data?.configuration?.plugins?.[PLUGIN_ID];
+
+      const rawPriority = cfg?.popoverPriority;
+      if (rawPriority) {
+        const listed = rawPriority.split(',').map(s => s.trim()).filter(Boolean).filter(k => POPOVER_KEY_CLASSES[k]);
+        if (listed.length) {
+          // Any known key the user's list omitted still appears, just
+          // last — after every key they did list — same "unrecognized
+          // item lands last" rule reorderPopoverBar() already applies
+          // one level down, to DOM children it can't match against any
+          // key at all.
+          const keys = listed.slice();
+          for (const key of DEFAULT_POPOVER_PRIORITY) {
+            if (!keys.includes(key)) keys.push(key);
+          }
+          POPOVER_ORDER_PARSED = keys.map(key => POPOVER_KEY_CLASSES[key]);
+          // Invalidate every bar's cached reorder signature so the next
+          // pass re-applies the newly-loaded priority — reorderPopoverBar()
+          // below otherwise trusts a signature computed under the default
+          // order and silently no-ops.
+          const bars = document.querySelectorAll('.card-popovers.btn-group');
+          bars.forEach(bar => { delete bar.dataset._stashPopoverSig; });
+          bars.forEach(reorderPopoverBar);
+        }
       }
-      POPOVER_ORDER_PARSED = keys.map(key => POPOVER_KEY_CLASSES[key]);
-      // Invalidate every bar's cached reorder signature so the next pass
-      // re-applies the newly-loaded priority — reorderPopoverBar() below
-      // otherwise trusts a signature computed under the default order and
-      // silently no-ops.
-      const bars = document.querySelectorAll('.card-popovers.btn-group');
-      bars.forEach(bar => { delete bar.dataset._stashPopoverSig; });
-      bars.forEach(reorderPopoverBar);
+
+      const rawStyle = cfg?.pillStyle?.trim().toLowerCase();
+      if (rawStyle && PILL_STYLES.includes(rawStyle) && rawStyle !== PILL_STYLE) {
+        PILL_STYLE = rawStyle;
+        // Pills already built (before this fetch resolved) were styled
+        // under the default — restyle them now rather than waiting for
+        // the next unrelated re-render to happen to touch them. Reads
+        // the color back from `dataset.collectionColor` (set by
+        // applyPillStyle() at build time) rather than needing each
+        // pill's original `collection` object back in scope here.
+        document.querySelectorAll('.stash-collection-pill').forEach(pill => {
+          if (pill.dataset.collectionColor) applyPillStyle(pill, pill.dataset.collectionColor);
+        });
+      }
     } catch (e) {
-      console.error('[CollectionColors] popover priority setting fetch failed', e);
+      console.error('[CollectionColors] plugin settings fetch failed', e);
     }
   })();
 
