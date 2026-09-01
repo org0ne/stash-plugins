@@ -166,8 +166,15 @@
     pill.className = extraClass ? `stash-collection-pill ${extraClass}` : 'stash-collection-pill';
     pill.textContent = collection.label;
     pill.style.color = collection.color;
-    pill.style.backgroundColor = collection.color + '22';
-    pill.style.border = '1px solid ' + collection.color + '55';
+    // Outline only, no fill — the one pill on the card that isn't a
+    // translucent-wash surface, deliberately: every button and every
+    // mode-bar pill now uses that same wash mechanic, so this is the
+    // structural cue that a collection pill is a data tag, not an
+    // action. Border carries full-opacity color (not a diluted alpha
+    // step like the old fill did) since it's now the only color surface
+    // this pill has, alongside the (also full-opacity) text.
+    pill.style.backgroundColor = 'transparent';
+    pill.style.border = '1.5px solid ' + collection.color;
     pill.title = 'Filter: ' + collection.label;
     pill.addEventListener('click', e => {
       e.stopPropagation();

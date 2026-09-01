@@ -8,23 +8,36 @@
 .stash-collection-pill {
   margin-right: 4px !important;
   margin-left: 0 !important;
-  /* Asymmetric vertical padding (0 top, 2px bottom), not a symmetric
-     "0 7px" — the label text is centered by the flex align-items rule
-     below, and this pill's fixed 24px height/1px border/line-height:1
-     combination leaves the rendered glyphs sitting about 1px low of true
-     optical center (confirmed live: measured the text's own rendered
-     bounding box vs the pill's box before/after — this shifts it up
-     exactly 1px with zero change to the pill's own box, border, or
-     height). Shrinking available content height from the bottom only is
-     what moves the flex-centered line up; shrinking evenly (adding equal
-     top+bottom padding) wouldn't move anything. */
-  padding: 0 7px 2px 7px !important;
+  /* Vertical: asymmetric (0 top, 2px bottom), not symmetric — the label
+     text is centered by the flex align-items rule below, and this pill's
+     fixed 24px height/line-height:1 combination leaves the rendered
+     glyphs sitting about 1px low of true optical center (confirmed live:
+     measured the text's own rendered bounding box vs the pill's box
+     before/after — this shifts it up exactly 1px). Shrinking available
+     content height from the bottom only is what moves the flex-centered
+     line up; shrinking evenly (equal top+bottom padding) wouldn't move
+     anything. This math is border-width-independent (border is
+     symmetric top/bottom, so it cancels out of where the center sits) —
+     confirmed it still holds after the border below went from 1px to
+     1.5px, no retuning needed.
+
+     Horizontal: 10px, not the 7px this had as a 4px-radius rectangle —
+     bumped when the shape went fully round below. A stadium end reads as
+     visually tighter against the same text than a soft rectangle's does,
+     so the round shape needs more room to keep from looking cramped. */
+  padding: 0 10px 2px 10px !important;
   height: 24px !important;
   display: inline-flex !important;
   align-items: center !important;
   align-self: center !important;
   flex-shrink: 0 !important;
-  border-radius: 4px !important;
+  /* Fully rounded (stadium shape), not the 4px soft-rectangle every
+     button/mode-pill on the page also uses now — a round pill reads as
+     a tag/label in nearly every UI convention (GitHub topics, Notion
+     properties), never as a clickable control, so the shape itself
+     carries part of the "this is data, not an action" distinction
+     alongside the outline-only fill below. */
+  border-radius: 999px !important;
   font-size: 14px !important;
   font-weight: 800 !important;
   letter-spacing: 0.8px !important;
