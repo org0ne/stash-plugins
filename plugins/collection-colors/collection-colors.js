@@ -224,12 +224,12 @@
   /* ============================
    *  PILL VISUAL STYLE
    *  Two looks, user-selectable via the popoverPriority-style plugin
-   *  setting `pillStyle` fetched below: 'solid' (default — matches
-   *  stash's own native tag chips, `.tag-item.badge.badge-secondary`:
-   *  solid background, contrast-picked text, no border) or 'outline'
-   *  (transparent background, full-opacity colored border/text — this
-   *  plugin's own earlier v2 look, distinguishing the pill from buttons/
-   *  mode-pills' shared wash mechanic rather than matching native).
+   *  setting `pillStyle` fetched below: 'outline' (default — transparent
+   *  background, full-opacity colored border/text; distinguishes the
+   *  pill from buttons/mode-pills' shared wash mechanic rather than
+   *  matching native) or 'solid' (matches stash's own native tag chips,
+   *  `.tag-item.badge.badge-secondary`: solid background, contrast-
+   *  picked text, no border).
    *
    *  applyPillStyle() is the single place either look is actually
    *  applied, called both from buildPill() (new pills) and from the
@@ -240,7 +240,7 @@
    *  `collection` object back in scope.
    * ============================ */
   const PILL_STYLES = ['solid', 'outline'];
-  let PILL_STYLE = 'solid';
+  let PILL_STYLE = 'outline';
 
   function applyPillStyle(pill, colorHex) {
     pill.dataset.collectionColor = colorHex;

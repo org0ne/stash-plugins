@@ -30,12 +30,12 @@ settings:
   pillStyle:
     displayName: Collection pill style
     description: >
-      How the collection pill is drawn: "solid" (default) fills the pill
-      with the collection's color and picks black or white text
-      automatically for contrast, matching stash's own native tag chips.
-      "outline" instead leaves the pill transparent with just a colored
-      border and text, so it can never be mistaken for a themed action
-      button. Any other value falls back to solid.
+      How the collection pill is drawn: "outline" (default) leaves the
+      pill transparent with just a colored border and text, so it can
+      never be mistaken for a themed action button. "solid" instead
+      fills the pill with the collection's color and picks black or
+      white text automatically for contrast, matching stash's own
+      native tag chips. Any other value falls back to outline.
     type: STRING
 ui:
   javascript:
