@@ -1,0 +1,11 @@
+name: Copy Buttons
+description: >
+  Adds click-to-copy buttons next to performer names, performer
+  disambiguations, and studio codes wherever stash (or another plugin)
+  renders them — no dependency on any other plugin.
+version: 1.0.0
+ui:
+  javascript:
+    - copy-buttons.js
+  css:
+    - copy-buttons.css

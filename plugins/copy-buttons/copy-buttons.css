@@ -1,0 +1,90 @@
+/* ============================
+ *  SHARED BASE
+ *  Common to all three copy buttons this plugin adds — transparent,
+ *  inline with the text it copies, faded until hovered/focused, flips to
+ *  a green check briefly on click. Per-button classes below only ever
+ *  override color/size, never re-declare these.
+ * ============================ */
+.stash-copy-btn {
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-size: 0.75em !important;
+  line-height: 1 !important;
+  opacity: 0.65 !important;
+  vertical-align: middle !important;
+  flex-shrink: 0 !important;
+  transition: opacity 0.15s ease, color 0.15s ease !important;
+}
+.stash-copy-btn:hover { opacity: 1 !important; }
+.stash-copy-btn:focus-visible {
+  outline: 1px solid rgba(115, 193, 230, 0.6) !important;
+  outline-offset: 2px !important;
+}
+.stash-copy-btn.copied {
+  color: #50fa7b !important;
+  opacity: 1 !important;
+}
+
+/* ============================
+ *  PERFORMER NAME / DISAMBIGUATION
+ *  (performer-card grid + performer detail header)
+ * ============================ */
+
+/* Name button matches whatever color the performer name itself uses
+   (varies by context: white on the card grid, theme heading color on
+   the detail page) rather than a fixed color. */
+.performer-name-copy { color: inherit !important; }
+.performer-disambiguation-copy { color: #73c1e6 !important; }
+/* The disambiguation text itself (e.g. "(愛須心亜)" next to a performer's
+   name) — its copy button above already matches this cyan, so the text
+   span (`.performer-disambiguation`, no "-copy") gets the same color
+   rather than falling back to stash's own muted default. */
+.performer-disambiguation { color: #73c1e6 !important; }
+
+/* Performer-card grid: small icon inline with the truncated title */
+.performer-card .card-section-title .performer-name-copy,
+.performer-card .card-section-title .performer-disambiguation-copy {
+  font-size: 11px !important;
+}
+
+/* Performer detail header: larger text needs a proportionally smaller icon */
+.performer-head .performer-name-copy,
+.performer-head .performer-disambiguation-copy {
+  font-size: 0.6em !important;
+  opacity: 0.55 !important;
+}
+
+/* ============================
+ *  STUDIO CODE (scene detail page)
+ *  Two possible contexts — see addStudioCodeCopyButton() in the JS for
+ *  which one applies and why. Each gets its own look since the
+ *  surrounding element is visually very different (a solid pink pill
+ *  in one, a plain Details row in the other).
+ * ============================ */
+
+/* Relocated case: inside another plugin's .studio-code pill (a solid,
+   dark, monospace badge) — ported from that pill's own original copy
+   button styling so it looks identical to before this was split out. */
+.studio-code .studio-code-copy {
+  color: inherit !important;
+  padding: 3px !important;
+  font-size: 13px !important;
+  opacity: 0.7 !important;
+}
+.studio-code .studio-code-copy:focus-visible {
+  outline-color: rgba(255, 128, 191, 0.6) !important;
+}
+
+/* Native fallback case: plain text inside a Details row — shares the
+   same base look as the performer copy buttons rather than a bespoke
+   third style. */
+.scene-details h6 .studio-code-copy {
+  color: inherit !important;
+  margin-left: 4px !important;
+}

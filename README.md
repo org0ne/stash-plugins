@@ -19,6 +19,7 @@ Stash will list every plugin in this repo, ready to install with one click.
 | Plugin | Description |
 | --- | --- |
 | [collection-colors](plugins/collection-colors) | Colors scene cards by which configured Library path they live under, auto-discovered — no hardcoded paths. |
+| [copy-buttons](plugins/copy-buttons) | Click-to-copy buttons for performer names, performer disambiguations, and studio codes. |
 
 ## Repo structure
 
