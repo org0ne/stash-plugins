@@ -165,16 +165,23 @@
     const pill = document.createElement('span');
     pill.className = extraClass ? `stash-collection-pill ${extraClass}` : 'stash-collection-pill';
     pill.textContent = collection.label;
-    pill.style.color = collection.color;
-    // Outline only, no fill — the one pill on the card that isn't a
-    // translucent-wash surface, deliberately: every button and every
-    // mode-bar pill now uses that same wash mechanic, so this is the
-    // structural cue that a collection pill is a data tag, not an
-    // action. Border carries full-opacity color (not a diluted alpha
-    // step like the old fill did) since it's now the only color surface
-    // this pill has, alongside the (also full-opacity) text.
-    pill.style.backgroundColor = 'transparent';
-    pill.style.border = '1.5px solid ' + collection.color;
+    // v2, 2026-09-01: outline only, no fill — kept here commented out
+    // rather than deleted, in case this direction is revisited. See git
+    // history for the reasoning at the time (distinguishing this pill
+    // from buttons/mode-pills' shared wash mechanic).
+    // pill.style.color = collection.color;
+    // pill.style.backgroundColor = 'transparent';
+    // pill.style.border = '1.5px solid ' + collection.color;
+    // v3 (current): solid fill + off-white text, matching stash's own
+    // native tag chips (`.tag-item.badge.badge-secondary` — confirmed
+    // live: solid slate background, `#f8f8f2` text, no border) rather
+    // than this plugin's own invented outline treatment. `#f8f8f2` is
+    // the exact color native tags use, not a plain `#fff` — same
+    // reasoning as `--dl-fg` elsewhere in this codebase: genuinely
+    // neutral, and matches what's already on screen right next to it.
+    pill.style.color = '#f8f8f2';
+    pill.style.backgroundColor = collection.color;
+    pill.style.border = 'none';
     pill.title = 'Filter: ' + collection.label;
     pill.addEventListener('click', e => {
       e.stopPropagation();

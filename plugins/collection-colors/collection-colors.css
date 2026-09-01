@@ -33,7 +33,8 @@
      a tag/label in nearly every UI convention (GitHub topics, Notion
      properties), never as a clickable control, so the shape itself
      carries part of the "this is data, not an action" distinction
-     alongside the outline-only fill below. */
+     alongside the solid-fill "native tag" look set inline in the JS
+     (buildPill()) — color/background/border live there, not here. */
   border-radius: 999px !important;
   font-size: 14px !important;
   font-weight: 800 !important;
