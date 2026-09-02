@@ -1,0 +1,29 @@
+name: JAV Layout
+description: >
+  Dracula Pro card styling plus the Option C scene dashboard — a single
+  reading-order sidebar (identity, description, tags, then a five-mode
+  switcher with Performers/File/History swapping in below it), replacing
+  the nine-tab bar.
+version: 2.0.0
+
+ui:
+  # Loaded in order. fonts.css just registers @font-face rules (self-
+  # hosted Quicksand, embedded as base64 — see that file for why) and has
+  # no page effect of its own, so it loads first, ahead of every consumer.
+  # clean-cards.* is the existing v5.5 customisation (title cleanup split
+  # out to the standalone title-scrubber plugin — see CLAUDE.md);
+  # buttons.css is an independent, page-agnostic button restyle;
+  # scene-dashboard.* is the scene page's own layout; entity-dashboard.*
+  # is the shared performer/studio/group/tag layout (one config-driven
+  # module, not four near-identical files) and must come after
+  # scene-dashboard.css since it reuses that file's --jl-* tokens.
+  css:
+    - fonts.css
+    - clean-cards.css
+    - buttons.css
+    - scene-dashboard.css
+    - entity-dashboard.css
+  javascript:
+    - clean-cards.js
+    - scene-dashboard.js
+    - entity-dashboard.js

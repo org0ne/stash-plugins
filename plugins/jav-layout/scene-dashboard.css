@@ -1,0 +1,1095 @@
+/* ============================================================
+ *  Scene Dashboard — Option C
+ *
+ *  Reorders the scene page sidebar into one reading-order column instead
+ *  of the nine-tab layout: identity block, description, tags, a mode
+ *  switcher, then Performers/File/History swapping in below it per mode.
+ *
+ *  Nothing here moves a DOM node. react-bootstrap 1.6 wraps every
+ *  Tab.Pane in <Fade> without unmountOnExit, so all panes except
+ *  scene-edit-panel are already mounted and merely hidden. This file
+ *  reveals and reorders them; scene-dashboard.js only tags and labels.
+ *
+ *  The reorder spans several disconnected React subtrees (the page
+ *  header, deep inside the Details tab-pane, the injected mode bar), which
+ *  a single `order`/`grid-column` trick can't reach across. Instead every
+ *  wrapper in between gets `display: contents` — it un-boxes the wrapper
+ *  without touching the DOM, so its children become direct flex items of
+ *  .scene-tabs (already `display:flex;flex-direction:column` in stash's
+ *  own CSS), addressable by `order` regardless of nesting depth.
+ *
+ *  Every rule is gated on [data-jl-mode], which scene-dashboard.js sets
+ *  only after it has successfully built the mode bar. If the script
+ *  fails, stash renders exactly as it does today.
+ * ============================================================ */
+
+:root {
+  --jl-pink:   #ff80bf;
+  --jl-cyan:   #73c1e6;
+  --jl-lilac:  #e1cdfe;
+  --jl-text:   #cdd6f4;
+  --jl-muted:  #8b9bc7;
+  --jl-dim:    #6272a4;
+  --jl-line:   rgba(98, 114, 164, 0.28);
+  --jl-well:   rgba(30, 30, 50, 0.42);
+  --jl-gap:    14px;
+}
+
+/* ------------------------------------------------------------
+ *  Mode bar replaces the nav tabs
+ * ------------------------------------------------------------ */
+.scene-tabs[data-jl-mode] .nav-tabs { display: none !important; }
+
+.jl-modes-row {
+  display: flex;
+  justify-content: center;
+}
+.jl-modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(25, 24, 34, 0.7);
+  border: 1px solid var(--jl-line);
+  border-radius: 8px;
+  flex-wrap: wrap;
+  /* Reported live (2026-09-02) on the tag page (7 tabs) at mobile width:
+     with no justify-content set, a wrapped second row defaults to
+     flex-start, packing against the pill's own left edge instead of
+     centering under the (wider) first row - the same left-justified-
+     second-row symptom as .details-edit had, same fix. Confirmed live:
+     .jl-modes only ever wraps when an entity page's tab count is high
+     enough at a narrow viewport (tag's 7; performer/studio/group's
+     6-or-fewer tabs fit on one line even on a phone), and a single-line
+     bar (the common case) is completely unaffected by justify-content -
+     centering only has any effect once there's leftover space to
+     distribute, i.e. once wrapping has already happened. */
+  justify-content: center;
+}
+.jl-mode {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--jl-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 5px 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.jl-mode:hover { color: var(--jl-text); background: rgba(98, 114, 164, 0.15); }
+.jl-mode[aria-selected="true"] { color: var(--jl-pink); background: rgba(255, 128, 191, 0.15); }
+.jl-mode:focus-visible { outline: 1px solid var(--jl-pink); outline-offset: 1px; }
+
+/* ------------------------------------------------------------
+ *  Layout: flatten every wrapper standing between .scene-tabs and the
+ *  content we want to reorder, so the header, the mode bar and pieces of
+ *  the Details pane all become siblings in one flex context.
+ * ------------------------------------------------------------ */
+.scene-tabs[data-jl-mode] {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-content: flex-start;
+  /* No column-gap: its only real consumer is the tag chip cloud (everything
+     else here is flex: 0 0 100%, one item per line), and that now uses its
+     own per-chip margin instead — see .tag-item below for why. */
+  row-gap: 10px;
+  /* Native padding-right is 0 — every flex:0 0 100% child's right edge
+     otherwise lands right against .scene-tabs's own internal scrollbar
+     (confirmed via getBoundingClientRect: the scrollbar alone already eats
+     10px, with zero padding of ours on top). 16px here gives that
+     scrollbar real breathing room, matching the .jl-codedate-backdrop's
+     own 16px inset — but rather than repeating that inset on every card
+     individually, doing it once here narrows the shared content box every
+     `flex: 0 0 100%` child (Title, Toolbar, every card, the mode bar, tag
+     chip wrapping) measures itself against, so they all land on the same
+     right edge for free without their own per-element calc/margin. */
+  padding-right: 16px !important;
+}
+
+.scene-tabs[data-jl-mode] > div:first-child,       /* header wrapper: identity + subheader + toolbar */
+.scene-tabs[data-jl-mode] .scene-header-container,
+.scene-tabs[data-jl-mode] > div:nth-child(2),      /* mode-bar + nav-tabs wrapper */
+.scene-tabs[data-jl-mode] .tab-content,
+.scene-tabs[data-jl-mode] [data-jl-pane="details"],
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] > .row,
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .scene-details,
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] > .row:nth-child(2) > .col-12 {
+  display: contents !important;
+}
+
+/* Every promoted item takes a full line — flex-wrap simulates a vertical
+   stack while still letting .tag-item (below) pack inline like a cloud. */
+.scene-tabs[data-jl-mode] h3.scene-header,
+.scene-tabs[data-jl-mode] .stash-original-title,
+.scene-tabs[data-jl-mode] .scene-toolbar,
+.scene-tabs[data-jl-mode] .scene-subheader,
+.scene-tabs[data-jl-mode] [data-jl-item="scenedetails"],
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="metadata"],
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="description"],
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] p.pre,
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="tags"],
+.scene-tabs[data-jl-mode] [data-jl-item="performers-heading"],
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .scene-performers,
+.scene-tabs[data-jl-mode] .jl-sidebar-performers,
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .custom-fields,
+.scene-tabs[data-jl-mode] [data-jl-pane="fileinfo"],
+.scene-tabs[data-jl-mode] [data-jl-pane="history"],
+.scene-tabs[data-jl-mode] [data-jl-pane="groups"],
+.scene-tabs[data-jl-mode] [data-jl-pane="galleries"],
+.scene-tabs[data-jl-mode] [data-jl-pane="markers"],
+.scene-tabs[data-jl-mode] [data-jl-pane="filters"],
+.scene-tabs[data-jl-mode] [data-jl-pane="edit"],
+.scene-tabs[data-jl-mode] [data-jl-pane="queue"] {
+  flex: 0 0 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+/* The native "Details:" / "Tags" headings are replaced by injected
+   jl-heads, so the originals are just noise now. Subheader stays visible —
+   see its own order rule below. */
+.scene-tabs[data-jl-mode] [data-jl-item="description-heading"],
+.scene-tabs[data-jl-mode] [data-jl-item="tags-heading"] {
+  display: none !important;
+}
+
+/* Tags are the one exception: pack inline like a chip cloud instead of one
+   per line, same as they did before flattening. Stash's own `.tag-item`
+   carries `margin: 5px` (sized for a badge cloud with no other gap control);
+   replaced here with a bigger, explicit margin that does double duty as
+   both inter-chip spacing *and* left/right padding for the cloud —
+   `column-gap` (the container's own gap property) is zeroed for this
+   reason, since stacking it with a per-chip margin would double-count the
+   same space, the same mistake documented elsewhere in this file for
+   row-gap. The container's `column-gap` has no other consumer: everything
+   else in this layout is `flex: 0 0 100%` (one item per line, `column-gap`
+   never applies), except the Studio Logo/Code pair, which is unaffected
+   because Studio Code's `margin-left: auto` already consumes all
+   remaining space on that line regardless of `column-gap`'s value.
+   An item's own margin only guarantees ITS OWN edge (a first-of-line
+   chip's margin-left reserves space from the container edge; a
+   last-of-line chip's margin-right is what the wrap algorithm checks fits
+   before the container edge), so the base 8px here is sized for the
+   *inter-chip* gap (two adjacent chips' margins combine to 16px between
+   them) — a row's own leftmost/rightmost chip then gets its outward-facing
+   side bumped to 14px below, matching the inset every other card's content
+   uses, via `data-jl-tag-row-start`/`-end` (scene-dashboard.js's
+   markTagRows(), the same measurement pass that flags row 1 — see its own
+   comment for why this needs actual layout, not a CSS selector, to
+   answer). */
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .tag-item {
+  flex: 0 0 auto;
+  margin: 0 8px 0 8px;
+}
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .tag-item[data-jl-tag-row-start="true"] {
+  margin-left: 14px;
+}
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .tag-item[data-jl-tag-row-end="true"] {
+  margin-right: 14px;
+}
+/* Row 1 alone cancels the container's row-gap between the backdrop (flush
+   with the head, see .jl-tags-backdrop above) and the first row of chips —
+   without it, that row-gap showed as extra padding under the divider that
+   Metadata/Details don't have (their own first row cancels it too, the same
+   way). scene-dashboard.js's markTagFirstRow() flags which chips those are
+   by measured position, since flexbox has no "first line" selector. Every
+   other row leaves the container's row-gap: 10px alone, giving wrapped
+   lines vertical breathing room the single-margin-for-every-chip version
+   used to zero out along with row 1's. */
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .tag-item[data-jl-tag-first-row="true"] {
+  margin-top: -10px;
+}
+
+/* Reading order. Numbers are spaced for room to insert later. */
+
+/* Studio Logo: flattened onto its own full-width line, lowest order so it
+   leads the column. Size/opacity/centering are still left to clean-cards.
+   css's native `.studio-logo img` rule and stash's bundle CSS — the one
+   override here is trimming stash's own `margin-top: 1rem` (14px at this
+   root font-size) down to 4px, tightening the gap above the logo by 10px;
+   everything else about the native look (100px, opacity: 0.85, centered)
+   is untouched. */
+.scene-tabs[data-jl-mode] .scene-header-container > h1.studio-logo {
+  order: 5;
+  flex: 0 0 100%;
+  min-width: 0;
+  margin-top: 4px;
+  /* Native h1 default gives this a 7px margin-bottom that was never
+     zeroed — stacking with the container's own row-gap: 10px for a 17px
+     gap after the logo, vs. the 10px baseline everywhere else in this
+     column. Same row-gap-double-counting family of bug documented at
+     length elsewhere in this file, just a fresh instance of it (found by
+     measuring gaps, not by design). */
+  margin-bottom: 0;
+}
+.scene-tabs[data-jl-mode] h3.scene-header                            { order: 20; }
+/* Same hue family as the title's --jl-lilac (clean-cards.css), just dimmed —
+   reads as "the same thing, quieter" rather than an unrelated muted color. */
+.scene-tabs[data-jl-mode] .stash-original-title {
+  order: 30;
+  color: rgba(225, 205, 254, 0.55) !important;
+  /* clean-cards.css's `.scene-details h6 { margin-bottom: 2px !important }`
+     rule — the exact same "stubborn 2px seam" landmine documented in the
+     scattered-group-card notes below, this time on Original Title instead
+     of a Metadata row — stacks with the container's row-gap: 10px for 12px
+     after Original Title, vs. the 10px baseline. Needs !important to beat
+     that rule's own !important. */
+  margin-bottom: 0 !important;
+  /* Requested live (2026-09-02): "reduce padding between Title and
+     Original Title... so they read more related." Pulls the container's
+     own row-gap: 10px down to 4px — a translation/romanization pairing
+     reads as one grouped unit at a tighter gap, same reasoning as a
+     caption sitting close under its heading. -6px, not a smaller value:
+     confirmed live this is the only lever here, since row-gap itself is
+     a container-level property shared by every item in this column, not
+     something this one pair can opt out of on its own. */
+  margin-top: -6px !important;
+}
+
+/* Studio Code + Subheader (now just Date — fps/resolution moved into
+   Metadata, see tagPanes()) share one line, mirroring the scene-card
+   grid's own `.stash-code-date` bar: code on the left, date on the right,
+   one joined dark pink pill behind both. They're two separate native React
+   elements, not siblings inside one container the way the card's bar is
+   (that one's a single div clean-cards.js builds fresh with code and date
+   as its own children) — no single wrapper to hang one merged pill off
+   here, so this pairs them via flex placement (both `flex: 0 0 auto` with
+   consecutive order values, landing on the same flex-wrap line, Code's
+   `margin-right: auto` pushing Date out to the line's right edge — the
+   same auto-margin trick this used to use to push Code right when it
+   shared Studio Logo's line instead, just aimed the other direction now
+   that Code leads the line) and joins their backgrounds with
+   `.jl-codedate-backdrop`, the exact same appended-backdrop technique
+   `.jl-tags-backdrop` uses for the same underlying problem (one seamless
+   fill behind several elements with no shared parent to paint it on) —
+   see sizeCodeDateBackdrop() in scene-dashboard.js. Code and Date both
+   still carry their own matching pill background too (Code natively, Date
+   below); since every layer paints the exact same rgba(30,30,50,.95), the
+   redundancy is invisible — the backdrop's job is purely to fill the gap
+   between them that neither element's own background reaches.
+
+   Sits between Studio Logo (order 5) and Title (order 20) — was between
+   Original Title (30) and Toolbar (50) before that, and before that shared
+   Studio Logo's own line. Only the order values moved; nothing about how
+   the group is built or joined changed.
+
+   Styling now matches `.jl-modes` (the mode switcher pill, top of this
+   file) as the reference look, rather than clean-cards.css's native
+   studio-code pill: `rgba(25,24,34,.7)` background, `1px solid var(--jl-
+   line)` border, `8px` radius — was `rgba(30,30,50,.95)`/3px/no border.
+   Structured the same way `.jl-modes`/`.jl-mode` are too: the OUTER
+   container (backdrop here, `.jl-modes` there) carries all the chrome;
+   Code and Date themselves are transparent, same as `.jl-mode` buttons
+   carry no background until hover/selected. Previously Code and Date each
+   *also* painted their own matching fill (redundant-but-harmless when all
+   three used the same flat color) — with the mode-bar reference now the
+   single source of truth, that redundancy is removed instead of tripled:
+   cleaner, and there's no seam risk from three separately-colored layers
+   drifting out of sync again. */
+.scene-tabs[data-jl-mode] .jl-codedate-backdrop {
+  order: 10;
+  /* flex-basis calc(100% + 10px), not plain 100% — this bar is
+     deliberately wider than every other full-line item (Title, Toolbar,
+     the mode bar all still get plain 100%), requested live to make it
+     read as more of an anchor for the sidebar, addressing Title
+     sometimes feeling too far left relative to it. margin-left: -5px
+     centers the extra 10px evenly across both sides (5px left, 5px
+     right) — NOT margin-right, and NOT a `100%` basis with margins added:
+     for a flex item, margin doesn't add to a fixed flex-basis's own
+     rendered width, it only shifts the box (confirmed live: an earlier
+     `flex: 0 0 100%; margin: 0 -5px 0 -5px` version left width at exactly
+     409px, unchanged, with the whole box just shifted 5px left — the
+     right edge moved 5px *inward*, the opposite of "wider"). The extra
+     width has to come from flex-basis itself. Both directions were
+     checked for safe room before committing to 5px/5px: left has
+     .scene-tabs's own 15px padding-left to give back from (5px leaves
+     10px still intact); right has its 16px padding-right *plus* a
+     separate ~10px the sidebar's own scrollbar gutter already eats
+     natively (confirmed live: content's measured right edge sits 26px
+     short of the container's true right edge, only 16 of which is the
+     padding-right rule) — 5px stays well inside the 16px padding portion,
+     nowhere near the scrollbar track itself. Code/Subheader's own text
+     positions are untouched by this — they still start/end at the old,
+     narrower edges, so the extra width shows as a bit more colored bar
+     peeking out on each side, not the text itself shifting. */
+  flex: 0 0 calc(100% + 10px);
+  margin-left: -5px;
+  min-width: 0;
+  background: rgba(25, 24, 34, 0.7);
+  border: 1px solid var(--jl-line);
+  border-radius: 8px;
+  /* border-box so the added border doesn't push this taller than the
+     height sizeCodeDateBackdrop() measures Code/Date at and sets here —
+     without it, Code/Date's `margin-top: -10px` trick (pulling them up to
+     sit exactly on the backdrop) would leave a 2px sliver of border
+     poking out past their bottom edge. */
+  box-sizing: border-box;
+}
+.scene-tabs[data-jl-mode] .studio-code {
+  order: 11;
+  /* flex: 0 0 auto, not 100% — flex-basis governs sizing on a flex item
+     over `width`, so `0 0 100%` would stretch the pill to the sidebar's
+     full width regardless of clean-cards.css's `width: fit-content`. */
+  flex: 0 0 auto;
+  min-width: 0;
+  /* margin-top: -10px cancels the row-gap between the backdrop and this
+     line, same as .tag-item's own first-row rule — there's always exactly
+     one line here (unlike Tags' variable row count), so this is a plain
+     static rule, not measurement-gated. No margin-left (0) — the backdrop
+     is left-justified, so Code's pill already starts flush with it. */
+  margin: -10px auto 0 0 !important;
+  font-size: 14px !important;
+  /* Own background/radius removed — clean-cards.css's native studio-code
+     pill (rgba(30,30,50,.95), 3px) doesn't match the mode-bar reference
+     look this group now uses, and the backdrop already paints the whole
+     bar in the right color; Code just needs to be transparent on top of
+     it, same as an unselected .jl-mode button. */
+  background: transparent !important;
+  border-radius: 0 !important;
+  /* Vertical padding history: native 2px/2px → 7px/7px (36px bar,
+     matching .jl-modes) → 0/0 (matching the scene-card grid bar's own
+     zero padding, reported too tight) → 5px/5px (32px, reported too
+     much) → 3px/3px (28px, current) — each step a live visual call, no
+     other reference measured against for these last two. */
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
+  /* Left was native 10px — reported live as too far from the bar's own
+     edge, the opposite complaint from the scene-card grid's matching bar
+     (too close, at 4px). Not a plain "split 10 and 4" though: this
+     element's own left edge sits 5px inside the backdrop's true visible
+     left edge (the backdrop is deliberately 5px wider on each side than
+     its content, see .jl-codedate-backdrop below — an "anchor" effect),
+     so the ORIGINAL real text-to-visible-edge gap was 10+5=15px, not
+     10px, confirmed by measuring live before assuming the padding
+     number alone was the answer. Split the difference against the
+     card's true 4px gap: (4+15)/2 = 9.5, rounded to 9 — so this
+     padding-left is 4px (9 minus the 5px the backdrop already
+     contributes), re-measured live afterward to confirm the visible gap
+     actually lands on 9px, not just computed on paper. See
+     clean-cards.css's own `.stash-code-date` for the grid half of this
+     same change (9px padding there, no backdrop offset to account for). */
+  padding-left: 4px !important;
+}
+.scene-tabs[data-jl-mode] .scene-subheader {
+  order: 12;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-top: -10px;
+  /* No margin-right — Code's own margin-right: auto already pushes Date to
+     hug whatever the line's right edge is, which now already matches the
+     backdrop's via the container's own padding-right rather than an extra
+     margin added here on top of that. */
+  /* clean-cards.css's native 15px, inherited by .date below since it never
+     sets its own font-size — matched to Code's 14px above so the two pills
+     read as one size, not two slightly different ones. */
+  font-size: 14px !important;
+  /* Transparent — same reasoning as Code above, the backdrop is the only
+     layer that paints a background now. */
+  background: transparent;
+  /* Top/bottom: native 2px → 7px (36px bar) → 0 (matching the grid bar's
+     own zero padding) → 5px → 3px (current, 28px bar), same as Code's
+     own matching change just above at every step — the backdrop
+     measures whichever of Code/Date is taller, so they need to move
+     together. Right (this element's own outer edge) was
+     native 10px — reported live as too far from the bar's edge, the
+     opposite complaint from the scene-card grid's matching bar (too
+     close, at 4px). This element's own right edge sits 5px inside the
+     backdrop's true visible right edge (same "anchor" overhang as
+     Code's left edge, see .studio-code above and .jl-codedate-backdrop
+     below), so the real original gap was 10+5=15px, not 10px — split
+     against the card's true 4px onto 9px (rounded from 9.5), landing
+     this padding-right at 4px (9 minus the 5px the backdrop already
+     supplies). Left stays 10px — the inner gap toward Code, not what
+     was reported, and not visually meaningful anyway since both
+     elements are transparent now and only the shared backdrop actually
+     paints a boundary between them. */
+  padding: 3px 4px 3px 10px;
+  line-height: 1.6;
+}
+/* fps/resolution/divider live inside one unclassed wrapper span (see
+   getouter.mjs dumps in git history / clean-cards.css's native markup) —
+   hiding it leaves only the .date span, still read by tagPanes() as the
+   mirror source even though it's invisible here. */
+.scene-tabs[data-jl-mode] .scene-subheader > span:not(.date) {
+  display: none !important;
+}
+.scene-tabs[data-jl-mode] .scene-subheader .date {
+  color: var(--jl-pink) !important;
+  font-weight: 700 !important;
+  /* Code and Date share one visual bar (see the note above this block)
+     but were never actually unified on font — Code (.studio-code, in
+     clean-cards.css) has been monospace (source-code-pro stack) all
+     along, Date inherited plain "Segoe UI" (-> Liberation Sans) same as
+     surrounding body text. Same fix applied to the grid view's own
+     .stash-code-date .date in clean-cards.css — the two bars now match
+     each other on font, not just on color/weight/height. */
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace !important;
+}
+/* Scene badge block: one combined "Resolution | fps | Director" readout
+   above a second line holding just the collection-colors badge slot,
+   between Original Title (30) and Toolbar (50) — see
+   buildSceneBadgeRow() in scene-dashboard.js. Left-aligned like Title/
+   Original Title/Toolbar themselves (flex: 0 0 auto sandwiched between
+   two flex: 0 0 100% neighbours naturally lands on its own row, same
+   technique as Studio Code's own line). Not part of the Metadata card
+   despite living inside the same .scene-details column — no card
+   background/border/grid here, just bare content flush on the page. */
+.scene-tabs[data-jl-mode] .jl-scene-badges {
+  order: 40;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  /* Requested live (2026-09-02) alongside the Title/Original Title
+     tightening above: "a small additional padding between Original
+     Title and the resolution, framerate, and Director display" — the
+     opposite direction from that pull, on purpose. Original Title reads
+     as part of the Title above it now (4px), so this block needs its
+     own clearer separation below to still read as a distinct group, not
+     get pulled into that same cluster by proximity. +6px on top of the
+     container's row-gap: 10px, landing at 16px total. */
+  margin-top: 6px;
+}
+/* Font/weight (not color) matches .jl-mode (the mode-switcher pills)
+   exactly, per request — "Segoe UI", sans-serif / 12px / 600 / 0.3px
+   letter-spacing — as the row's own ambient font, inherited by the
+   plain-text Resolution/fps segments (raw text nodes, not individually
+   classed) and the "|" separators alike. Color is muted here instead,
+   same reasoning as .jl-mode's own resting (unselected) state, not
+   copied from it. Director's segment (a real cloned <a>, see
+   buildSceneBadgeRow()'s own comment for why) overrides this with the
+   Metadata card's own value font just below — same "own font, own
+   color" pattern as any other element in this row. */
+.jl-scene-info-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: "Segoe UI", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--jl-muted);
+}
+.jl-scene-info-row:empty {
+  display: none;
+}
+.jl-scene-info-sep {
+  color: var(--jl-dim);
+}
+/* Label/value font pair matches the Metadata card's own recipe exactly
+   (see the [data-jl-item="scenedetails"] rules below) — reproduced here
+   rather than shared via selector, since this row isn't part of that
+   card. The value is a cloned native <a> so it needs its link defaults
+   overridden same as Metadata's own Director link would via its <a>'s
+   inherited color — plain text color, not native link blue/visited, and
+   no underline until hover. */
+.jl-scene-director-label {
+  font-family: "Segoe UI", sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--jl-muted);
+}
+a.jl-scene-director-value {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--jl-text);
+  text-decoration: none;
+}
+a.jl-scene-director-value:hover {
+  color: var(--jl-pink);
+  text-decoration: underline;
+}
+.jl-scene-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Reserved for other plugins (collection-colors) to drop a badge/pill
+   into — dracula-layout never puts anything here itself. Collapsing on
+   :empty means this costs zero layout space when no such plugin is
+   installed, rather than a stray gap. */
+.jl-scene-badge-slot:empty {
+  display: none;
+}
+
+/* Compact performer name list — sits between the Code/Date bar (order 10-12)
+   and Title (order 20), matching the scene-card grid tile's own DOM order
+   (code-date bar, then performers, then title — see clean-cards.js
+   enhanceCard()). Reuses .stash-performers, the same class those tiles use,
+   so it gets that rule's cyan links/nowrap+ellipsis/dot-separator look and
+   the same hover-popup behavior for free (photo/name/disambiguation, via
+   window.JLPerformerPopup — see clean-cards.js). Requested live
+   2026-09-01 — first tried replacing the native Performer section's own
+   big-card grid outright, reverted ("keep the native performer display...
+   move the performer names between the code-date bar and the title") in
+   favor of adding this as a second, persistent-header view alongside the
+   native grid rather than instead of it: the native grid (.scene-performers,
+   further down, Browse-only) is untouched, this is purely additive. Built
+   in scene-dashboard.js's buildSidebarPerformerList(), reading id/name/
+   disambiguation/image straight out of that same native grid's markup — no
+   extra GraphQL fetch needed, and no [data-jl-mode="browse"] gating here
+   since (like Title/Toolbar) it's meant to stay visible in every mode. */
+.scene-tabs[data-jl-mode] .jl-sidebar-performers {
+  order: 15;
+  /* .stash-performers (clean-cards.css) sets no font-family of its own, so
+     on the scene-card grid it inherits the card's own Lato stack — but
+     this list lives in a different ambient context (the sidebar, whose
+     own inherited stack is "Segoe UI", sans-serif → Liberation Sans), so
+     without an explicit font-family here it silently rendered in a
+     different, visibly thinner face despite an identical declared
+     font-weight: 500 (confirmed live via CSS.getPlatformFontsForNode —
+     scene-card resolved to Lato-Medium, sidebar to Liberation Sans).
+     Matching the scene-card's own stack fixes the mismatch; reported live
+     as still "too thin" even once matched, so this also went a step past
+     parity — 600 (Lato Semibold) against the scene-card's own 500 (Lato
+     Medium), deliberately heavier, not just equal. Pulled back down to
+     500 (2026-09-02, "reduce the performer font weight by 100") — still
+     resolves to a real Lato face (Lato-Medium, confirmed installed via
+     fc-list), same weight as the scene-card grid's own version now;
+     16px stays (the size step past parity wasn't part of this ask). */
+  font-family: Lato, Inter, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 500 !important;
+  /* Requested live (2026-09-02): "reduce padding between the performer
+     and title text - match the spacing between title and original
+     title." Same -6px-off-row-gap mechanism as
+     .stash-original-title's own margin-top just below Title — pulls the
+     container's row-gap: 10px down to 4px, landing on the exact same gap
+     Title has to Original Title, so the performer names read as
+     attached to the title they belong to instead of a separate block.
+     Briefly reverted the same session on a scope-confirmation
+     misunderstanding, then confirmed this was the correct target after
+     all and re-applied — this rule only ever touched
+     .jl-sidebar-performers (the list above Title), never the native
+     .scene-performers grid further down (Browse-only, below Tags). */
+  margin-bottom: -6px;
+}
+
+/* Tried giving Toolbar the same dark-pill treatment as the Code/Date bar
+   and the mode switcher — reverted. Once all three shared identical
+   chrome, Toolbar and the mode switcher sitting right on top of each
+   other read as one stacked block rather than two controls (see the
+   mockup review this settled: variant C, "flat toolbar", against A "more
+   gap" and B "merged bar" — C won because it's the only one that keeps
+   the two controls visually independent instead of just adding space
+   between duplicates or fusing them into one). Toolbar goes back to
+   sitting flush on the page background, exactly like Title/Original
+   Title — no override needed here at all, order is the only thing this
+   rule still has to set. */
+.scene-tabs[data-jl-mode] .scene-toolbar { order: 50; }
+
+/* Metadata card: injected head, then its rows in Resolution / Framerate /
+   Director / Created / Updated order. All five rows share one
+   `data-jl-item="scenedetails"` value (see tagPanes()), so — same as
+   everywhere else in this file — visual order comes entirely from `order`,
+   never DOM position: Director/Created/Updated are native and can't be
+   reordered relative to each other by moving them (constraint 1), and the
+   two mirrors are always appended after natives in DOM order regardless of
+   when tagPanes() creates them, so keying order off `data-jl-label`
+   instead is the only way to put Resolution/Framerate first without
+   touching a single DOM node. tagPanes()'s `data-jl-last-in-group` pass
+   (which flags whichever row gets the card's bottom border/radius) reads
+   this same intended order — see its own comment — not DOM/array order,
+   for the same reason. */
+/* Moved below Performers (2026-09-01, order 69-74 -> 112-117) — see the
+   Details/Tags cards right below, which deliberately stayed put: only
+   Metadata moved, not the whole Details/Tags/Performers block. Landed
+   in the gap between Performers (111) and File Info (120), the
+   smallest change that satisfies "below Performers" without touching
+   anyone else's order value. METADATA_ROW_ORDER in scene-dashboard.js
+   (the "who's last in group" bottom-border pass) tracks these five
+   rows' *relative* sequence by label name, not these absolute numbers
+   — moving the whole block uniformly like this needs no JS change,
+   only a change to the internal Resolution/Framerate/Director/Created/
+   Updated sequence itself would. */
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="metadata"]                                   { order: 112; }
+.scene-tabs[data-jl-mode] [data-jl-item="scenedetails"][data-jl-label="Resolution"]  { order: 113; }
+.scene-tabs[data-jl-mode] [data-jl-item="scenedetails"][data-jl-label="Framerate"]   { order: 114; }
+.scene-tabs[data-jl-mode] [data-jl-item="scenedetails"][data-jl-label="Director"]    { order: 115; }
+.scene-tabs[data-jl-mode] [data-jl-item="scenedetails"][data-jl-label="Created"]     { order: 116; }
+.scene-tabs[data-jl-mode] [data-jl-item="scenedetails"][data-jl-label="Updated"]     { order: 117; }
+
+/* Details card: injected head, then the description paragraph. */
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="description"]        { order: 79; }
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] p.pre               { order: 81; }
+
+/* Tags card: injected head, then the chip cloud. */
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="tags"]                { order: 89; }
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .tag-item           { order: 91; }
+
+/* Sits right after Toolbar (order: 50) and before Details (order: 79,
+   the first Browse-body card now that Metadata moved below Performers)
+   — the same slot stash's own native .nav-tabs occupied before this
+   plugin hid it (right after the header, before .tab-content begins).
+   Purely a position choice: doesn't affect which content is persistent vs.
+   Browse-only, since that's still governed by the [data-jl-mode="browse"]
+   visibility rules below, keyed off data attributes rather than DOM order. */
+/* No margin-top: row-gap: 10px (container) already provides the gap after
+   Toolbar on its own — an explicit 14px on top of that doubled up to 24px,
+   the same row-gap-plus-margin mistake fixed elsewhere in this file. */
+.scene-tabs[data-jl-mode] .jl-modes-row { order: 55; flex: 0 0 100%; min-width: 0; margin: 0 0 6px; }
+.scene-tabs[data-jl-mode] [data-jl-item="performers-heading"]          { order: 110; margin-top: 4px; }
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .scene-performers   { order: 111; }
+/* Performer cards default to a fixed 210px width (stash's native size for
+   generic performer grids elsewhere) that, plus its own 5px native margin,
+   doesn't fit two per row in this sidebar's usable width — so every
+   multi-performer scene silently fell back to one huge card per line
+   instead of stash's native 2-up flow. Shrinking is enough for stash's own
+   `.row.justify-content-center` flex-wrap to fit two per line on its own —
+   no grid needed, and an odd last card still centers alone on its own line
+   exactly like today. Single-performer scenes are untouched: with only one
+   card there's nothing to fit two of, so `:has()` doesn't match and the
+   native 210px card stays exactly as-is.
+
+   `calc(50% - 10px)`, not a fixed px value — was a fixed 190px (later
+   dropped from 200px once `.scene-tabs`'s own `padding-right: 16px` ate
+   into the sidebar's usable width), tuned to the one desktop width this
+   sidebar happened to measure at. Reported live 2026-09-02: on mobile,
+   `.scene-tabs` is the full (much narrower) viewport rather than the
+   fixed desktop sidebar, so that same 190px card (200px with its 5px
+   margins either side, 400px total for two) no longer fit — every
+   multi-performer scene silently fell back to a single column again,
+   same failure mode the original fixed-width fix was written for, just
+   at a second width nobody had tuned for. `calc(50% - 10px)` derives the
+   width from whatever the container's actual current width is instead:
+   each card's own 5px+5px margin (native, confirmed via computed style)
+   is 10px per card, 20px for the pair, so half the container minus 10px
+   always leaves exactly enough room for two — self-adjusting to any
+   container width (this sidebar's own padding changing again, a future
+   breakpoint, a different device) with no remeasuring required, unlike
+   the fixed-px value this replaces. Confirmed live at both mobile
+   (390px viewport, two 169.5px cards) and desktop (409px sidebar, two
+   194.5px cards) — same rule, no media query. */
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .scene-performers:has(.performer-card ~ .performer-card) .performer-card {
+  width: calc(50% - 10px) !important;
+}
+.scene-tabs[data-jl-mode] [data-jl-pane="fileinfo"]                    { order: 120; }
+.scene-tabs[data-jl-mode] [data-jl-pane="history"]                     { order: 130; }
+.scene-tabs[data-jl-mode] [data-jl-pane="groups"]                      { order: 140; }
+.scene-tabs[data-jl-mode] [data-jl-pane="galleries"]                    { order: 150; }
+/* Custom Fields moves to the very bottom of the Browse body, wrapped in the
+   same real-card mechanism as File/History (it's one contiguous element,
+   unlike Metadata/Details/Tags, so it doesn't need the scattered-group
+   treatment below). */
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .custom-fields      { order: 160; }
+/* Markers/Filters/Edit/Queue occupy the same slot as the Browse-only body
+   below — never simultaneously, since only one mode is active at a time. */
+.scene-tabs[data-jl-mode] [data-jl-pane="markers"],
+.scene-tabs[data-jl-mode] [data-jl-pane="filters"],
+.scene-tabs[data-jl-mode] [data-jl-pane="edit"],
+.scene-tabs[data-jl-mode] [data-jl-pane="queue"]                        { order: 110; }
+
+/* ------------------------------------------------------------
+ *  Scattered-group cards: Metadata, Details and Tags each look like a
+ *  `.jl-card` (below) but aren't one — their content is several sibling
+ *  elements sharing a React-owned parent with OTHER content that must NOT
+ *  be part of the card (Original Title lives alongside Metadata's fields;
+ *  Performers/Custom Fields live alongside Details/Tags), so there is no
+ *  single element to hang `.jl-card` off. Every member gets the card's
+ *  background/side-borders individually instead, with the negative
+ *  margin-top pulling them flush against each other (countering the
+ *  container's row-gap) so they read as one seamless box; radius/border
+ *  lands on the head (top) and the true last member (bottom).
+ *
+ *  Tags is the exception: it keeps only the head's card chrome. The chips
+ *  themselves stay their native pill/badge look (stash's own `.tag-item`
+ *  background) rather than being folded into the card's solid fill — boxing
+ *  a wrapped chip cloud into one seamless rectangle purely via matching
+ *  per-chip backgrounds leaves visible seams at the wrap points anyway,
+ *  and pill-styled tags read better on their own.
+ * ------------------------------------------------------------ */
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="metadata"],
+.scene-tabs[data-jl-mode] [data-jl-item="scenedetails"],
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="description"],
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] p.pre,
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="tags"] {
+  background: var(--jl-well);
+  border-left: 1px solid var(--jl-line);
+  border-right: 1px solid var(--jl-line);
+  padding-left: 14px;
+  padding-right: 14px;
+  /* Fully negate the container's row-gap: 10px — each row paints its own
+     background (there's no single shared parent to paint the fill once,
+     same reason as everywhere else in this card), so any leftover gap
+     doesn't just look like whitespace, it exposes the page background
+     showing through between rows: alternating bands, not File's one
+     continuous fill. The File-matching breathing room between rows comes
+     from padding *inside* each row's own box instead (below), which stays
+     part of the fill rather than a gap in it. */
+  margin-top: -10px;
+}
+.scene-tabs[data-jl-mode] [data-jl-item^="scenedetails"],
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] p.pre {
+  padding-top: 3px;
+}
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="metadata"],
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="description"],
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="tags"] {
+  border-top: 1px solid var(--jl-line);
+  border-radius: 4px 4px 0 0;
+  padding-top: 9px;
+  padding-bottom: 9px;
+  /* margin-top: 0, not the members' -10px — but *also* not some positive
+     value "to add the row-gap back": the container's row-gap: 10px already
+     runs between every pair of adjacent flex items automatically, File's
+     own card-to-card gap included. An earlier version set this to 10px on
+     the theory that the head needed its own explicit gap-back, which just
+     double-counted row-gap on top of itself — 20px before every card
+     instead of 10, worse once collapsed (see the collapsed-state rule
+     below, which had the same bug from the other side). */
+  margin-top: 0;
+  /* File's own jl-head divider doesn't reach the card's outer edge — it's
+     nested inside the card's own 14px padding, so its border-bottom is
+     narrower than the card border around it. This jl-head has no such
+     wrapper (it's flattened, sharing the card's own left/right border
+     directly), so replicate the inset via a pseudo-element sized to the
+     head's *content* box instead of a real `border-bottom`, which would
+     span the same full width as the card's outer border-left/right. */
+  border-bottom: none;
+  flex-wrap: wrap;
+  row-gap: 9px;
+}
+/* Tags' own head needs a narrower padding-bottom than Metadata/Details
+   get from the shared rule above — found live (2026-09-01), reported as
+   visibly more space above the chip cloud than below it. Root cause:
+   this 9px sits *inside* the head's own box, below the divider
+   (::after) — a completely separate space from .jl-tags-backdrop's own
+   margin-top: -10px (which only cancels the *container's* row-gap
+   between head and backdrop, landing that gap at 0, not this box's own
+   padding) or its 10px inset to the first chip row. The two stack:
+   9 (this padding) + 0 (row-gap, cancelled) + 10 (backdrop's own inset)
+   = 19px above the first row, against a symmetric 10px below the last
+   row (confirmed live via getBoundingClientRect on the head, backdrop,
+   and first/last chips — not assumed from the CSS numbers alone).
+   Metadata/Details don't show this as visibly because their own rows
+   only add 3px of their own top padding on top of the same head
+   padding-bottom (12px vs 10px — a real but much smaller gap, and not
+   what was reported), so this is scoped to Tags alone rather than
+   changed on the shared rule. 0 here means the divider sits right at
+   the head's own bottom edge, leaving the backdrop's already-symmetric
+   10px as the *only* top inset — matching the bottom exactly. */
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="tags"] {
+  padding-bottom: 0;
+}
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="metadata"]::after,
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="description"]::after,
+.scene-tabs[data-jl-mode] .jl-head[data-jl-card="tags"]::after {
+  content: '';
+  flex-basis: 100%;
+  height: 0;
+  border-bottom: 1px solid var(--jl-line);
+}
+.scene-tabs[data-jl-mode] [data-jl-item="scenedetails"][data-jl-last-in-group="true"],
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] p.pre {
+  border-bottom: 1px solid var(--jl-line);
+  border-radius: 0 0 4px 4px;
+  padding-bottom: 10px;
+}
+/* Tags is the one card whose body isn't its members' own backgrounds —
+   .jl-tags-backdrop (sized in scene-dashboard.js) is a single real element
+   painting the fill once behind the whole wrapped chip cloud, so the chips
+   keep their native pill colors instead of being flattened into rows. It
+   carries the card's bottom corner/border since it's always the true last
+   element of this particular card. */
+.scene-tabs[data-jl-mode] .jl-tags-backdrop {
+  order: 90;
+  flex: 0 0 100%;
+  min-width: 0;
+  background: var(--jl-well);
+  border-left: 1px solid var(--jl-line);
+  border-right: 1px solid var(--jl-line);
+  border-bottom: 1px solid var(--jl-line);
+  border-radius: 0 0 4px 4px;
+  /* Missing from the first version of this rule: without it, row-gap: 10px
+     (container) shows through as a visible seam of plain page background
+     between the head's bottom edge and the backdrop's top — the exact
+     row-gap-not-cancelled mistake documented elsewhere in this file, just
+     not yet made here when this rule was first written. sizeTagsBackdrop()
+     in scene-dashboard.js measures the backdrop's rendered position after
+     this applies, so the height it computes already accounts for it. */
+  margin-top: -10px;
+}
+/* Metadata's <h6> lines and the Details paragraph get File/History's own
+   text treatment (their <dt>/<dd> are `--jl-muted`/`--jl-text`, weight
+   800/400, 12/13px) instead of default bold <h6>/<p> styling, so a
+   collapsible pane's body reads the same regardless of which native markup
+   backs it. The label is rendered via `::before` reading `data-jl-label`
+   (set by splitLabelValue() in scene-dashboard.js, which strips the literal
+   "Label: " text out of the node) rather than wrapping it in a real
+   element — a real wrapper would mean restructuring the text node, unsafe
+   for Director since stash can rewrite it after an Edit-mode save; `::before`
+   never touches the node at all.
+
+   clean-cards.css already has a `.scene-details h6 { font-size/weight/
+   color/margin-bottom !important }` rule from the original (pre-dashboard)
+   layout — !important, so every property it sets needs !important here too
+   or it wins regardless of specificity.
+
+   Values are tab-aligned like File's own <dt>/<dd> grid: each row is its
+   own 2-column grid (`::before` in column 1, the row's own text — an
+   anonymous grid item — in column 2), with the SAME fixed column-1 width on
+   every row so every value lines up regardless of its label's length. File
+   achieves this with one shared grid across every dt/dd pair; that's not
+   available here since these rows aren't siblings inside a shared
+   container (see the scattered-group-card note in CLAUDE.md), so the width
+   is a constant instead — 84px comfortably fits "Resolution:", the
+   longest label in the current set at ~79px measured (canvas-measured
+   against the actual 12px/800-weight monospace font this renders in, not
+   eyeballed). Framerate/Resolution are mirrored in from Subheader (see
+   tagPanes()) and are exactly the kind of longer label this needs
+   remeasuring for — a first pass at this sized the column for "Director:"
+   alone (~65px) before Framerate/Resolution existed here, and "Resolution:"
+   wrapped its own `::before` onto two lines inside a column 14px too
+   narrow for it. If a longer label is ever added, remeasure and bump this
+   number again; there's no auto-sizing safety net here the way there is
+   in File's dl. */
+.scene-tabs[data-jl-mode] [data-jl-item^="scenedetails"] {
+  display: grid !important;
+  grid-template-columns: 84px 1fr;
+  column-gap: 8px;
+  color: var(--jl-text) !important;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  letter-spacing: normal !important;
+  /* Matches File's own <dd> (13px/19.5px, i.e. the same 1.5 ratio as the
+     label's 12px/18px below) — this rule left line-height unset before,
+     same gap as the label had, just smaller since 13px's default ~1.2
+     (15.6px) is closer to 19.5px than 12px's was. */
+  line-height: 1.5 !important;
+  margin-bottom: 0 !important;
+}
+/* font-family here is a real override, not redundant with the row's own
+   monospace rule above: this pseudo-element would otherwise inherit that
+   value straight through (::before has no font-family of its own by
+   default), same bug as performer-dashboard.css's detail-item-title had —
+   the label should read sans-serif like File's own native <dt>, only the
+   value stays monospace. No !important needed: a property set directly on
+   this element always wins over an inherited one, !important or not —
+   inheritance only applies when nothing here sets the property at all.
+   line-height: 1.5 is the same kind of miss — File's native <dt> (and
+   performer's own .detail-item-title) both render their 12px label at an
+   18px line-height; this rule left line-height unset, so it fell back to
+   the row's own tighter ~1.2, which reads as visibly smaller/more cramped
+   at the *identical* font-size — confirmed via computed style (14.4px vs
+   18px), not just eyeballed.
+
+   The font-family stack itself matters past just "Segoe UI" — it isn't
+   installed on this server either way, so both this rule and File's own
+   native one fall through to a substitute, but the *rest* of the stack
+   decides which one. File's native rule is plain `"Segoe UI", sans-serif`;
+   an earlier version of this rule added `system-ui, -apple-system` after
+   it, which changed the browser's actual substitution choice — confirmed
+   via CDP's CSS.getPlatformFontsForNode (the right tool here: getComputedStyle
+   only ever returns the declared stack, never which font it actually
+   resolved to): File's <dt> renders "Liberation Sans", this rule rendered
+   "DejaVu Sans" — two different typefaces with different metrics at the
+   identical declared size, reading as a real size mismatch despite
+   font-size/line-height matching exactly. Match File's exact stack, not
+   just its first (unavailable) name, or substitution can diverge again. */
+.scene-tabs[data-jl-mode] [data-jl-item^="scenedetails"]::before {
+  content: attr(data-jl-label) ":";
+  grid-column: 1;
+  color: var(--jl-muted);
+  font-family: "Segoe UI", sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] p.pre {
+  color: var(--jl-text);
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 13px;
+}
+
+/* Custom Fields keeps its own native collapse (defaults closed) separate
+   from ours; our jl-head now does that job for the whole card, so the
+   native toggle is hidden — scene-dashboard.js force-opens it once so the
+   content isn't stranded behind a control nobody can reach any more. */
+.scene-tabs[data-jl-mode] [data-jl-pane="details"] .custom-fields .collapse-header {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------
+ *  Visibility: matching stash's original tab behavior, only the identity
+ *  header (Title/Original Title/Studio/Toolbar) stays visible in every
+ *  mode. Everything else that lives in the Details pane — Metadata,
+ *  Details, Tags, same as Performers/Custom Fields — is Browse-only and
+ *  hides when another mode is selected, same as fileinfo/history/groups/
+ *  galleries already do.
+ *
+ *  Original Title is deliberately not in this list: it's tagged only by
+ *  `.stash-original-title`, never `[data-jl-item^="scenedetails"]` (see
+ *  tagPanes() in scene-dashboard.js), specifically so it's untouched here
+ *  and stays part of the always-visible header.
+ * ------------------------------------------------------------ */
+.scene-tabs[data-jl-mode]:not([data-jl-mode="browse"]) [data-jl-item^="scenedetails"],
+.scene-tabs[data-jl-mode]:not([data-jl-mode="browse"]) .jl-head[data-jl-card="metadata"],
+.scene-tabs[data-jl-mode]:not([data-jl-mode="browse"]) .jl-head[data-jl-card="description"],
+.scene-tabs[data-jl-mode]:not([data-jl-mode="browse"]) [data-jl-pane="details"] p.pre,
+.scene-tabs[data-jl-mode]:not([data-jl-mode="browse"]) .jl-head[data-jl-card="tags"],
+.scene-tabs[data-jl-mode]:not([data-jl-mode="browse"]) [data-jl-pane="details"] .tag-item,
+.scene-tabs[data-jl-mode]:not([data-jl-mode="browse"]) .jl-tags-backdrop,
+.scene-tabs[data-jl-mode]:not([data-jl-mode="browse"]) [data-jl-item="performers-heading"],
+.scene-tabs[data-jl-mode]:not([data-jl-mode="browse"]) [data-jl-pane="details"] .scene-performers,
+.scene-tabs[data-jl-mode]:not([data-jl-mode="browse"]) [data-jl-pane="details"] .custom-fields {
+  display: none !important;
+}
+
+/* display must be flex, not block: `.jl-card` relies on flex + `order: -1`
+   to keep the injected header first regardless of where React's re-renders
+   leave it in the DOM. Excludes Details: that pane is flattened above, not
+   boxed, so it never gets its own display override here. */
+.scene-tabs[data-jl-mode="browse"] .tab-content > .tab-pane[data-jl-browse]:not([data-jl-pane="details"]) {
+  display: flex !important;
+  flex-direction: column;
+  opacity: 1 !important;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------
+ *  Card chrome — still applies to File / History / Groups / Galleries,
+ *  the panes that stay boxed instead of being flattened.
+ * ------------------------------------------------------------ */
+.jl-card {
+  background: var(--jl-well);
+  border: 1px solid var(--jl-line);
+  border-radius: 4px;
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.jl-head {
+  order: -1;
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--jl-line);
+  color: var(--jl-dim);
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 9px 0 7px;
+  margin: 0 0 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  transition: color 0.12s ease;
+}
+.jl-head:hover { color: var(--jl-muted); }
+.jl-head:focus-visible { outline: 1px solid var(--jl-pink); outline-offset: 2px; }
+.jl-head .jl-chevron {
+  font-size: 9px;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+
+.jl-collapsed > *:not(.jl-head) { display: none !important; }
+.jl-collapsed > .jl-head { margin-bottom: 0; border-bottom-color: transparent; }
+.jl-collapsed > .jl-head .jl-chevron { transform: rotate(-90deg); }
+
+/* Collapse for the scattered-group cards: there's no single host to put
+   `.jl-collapsed` on, so the flag lives on .scene-tabs per group instead
+   (see applyGroupCollapsed in scene-dashboard.js), and each member is hidden
+   by its own existing selector. */
+.scene-tabs[data-jl-collapsed-metadata="true"] [data-jl-item^="scenedetails"] { display: none !important; }
+.scene-tabs[data-jl-collapsed-description="true"] [data-jl-pane="details"] p.pre { display: none !important; }
+.scene-tabs[data-jl-collapsed-tags="true"] [data-jl-pane="details"] .tag-item { display: none !important; }
+/* .jl-tags-backdrop's visibility is otherwise only ever set by
+   sizeTagsBackdrop() — which the collapse click handler never calls (it
+   only flips the data-jl-collapsed-tags attribute, see applyGroupCollapsed)
+   — so collapsing right after a page load that started with Tags expanded
+   left the backdrop's last-measured inline height/background rendering
+   behind the now-hidden chips, a full outlined box with nothing inside it.
+   A plain CSS override, same as the .tag-item rule above, fixes it
+   unconditionally regardless of whatever inline style JS last set. */
+.scene-tabs[data-jl-collapsed-tags="true"] .jl-tags-backdrop { display: none !important; }
+.scene-tabs[data-jl-collapsed-metadata="true"] .jl-head[data-jl-card="metadata"],
+.scene-tabs[data-jl-collapsed-description="true"] .jl-head[data-jl-card="description"],
+.scene-tabs[data-jl-collapsed-tags="true"] .jl-head[data-jl-card="tags"] {
+  border-radius: 4px;
+  /* The expanded head has `border-bottom: none` (the ::after pseudo-element
+     draws the inset divider instead — see the shared head rule above), and
+     collapsing never turns that back on, so a collapsed card was missing
+     its bottom edge entirely: top/left/right outlined, open underneath.
+     ::after is hidden below on collapse, so this needs a real border here
+     to close the box. */
+  border-bottom: 1px solid var(--jl-line);
+  /* No margin-bottom override: row-gap: 10px alone already matches File's
+     own collapsed-to-collapsed gap (its .jl-card carries no extra margin
+     either) — adding one here just double-counts row-gap again, same
+     mistake as the head's old margin-top. File/History/Custom Fields'
+     collapsed height also includes 14px from their own .jl-card's
+     padding-bottom, which doesn't disappear when the content inside is
+     hidden; matched here with the same 14px so a collapsed scattered-group
+     card is the same height as a collapsed real one. */
+  padding-bottom: 23px;
+}
+/* The inset divider (::after, added above) separates the head from the
+   body below it — with the body hidden, it's a line with nothing left to
+   divide, floating in the middle of the (now single-row) card. */
+.scene-tabs[data-jl-collapsed-metadata="true"] .jl-head[data-jl-card="metadata"]::after,
+.scene-tabs[data-jl-collapsed-description="true"] .jl-head[data-jl-card="description"]::after,
+.scene-tabs[data-jl-collapsed-tags="true"] .jl-head[data-jl-card="tags"]::after {
+  display: none;
+}
+.scene-tabs[data-jl-collapsed-metadata="true"] .jl-head[data-jl-card="metadata"] .jl-chevron,
+.scene-tabs[data-jl-collapsed-description="true"] .jl-head[data-jl-card="description"] .jl-chevron,
+.scene-tabs[data-jl-collapsed-tags="true"] .jl-head[data-jl-card="tags"] .jl-chevron {
+  transform: rotate(-90deg);
+}
+
+/* An empty Groups or Galleries card is noise — hide it entirely.
+   Must match the reveal rule's specificity or higher, or `display: flex
+   !important` above wins and the empty card renders anyway. */
+.scene-tabs[data-jl-mode="browse"] .tab-content > .tab-pane[data-jl-browse][data-jl-empty="true"] {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------
+ *  Density inside the cards
+ * ------------------------------------------------------------ */
+.scene-tabs[data-jl-mode="browse"] .scene-file-info { padding: 0 !important; max-width: none !important; }
+.scene-tabs[data-jl-mode="browse"] .scene-file-info dd { margin-bottom: 4px !important; }
+.scene-tabs[data-jl-mode="browse"] .play-history,
+.scene-tabs[data-jl-mode="browse"] .o-history { margin-bottom: 10px; }
+
+/* ------------------------------------------------------------
+ *  Edit toolbar — refinement on top of buttons.css's global rules
+ * ------------------------------------------------------------ */
+/* "Scrape with…" is natively `.btn-primary`, same class as Save right next
+   to it — buttons.css's global rule makes both the pink wash treatment, so
+   they'd still read as equally important despite Save being the only
+   genuinely primary action on this row. Demoted to the same ghost
+   treatment buttons.css gives `.btn-secondary`, scoped to this one button:
+   it's the one place native markup doesn't already carry `.btn-secondary`
+   for a secondary-weight action, so the fix has to live here rather than
+   in the page-agnostic file. */
+.edit-buttons-container .scraper-menu .btn-primary {
+  background-color: transparent;
+  border-color: var(--jl-line);
+  color: var(--jl-muted);
+}
+.edit-buttons-container .scraper-menu .btn-primary:hover {
+  border-color: var(--jl-pink);
+  color: var(--jl-fg);
+  background-color: var(--jl-pink-wash-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jl-mode, .jl-head, .jl-head .jl-chevron { transition: none !important; }
+}

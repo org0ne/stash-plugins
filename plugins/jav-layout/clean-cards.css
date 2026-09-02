@@ -1,0 +1,540 @@
+/* Clean Cards — Dracula Pro scene/card styling.
+   Extracted verbatim from customJavaScript.js v5.4; behaviour unchanged. */
+.scene-card.zoom-0 .card-section-title .TruncatedText { font-size: 16px !important; }
+.scene-card.zoom-1 .card-section-title .TruncatedText { font-size: 17px !important; }
+.scene-card.zoom-2 .card-section-title .TruncatedText { font-size: 19px !important; }
+.scene-card.zoom-3 .card-section-title .TruncatedText { font-size: 19px !important; line-height: 1.55 !important; }
+.scene-card.zoom-4 .card-section-title .TruncatedText { font-size: 20px !important; }
+
+.scene-card.zoom-0 .stash-performers { font-size: 13px !important; }
+.scene-card.zoom-1 .stash-performers { font-size: 14px !important; }
+.scene-card.zoom-2 .stash-performers { font-size: 15px !important; }
+.scene-card.zoom-3 .stash-performers { font-size: 16px !important; }
+.scene-card.zoom-4 .stash-performers { font-size: 17px !important; }
+
+.scene-card.zoom-0 .stash-code-date { font-size: 12px !important; }
+.scene-card.zoom-1 .stash-code-date { font-size: 13px !important; }
+.scene-card.zoom-2 .stash-code-date { font-size: 14px !important; }
+.scene-card.zoom-3 .stash-code-date { font-size: 15px !important; }
+.scene-card.zoom-4 .stash-code-date { font-size: 16px !important; }
+
+
+.scene-card .card-section {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  padding-bottom: 28px !important;
+  box-sizing: border-box !important;
+}
+
+.scene-card .card-section > a {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+
+.stash-code-date {
+  font-weight: 800 !important;
+  background: rgba(30, 30, 50, 0.95) !important;
+  /* 9px, not the original 4px — reported live as too close to the bar's
+     own edge next to the sidebar's matching Code/Date bar (which had the
+     opposite problem, too far). Split the difference against the
+     sidebar's TRUE visual gap, not its raw padding number: the sidebar
+     bar's own backdrop is deliberately 5px wider on each side than its
+     Code/Date content (an "anchor" effect, see .jl-codedate-backdrop in
+     scene-dashboard.css) — measured live, that made the sidebar's real
+     text-to-visible-edge gap 15px (10px padding + 5px backdrop
+     overhang), not the 10px its CSS padding value alone suggests.
+     Midpoint of the true 4px/15px gap is 9px, confirmed by re-measuring
+     after the change, not just computed on paper. See
+     scene-dashboard.css's own `.studio-code`/`.scene-subheader`
+     padding-left/-right for the sidebar half of this same change (which
+     needed 4px of padding, not 9, to land on the same 9px visual gap —
+     the backdrop offset already supplies the other 5). */
+  padding: 0 9px !important;
+  /* No bottom margin — this bar is now a direct child of .card-section
+     (see enhanceCard() in clean-cards.js: inserted as a sibling of the
+     title's own <a>, not inside it), which already supplies a 4px `gap`
+     between its own direct children. Keeping a margin-bottom here too
+     would double-count that gap (4px margin + 4px gap = 8px), the same
+     row-gap-plus-margin bug documented at length elsewhere in this
+     project. */
+  margin: 0 !important;
+  border-radius: 3px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: baseline !important;
+  flex-shrink: 0 !important;
+  line-height: 1.6 !important;
+  /* Deliberately 10px wider than the title text below it (5px each
+     side), not matching it exactly — reported live that the bar read as
+     narrower than the card's own text margin, the same "anchor" request
+     already granted for the sidebar's matching bar (.jl-codedate-
+     backdrop in scene-dashboard.css, which extends 5px past its own
+     shared edge on each side for the same reason). The 9px padding above
+     is untouched on purpose: code/date's distance from THIS bar's own
+     edge stays exactly what it was, the bar's edge itself just moves
+     outward past the title's. box-sizing: border-box (already the
+     native default reasserted below) means this width includes the
+     padding, so widening it doesn't also grow the padding gap. Parent
+     is `display: flex; flex-direction: column` with no padding of its
+     own (confirmed live) — items stretch to 100% width on the cross
+     axis by default, which is why plain `width: 100%` (implicit, via
+     stretch) previously made this match the title's own container
+     exactly; `width` calc + a centering negative margin is the correct
+     lever here, not flex-basis (flex-basis governs the *main* axis,
+     vertical in a column flex, not the cross-axis width). */
+  box-sizing: border-box !important;
+  width: calc(100% + 10px) !important;
+  margin-left: -5px !important;
+}
+.stash-code-date,
+.stash-code-date .code,
+.stash-code-date .date { color: #ff80bf !important; line-height: 1.6 !important; }
+.stash-code-date .code { letter-spacing: 0.5px !important; }
+/* .code already renders monospace here (native, no rule of its own
+   needed) — .date never did, inheriting the card's own Lato instead.
+   Unified to match: Code and Date read as one font now, not two, same
+   fix applied to the scene detail page's own Code/Date bar
+   (scene-dashboard.css's .scene-subheader .date). */
+.stash-code-date .date {
+  font-weight: 700 !important;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace !important;
+}
+
+.stash-code-date .code-group {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 0px !important;
+  min-width: 0 !important;
+}
+
+.stash-code-copy {
+  background: transparent !important;
+  border: none !important;
+  color: inherit !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  font-size: 0.85em !important;
+  line-height: 1 !important;
+  opacity: 0.7 !important;
+  flex-shrink: 0 !important;
+  align-self: center !important;
+  transition: opacity 0.15s ease, color 0.15s ease !important;
+}
+.stash-code-copy:hover { opacity: 1 !important; }
+.stash-code-copy.copied {
+  color: #50fa7b !important;
+  opacity: 1 !important;
+}
+
+.stash-performers {
+  font-weight: 500 !important;
+  letter-spacing: 0.06em !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  display: block !important;
+  flex-shrink: 0 !important;
+}
+
+
+.stash-performers a,
+.stash-performers a:visited,
+.stash-performers a:hover,
+.stash-performers a:active { color: #73c1e6 !important; }
+
+/* =====================================================
+ *  PERFORMER NAME HOVER POPUP
+ * ===================================================== */
+.stash-performer-popup {
+  position: fixed !important;
+  z-index: 10000 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 150px !important;
+  box-sizing: border-box !important;
+  opacity: 0 !important;
+  transform: translateY(-4px) !important;
+  transition: opacity 0.12s ease, transform 0.12s ease !important;
+  pointer-events: none !important;
+}
+.stash-performer-popup.visible {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+.stash-performer-popup .stash-performer-popup-arrow {
+  position: relative !important;
+  width: 0 !important;
+  height: 0 !important;
+  border-left: 7px solid transparent !important;
+  border-right: 7px solid transparent !important;
+  border-bottom: 7px solid rgba(30, 30, 50, 0.97) !important;
+  flex-shrink: 0 !important;
+}
+.stash-performer-popup img {
+  width: 100% !important;
+  height: 195px !important;
+  object-fit: cover !important;
+  object-position: top center !important;
+  border-radius: 6px !important;
+  display: block !important;
+  background: #14141f !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5) !important;
+}
+.stash-performer-popup .stash-performer-popup-name {
+  margin-top: 4px !important;
+  background: rgba(30, 30, 50, 0.97) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  line-height: 1.3 !important;
+  padding: 3px 10px !important;
+  border-radius: 4px !important;
+  max-width: 100% !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  box-sizing: border-box !important;
+}
+.stash-performer-popup .stash-performer-popup-name .stash-performer-popup-disambig {
+  font-weight: 500 !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  margin-left: 4px !important;
+}
+
+.scene-card .card-section-title {
+  min-height: 0 !important;
+  flex: 0 0 auto !important;
+}
+
+/* Quicksand/600 here, on the performer-card title below, the scene detail
+   Title, and performer-dashboard.css's .performer-name — deliberately the
+   same font+weight in all four places. Checked live first, not assumed:
+   scene-card titles already rendered in native Lato, but the other three
+   fell back to plain Liberation Sans (their native rule is just
+   `"Segoe UI", sans-serif` with nothing better behind it) — an
+   inconsistency nobody had chosen on purpose. Quicksand won out of a
+   mockup comparing it against Lato/Inter/Inter Display at weight 500 vs
+   600 vs 700 across real titles at each context's own native size; 600
+   was the weight sweet spot — 500 read thin against the surrounding
+   chrome, 700 read as shouting on longer scene titles. Confirmed
+   installed on this server via `fc-list` before picking it, same as
+   every other font choice in this plugin — zero new dependency. */
+.scene-card .card-section-title .TruncatedText {
+  font-family: Quicksand, "Liberation Sans", Arial, sans-serif !important;
+  font-weight: 600 !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 3 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.4 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-wrap: anywhere !important;
+  flex: 0 1 auto !important;
+  contain: layout !important;
+}
+
+.scene-card .card-popovers.btn-group {
+  position: absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  flex-wrap: nowrap !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  border-top: 1px solid rgba(98,114,164,0.25) !important;
+  padding: 0 8px 0 12px !important;
+  margin: 0 !important;
+  z-index: 2 !important;
+  overflow: hidden !important;
+}
+
+.scene-card .card-popovers.btn-group > * > button {
+  display: flex !important;
+  align-items: center !important;
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+}
+
+/* .stash-collection-pill styling now lives in the standalone
+   collection-colors plugin, which owns this class name and inserts the
+   element itself — see clean-cards.js's anchorButtonsRight()/
+   reorderPopoverBar() for why those two still filter on this class even
+   though this file no longer creates it. */
+
+.scene-card__details,
+.scene-card hr,
+.scene-card__date,
+.scene-card__description,
+.file-path { display: none !important; }
+
+.scene-card .watched-badge {
+  position: absolute !important;
+  z-index: 3 !important;
+}
+
+.zoom-1 .performer-card { height: 450px !important; }
+.zoom-2 .performer-card { height: 540px !important; }
+.zoom-3 .performer-card { height: 590px !important; }
+.zoom-4 .performer-card { height: 650px !important; }
+
+.performer-card > hr,
+.performer-card .card-section + hr {
+  display: block !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-top: 1px solid rgba(98,114,164,0.25) !important;
+  opacity: 1 !important;
+}
+
+.performer-card .card-popovers.btn-group {
+  position: static !important;
+  height: 40px !important;
+  display: flex !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  gap: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-top: 0 !important;
+  z-index: auto !important;
+}
+
+.performer-card .card-popovers > a,
+.performer-card .card-popovers > div { flex: 1 1 0 !important; margin: 0 !important; }
+
+.performer-card .card-popovers > a > button,
+.performer-card .card-popovers > div > button {
+  width: 100% !important;
+  height: 100% !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+}
+
+.performer-card .card-popovers > * + * {
+  border-left: 1px solid rgba(98,114,164,0.25) !important;
+}
+
+.performer-card .card-section {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  flex: 1 1 auto !important;
+  padding-bottom: 8px !important;
+  min-height: 92px !important;
+  max-height: none !important;
+  gap: 4px !important;
+  box-sizing: border-box !important;
+}
+
+.performer-card .card-section > a {
+  display: block !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+.performer-card .card-section-title {
+  margin-bottom: 0 !important;
+  line-height: 1.25 !important;
+}
+
+.performer-card .card-section-title .TruncatedText {
+  font-family: Quicksand, "Liberation Sans", Arial, sans-serif !important;
+  font-weight: 600 !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.25 !important;
+}
+
+.performer-card .performer-card__age {
+  margin-top: 2px !important;
+  margin-bottom: 0 !important;
+  line-height: 1.2 !important;
+}
+
+/* Performer name/disambiguation copy buttons: owned entirely by the
+   separate copy-buttons plugin now — nothing of this plugin's own left
+   to style here. */
+
+/* =====================================================
+ *  SCENE DETAIL PAGE
+ * ===================================================== */
+
+.scene-header-container .studio-logo img {
+  max-height: 100px !important;
+  width: auto !important;
+  opacity: 0.85 !important;
+}
+
+.scene-header-container .scene-header .TruncatedText {
+  color: #e1cdfe !important;
+  font-family: Quicksand, "Liberation Sans", Arial, sans-serif !important;
+  font-weight: 600 !important;
+  font-size: 1.6rem !important;
+  line-height: 1.25 !important;
+  -webkit-line-clamp: unset !important;
+}
+
+.scene-subheader {
+  font-size: 15px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.4px !important;
+  row-gap: 2px !important;      /* ← tight vertical spacing */
+  column-gap: 10px !important;  /* ← keeps horizontal spacing as-is */
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+}
+
+.scene-subheader .date,
+.scene-subheader .frame-rate,
+.scene-subheader .resolution {
+  color: #f8f8f2 !important;
+  font-weight: 700 !important;
+}
+.scene-subheader .divider { color: #f8f8f2 !important; opacity: 0.4 !important; }
+
+.scene-subheader .subheader-break { flex-basis: 100% !important; height: 0 !important; }
+.scene-header-container .studio-code {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0px !important;
+  width: fit-content !important;
+  margin: 18px auto 12px !important;
+  padding: 2px 2px 2px 10px !important;
+  background: rgba(30, 30, 50, 0.95) !important;
+  border-radius: 3px !important;
+  color: #ff80bf !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.5px !important;
+  font-size: 17px !important;
+  line-height: 1.6 !important;
+  text-align: center !important;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace !important;
+}
+
+/* Studio code copy button: owned entirely by the separate copy-buttons
+   plugin now — it appends its own button after .studio-code-text (the
+   element built above), styled from its own CSS, not this file's. */
+
+.scene-header-container .scene-header {
+  margin-top: 0 !important;      /* ← kill default <h3> top margin */
+}
+
+.scene-tabs .nav-tabs {
+  border-bottom: 1px solid rgba(98,114,164,0.3) !important;
+  gap: 2px !important;
+}
+.scene-tabs .nav-tabs .nav-link {
+  color: #8b9bc7 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.3px !important;
+  padding: 6px 12px !important;
+  border-radius: 4px 4px 0 0 !important;
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  transition: color 0.15s, border-color 0.15s !important;
+}
+.scene-tabs .nav-tabs .nav-link:hover {
+  color: #cdd6f4 !important;
+  border-bottom-color: rgba(98,114,164,0.5) !important;
+  background: transparent !important;
+}
+.scene-tabs .nav-tabs .nav-link.active {
+  color: #ff80bf !important;
+  border-bottom: 2px solid #ff80bf !important;
+  background: transparent !important;
+}
+
+.scene-details h6 {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  color: #6272a4 !important;
+  letter-spacing: 0.5px !important;
+  margin-bottom: 2px !important;
+}
+
+.row:has(> .scene-details) {
+  align-items: flex-start !important;
+  margin-bottom: 0 !important;
+}
+
+.scene-details h6 + p,
+.scene-details .pre { color: #73c1e6 !important; font-weight: 800 !important; }
+
+.scene-tabs h6:not(.scene-details h6) {
+  color: #cdd6f4 !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.3px !important;
+  text-transform: none !important;
+}
+
+.scene-performers .performer-card .performer-card__age {
+  color: #8b9bc7 !important;
+  font-size: 12px !important;
+}
+
+.scene-toolbar .rating-stars .star-rating-number {
+  color: #ff80bf !important;
+  font-weight: 800 !important;
+  font-size: 13px !important;
+}
+
+.scene-toolbar .count-button .count-icon svg,
+.scene-toolbar .count-button .count-icon span svg { color: #ff80bf !important; }
+
+.scene-file-info dt {
+  color: #8b9bc7 !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.4px !important;
+}
+.scene-file-info dd {
+  color: #cdd6f4 !important;
+  font-size: 13px !important;
+  font-family: monospace !important;
+}
+
+.play-history h5,
+.o-history h5 { color: #cdd6f4 !important; font-size: 14px !important; font-weight: 800 !important; }
+.play-history .badge,
+.o-history .badge {
+  background: #ff80bf22 !important;
+  color: #ff80bf !important;
+  border: 1px solid #ff80bf55 !important;
+}
+.scene-history li,
+.o-history li { color: #8b9bc7 !important; font-size: 13px !important; }
+.play-history .details-list dt { color: #8b9bc7 !important; font-size: 12px !important; font-weight: 800 !important; }
+.play-history .details-list dd { color: #ff80bf !important; font-weight: 600 !important; }
+
+.queue-scene-title { color: #cdd6f4 !important; font-size: 13px !important; font-weight: 600 !important; }
+.queue-scene-studio { color: #8b9bc7 !important; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 0.4px !important; }
+.queue-scene-performers { color: #73c1e6 !important; font-size: 12px !important; font-weight: 700 !important; }
+.queue-scene-date { color: #ff80bf !important; font-size: 11px !important; font-weight: 600 !important; }
+#queue-content li.current { border-left: 3px solid #ff80bf !important; padding-left: 6px !important; }
+#queue-content li { border-left: 3px solid transparent !important; padding-left: 6px !important; }

@@ -1,0 +1,433 @@
+/* ============================================================
+ *  Buttons — site-wide
+ *
+ *  Recolors/reshapes stash's native Bootstrap buttons everywhere this
+ *  plugin's CSS reaches (all pages — clean-cards.js/scene-dashboard.js/
+ *  performer-dashboard.js all load site-wide already, and so does this
+ *  file, deliberately CSS-only: unlike those, nothing here needs a page's
+ *  own DOM structure, just the Bootstrap classes stash already writes
+ *  everywhere — `.btn-primary`/`.btn-secondary`/`.btn-danger`/etc.
+ *
+ *  Grew out of a one-page mockup for the scene Edit toolbar
+ *  (`.edit-buttons-container`), then went through two revisions after
+ *  live feedback:
+ *   - v1 shipped with an invented warm accent (`#d97757`) and generous
+ *     padding (9px 18px / 8px radius) — too heavy next to the mode bar's
+ *     own pills once seen live.
+ *   - v2 (current) drops the invented accent entirely. Primary reuses
+ *     `var(--jl-pink)` directly — not just the same hex, the mode bar's
+ *     own MECHANISM: `[aria-selected="true"] { color: var(--jl-pink);
+ *     background: rgba(255,128,191,.15) }`, a tinted wash, never a solid
+ *     fill. Sized down to sit close to `.jl-mode`'s own 5px/13px padding
+ *     and 6px radius (not `.jl-modes`' outer 8px — that mismatch was
+ *     v1's real sizing bug, not just "padding too big").
+ *
+ *  Split deliberately into two tiers — see the two sections below:
+ *   1. Color/radius/weight — safe everywhere, applied globally.
+ *   2. Padding/font-size — NOT applied globally. See that section for why.
+ *
+ *  Font-family has moved twice since v2 above (v3: Lato, to fix a real
+ *  nav-bar font-weight leak and match scene-card titles; v4, current:
+ *  reverted to "Segoe UI" — same value as the nav bar's own native rule —
+ *  to normalize every button in the app to one font on request). Full
+ *  history in CLAUDE.md rather than duplicated here across every
+ *  revision; see the tier-1 rule below for what's actually current.
+ * ============================================================ */
+
+:root {
+  /* Primary consumes var(--jl-pink) directly (defined in scene-dashboard.css)
+     rather than a duplicate token — if that value ever moves, Save moves
+     with it. These are just the wash/border alpha steps layered on top. */
+  --jl-pink-wash:        rgba(255, 128, 191, 0.16);
+  --jl-pink-wash-hover:  rgba(255, 128, 191, 0.26);
+  --jl-pink-wash-active: rgba(255, 128, 191, 0.34);
+  --jl-pink-wash-soft:   rgba(255, 128, 191, 0.1);
+  --jl-pink-border:      rgba(255, 128, 191, 0.4);
+
+  --jl-danger:      #e0665a;
+  --jl-danger-border: rgba(224, 102, 90, 0.4);
+  --jl-on-danger:   #fff6f0;
+
+  /* Secondary's neutral text — deliberately NOT this plugin's own
+     --jl-muted/--jl-text/--jl-dim (#8b9bc7/#cdd6f4/#6272a4). All three are
+     genuinely blue-tinted (a Catppuccin-ish palette, chosen for the
+     sidebar), and Secondary governs the filtered-list toolbar/pagination
+     text site-wide — every list page, not just the sidebar — where that
+     tint reads as a drift toward blue rather than a neutral. --jl-fg is
+     Dracula's actual foreground (#f8f8f2, already used natively
+     elsewhere in this plugin, e.g. clean-cards.css's subheader divider) —
+     genuinely neutral, no hue bias. -dim is a flat opacity step off it,
+     not a separate hue, so dimming it can't reintroduce a tint. */
+  --jl-fg:     #f8f8f2;
+  --jl-fg-dim: rgba(248, 248, 242, 0.72);
+
+  --jl-btn-radius: 6px;
+}
+
+/* ------------------------------------------------------------
+ *  1. Color, radius, weight, font — safe on every real `.btn`.
+ *  Confirmed live (not assumed): injected this exact rule set into the
+ *  scenes list page — grid/list/tag toggles, the zoom slider's play/
+ *  ellipsis buttons, pagination («/</1 of N/>/») — nothing broke, nothing
+ *  changed size, because none of these properties affect box dimensions.
+ *
+ *  `:not(.minimal)` is load-bearing, not a style preference: native's own
+ *  main nav bar (Scenes/Images/.../Donate/the "Stash" logo link) is
+ *  ALSO literally `.btn.btn-primary.minimal` under the hood — that's
+ *  category 6 from the button categorization pass ("leave native"), and
+ *  color already respected that boundary for free (native's own
+ *  `.btn.minimal{background:...}` rule out-specifies a plain `.btn-primary`
+ *  background override), but nothing protected font-weight/font-family the
+ *  same way, so the nav bar was silently getting this rule's 600-weight
+ *  text — reported live as the nav bar "feels too heavy." Scene-card
+ *  rating/favorite/count-value chips are `.minimal` too and get the same
+ *  exemption, for the same reason: none of them are actually the kind of
+ *  button this file is styling. */
+.btn:not(.minimal) {
+  border-radius: var(--jl-btn-radius);
+  /* v4: "Segoe UI", sans-serif — byte-identical to native's own stack for
+     the main nav bar (the `.minimal` buttons this rule excludes, just
+     above). Normalizes every button in the app to one font on request:
+     nav bar, modal (Delete/Cancel confirmations, all `.modal-footer
+     .btn`), detail-page edit rows (Edit/Auto-tag/Merge/Delete, all
+     routed through this same `:not(.minimal)` rule already) were
+     genuinely three different fonts before this — nav bar native "Segoe
+     UI" (→ Liberation Sans, since Segoe UI was never actually installed
+     here), everything else v3's Lato. Reverts v3's font pick, keeps its
+     weight (500) — that fix was about heaviness, a separate question
+     from which typeface, and wasn't asked to change here. Neither v3 nor
+     this needed @font-face: "Segoe UI" is unavailable locally same as
+     always, so this still resolves to Liberation Sans/Arial exactly like
+     the nav bar already does — normalizing to the same *fallback
+     result*, not a font that's actually rendering as literal Segoe UI
+     anywhere. */
+  font-family: "Segoe UI", sans-serif;
+  font-weight: 500;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+/* Nav bar weight: tried bumping to 600 here (matching `.jl-mode`, the
+   mode-bar pills) to close what read as a gap against "the button bar" —
+   reverted, "too strong" once seen live. Native already gives the nav
+   bar 500 with no rule from this file at all (confirmed live before the
+   600 attempt: every nav item, active or inactive, already computed to
+   exactly 500 — the identical value this file sets on Save/Delete-style
+   buttons — traced via matched-rules inspection to a native
+   `.btn{font-weight:500}` base rule this plugin has never touched). So
+   500 needs no rule here to achieve; if nav weight is revisited again,
+   that's the baseline it already reverts to with nothing added — the
+   real reference point turned out to be more subtle than either
+   comparison alone (nav vs. this file's own buttons: already equal;
+   nav vs. the mode-bar pills: a real but apparently *not* the wanted
+   gap after all). Don't silently reintroduce a `.top-nav .btn.minimal`
+   weight override without live comparison against both reference points
+   again, and confirmation it's actually wanted this time. */
+.btn:focus-visible {
+  outline: 2px solid var(--jl-pink);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Primary — the mode bar's own selected-pill treatment, adapted: pink
+   text over a translucent wash, never a solid fill, same restraint as
+   `.jl-mode[aria-selected="true"]`. `.btn-success` is included: stash
+   isn't consistent about which semantic class a page's own Save button
+   uses (scene's is `.btn-primary`, the performer page's is
+   `.btn-success`) — same role, so same look, papering over that native
+   inconsistency rather than reproducing it.
+
+   Every rule in the three role blocks below carries `:not(.minimal)` —
+   rest, hover, active, disabled alike — completing what the tier-1
+   `.btn:not(.minimal)` rule started (v3) but the role-color rules never
+   got. Found live (2026-09-02): "native button color flashes on when
+   any nav-bar button is pressed." The nav bar's items are literally
+   `.btn.btn-primary.minimal`, and at rest/hover they were only ever
+   protected from these rules *by accident of specificity* — native's
+   `a.minimal`/`button.minimal` (element + class) happens to out-rank a
+   bare `.btn-primary` (class only) — while the `:active` rule below
+   (four class-levels, written to match native Bootstrap's own selector
+   shape) out-ranked native's `a.minimal:active:not(:disabled)` (three
+   classes + element), so ONLY the pressed state leaked: pressing any
+   nav button flashed the full Primary treatment
+   (`--jl-pink-wash-active` + pink border/text), confirmed via
+   `CSS.forcePseudoState` + `getMatchedStylesForNode`, not assumed.
+   `:not(.minimal)` on every rule makes the exemption explicit in all
+   four states instead of an accident in two of them — scene-card
+   rating/favorite/count chips (also `.minimal`) get the same guarantee
+   for free. */
+.btn-primary:not(.minimal),
+.btn-success:not(.minimal) {
+  background-color: var(--jl-pink-wash);
+  border-color: var(--jl-pink-border);
+  color: var(--jl-pink);
+}
+.btn-primary:not(.minimal):hover,
+.btn-success:not(.minimal):hover {
+  background-color: var(--jl-pink-wash-hover);
+  border-color: var(--jl-pink);
+  color: var(--jl-pink);
+}
+.btn-primary:not(.minimal):not(:disabled):not(.disabled):active,
+.btn-success:not(.minimal):not(:disabled):not(.disabled):active {
+  background-color: var(--jl-pink-wash-active);
+  border-color: var(--jl-pink);
+  color: var(--jl-pink);
+}
+/* Disabled Save used to stay 65%-opacity purple — still reads as "on".
+   Flat neutral instead, so a disabled action stops competing with an
+   enabled one for attention (see the Edit-toolbar mockup). */
+.btn-primary:not(.minimal):disabled, .btn-primary:not(.minimal).disabled,
+.btn-success:not(.minimal):disabled, .btn-success:not(.minimal).disabled {
+  background-color: var(--jl-well);
+  border-color: var(--jl-line);
+  color: var(--jl-dim);
+  opacity: 1;
+}
+
+/* Settings > Plugins' "Available Plugins"/"Available Package Sources"
+   tables (Edit/Delete per configured source) render solid purple,
+   untouched by any of the rules above — found live while auditing
+   Settings for the button-unification pass. Root cause confirmed via
+   `CSS.getMatchedStylesForNode`, not assumed: a separately-installed
+   theme plugin ships `.source-controls .btn-primary { background-color:
+   var(--purple); ... }` — two classes, genuinely higher specificity
+   than this file's own bare `.btn-primary` (one class), so it wins
+   regardless of load order, the same class of bug documented for
+   `.alias-head` elsewhere in this project. `:hover` has the identical
+   problem (`.source-controls .btn-primary:hover`, also higher
+   specificity); `:active` doesn't — confirmed live, no competing
+   `.source-controls`-scoped active rule exists, so this file's own
+   existing active rule (equal specificity, later in source order)
+   already wins there without help. Fixed by matching the native rule's
+   own selector shape exactly for the two states that need it, so the
+   tie breaks on load order (this file loads after the app bundle)
+   instead of losing on specificity. */
+.source-controls .btn-primary {
+  background-color: var(--jl-pink-wash);
+  border-color: var(--jl-pink-border);
+  color: var(--jl-pink);
+}
+.source-controls .btn-primary:hover {
+  background-color: var(--jl-pink-wash-hover);
+  border-color: var(--jl-pink);
+  color: var(--jl-pink);
+}
+
+/* Secondary — demoted to ghost. Bootstrap's default secondary (dark
+   slate fill) reads with the same weight as primary; transparent + a
+   quiet border reads as lower-emphasis without disappearing. Text is
+   `--jl-fg`(-dim), not `--jl-muted`/`--jl-text` — this is what pagination,
+   the sort/toolbar icons, and every other secondary control across every
+   filtered-list page render in, so a blue-tinted "neutral" here reads as
+   the whole list page trending blue, not a sidebar-only accent choice.
+   Hover/active tint the border/background pink (the one identity color)
+   while text just brightens along the same neutral, never turning pink
+   itself — this is the one lower-emphasis control that still points at
+   primary's color without wearing it outright. */
+.btn-secondary:not(.minimal) {
+  background-color: transparent;
+  border-color: var(--jl-line);
+  color: var(--jl-fg-dim);
+}
+.btn-secondary:not(.minimal):hover {
+  border-color: var(--jl-pink);
+  color: var(--jl-fg);
+  background-color: var(--jl-pink-wash-soft);
+}
+/* Matches native's own `:not(:disabled):not(.disabled):active` selector
+   (plus the `.minimal` exclusion, see the Primary block's comment) —
+   still out-specifies the app bundle's own rule, so this wins the same
+   way it did before the exclusion was added. Without this, native's own
+   dark-slate active fill (`#25313a`) shows through on press, unstyled,
+   the same class of bug the primary/success hover color omission had. */
+.btn-secondary:not(.minimal):not(:disabled):not(.disabled):active {
+  border-color: var(--jl-pink);
+  color: var(--jl-fg);
+  background-color: var(--jl-pink-wash);
+}
+.btn-secondary:not(.minimal):disabled, .btn-secondary:not(.minimal).disabled { opacity: 0.45; }
+
+/* Danger — same wash construction as primary, but deliberately red, not
+   pink: pink is this plugin's identity color everywhere else, and
+   destructive needs to read as unambiguous "stop." Escalates further on
+   hover than the other two — a full solid fill, not just a deeper wash —
+   the one moment this system asks for a harder confirmation. */
+.btn-danger:not(.minimal),
+.btn-outline-danger:not(.minimal) {
+  background-color: transparent;
+  border-color: var(--jl-danger-border);
+  color: var(--jl-danger);
+}
+.btn-danger:not(.minimal):hover,
+.btn-outline-danger:not(.minimal):hover {
+  background-color: var(--jl-danger);
+  border-color: var(--jl-danger);
+  color: var(--jl-on-danger);
+}
+/* Same native-active leak as .btn-secondary above, native's own solid
+   red (`#bd2222`) here instead of dark slate. Kept identical to :hover
+   rather than a third shade — the solid fill is already the maximum
+   escalation this system uses. */
+.btn-danger:not(.minimal):not(:disabled):not(.disabled):active,
+.btn-outline-danger:not(.minimal):not(:disabled):not(.disabled):active {
+  background-color: var(--jl-danger);
+  border-color: var(--jl-danger);
+  color: var(--jl-on-danger);
+}
+.btn-danger:not(.minimal):disabled, .btn-danger:not(.minimal).disabled,
+.btn-outline-danger:not(.minimal):disabled, .btn-outline-danger:not(.minimal).disabled { opacity: 0.4; }
+
+/* ------------------------------------------------------------
+ *  2. Padding/font-size — deliberately NOT global.
+ *
+ *  Unlike color/radius these change box size — and stash reuses the same
+ *  `.btn`/`.btn-secondary`/`.btn-primary` classes for compact controls
+ *  that can't afford to grow: `.minimal` scene-card rating/favorite
+ *  chips, and bare `.btn.btn-secondary` pagination arrows (« < 1 of N >
+ *  ») that carry no distinguishing class at all — confirmed live in v1 by
+ *  injecting a blanket `.btn { padding: 9px 18px }` on the scenes list:
+ *  the toolbar's icon buttons and pagination visibly ballooned and threw
+ *  off the row. Font-size wasn't blanket-tested either way, so it stays
+ *  scoped alongside padding rather than assumed safe.
+ *
+ *  No single selector reliably separates "real action button" from
+ *  "compact toolbar control" across the WHOLE app — but within stash's
+ *  own component boundaries, two real, reusable ones cover most of it.
+ *  Confirmed against stashapp/stash's actual source
+ *  (`ui/v2.5/src/components/`), not just live DOM spot-checks:
+ *
+ *  - `.modal-footer` — Bootstrap's own confirmation-dialog footer class,
+ *    used consistently by every delete/confirm modal across the app.
+ *    Confirmed live it holds only plain labeled buttons (Cancel/Delete),
+ *    no icon-only controls.
+ *  - `.edit-buttons-container` — the scene Edit toolbar this started on.
+ *    Scene-specific; performer/studio/group/tag use a *different* shared
+ *    wrapper instead (`.details-edit`, see below) — there's no single
+ *    class spanning all five entity types' edit toolbars.
+ *  - `.details-edit` — Cancel/Save/Set image…/Clear Image/Scrape with…
+ *    on the performer/studio/group/tag detail pages' edit mode. One
+ *    shared wrapper across all four entity types (confirmed live on
+ *    each) — stash's own component reuse, not a coincidence of similar
+ *    markup. No compact/icon-only controls found inside it on any of
+ *    the four; the icon-only field-level buttons elsewhere on those
+ *    same edit forms (remove-alias, date-picker toggle, scrape-url)
+ *    live in sibling `.form-group`/`.input-group` markup outside this
+ *    wrapper entirely.
+ *  - `.setting .btn:not(.btn-sm)` — every Settings tab's real actions
+ *    (Edit/Generate API key/Scan/Clean/Backup/Anonymize/etc, dozens of
+ *    them). `.setting` is a single React component
+ *    (`Settings/Inputs.tsx`'s `Setting`), used by every settings panel
+ *    AND by the "Generate" dialog reachable from ordinary scene/image/
+ *    gallery pages (`GenerateDialog.tsx` → `SettingSection` →
+ *    `ModalSetting`) — not Settings-page-scoped, confirmed from source,
+ *    so this rule reaches both. `:not(.btn-sm)` is required, not
+ *    defensive dressing: `PluginTasks.tsx` renders per-plugin task
+ *    buttons as `size="sm"` directly inside a `<Setting>`, so `.setting`
+ *    genuinely does contain compact buttons alongside full-size ones —
+ *    confirmed in source, not inferred from the size="sm" convention
+ *    alone.
+ *  - `.scene-markers-panel .btn-primary`/`-secondary`/`-danger` — added
+ *    when Create Marker was found still on native Bootstrap sizing
+ *    (uncovered by either container above), scoped to the three role
+ *    classes rather than a bare `.btn` — that panel also holds every
+ *    marker row's own compact `.btn-link` title/Edit controls, the exact
+ *    class of thing the blanket-padding test above broke; those never
+ *    carry a role class, so this scoping excludes them for free.
+ *
+ *  No single component covers the whole app this way — Tagger and bulk-
+ *  edit dialogs weren't confirmed to share a reusable wrapper either
+ *  from source or live spot-checks, so they're not covered yet. Extend
+ *  this list deliberately, container by container (checking source
+ *  when a wrapper's safety isn't obvious live), as other real action
+ *  rows turn up. Padding/size/weight/tracking match `.jl-mode`'s own
+ *  5px/13px/12px/600/0.3px recipe exactly (mode-bar CSS is in
+ *  scene-dashboard.css) — sat close but not identical to it through
+ *  v1-v2 on the reasoning that these are freestanding buttons with
+ *  their own border, not segments inside a shared pill bar. Going
+ *  border-included too (Option C) was tried live and reverted back to
+ *  keeping the border (Option B) — see the commented-out block just
+ *  below this rule for that attempt, kept for an easy revert rather
+ *  than deleted. */
+.modal-footer .btn,
+.edit-buttons-container .btn,
+.details-edit .btn,
+.setting .btn:not(.btn-sm),
+.scene-markers-panel .btn-primary,
+.scene-markers-panel .btn-secondary,
+.scene-markers-panel .btn-danger {
+  padding: 5px 13px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+/* The icon-only search-scrapers toggle in the Scrape split-button group
+   would get the same padding as its text-bearing neighbor above and end
+   up needlessly wide — it has no label to fill that width with. Vertical
+   padding matches the recipe above (5px) so it stays the same height as
+   its joined neighbor; only horizontal shrinks, sized for an icon alone. */
+.edit-buttons-container .dropdown-toggle:has(svg) {
+  padding: 5px 10px;
+}
+
+/* Option C, tried and reverted to Option B (2026-09-01): tier-2 buttons
+   keep their border again — see the tier-1 Primary/Secondary/Danger
+   rules above for what it resolves to at rest/hover/active. The
+   sizing/type-recipe match above (5px/13px/12px/600/0.3px) is Option B
+   on its own and stays; only the border removal below was undone.
+   Commented out as one block, not deleted, for an easy revert back to
+   C — uncomment this whole block to go borderless again.
+
+   ---- Option C's own reasoning, preserved ----
+   Borderless, matching the mode-bar pills exactly — they carry no
+   border of their own at all, relying entirely on the shared
+   `.jl-modes` bar's own outline. `border-color: transparent` rather
+   than `border: none`: the latter drops border-width to 0, which —
+   since these buttons have no fixed width — shrinks the rendered box
+   by the former border's full width (2px total) instead of just
+   hiding it, a real, if small, size shift against untouched siblings.
+   Transparent keeps the box exactly the size it already was.
+
+   `:not(.dropdown-toggle)` is load-bearing, not decoration: the Scrape
+   split-button pair (`.btn-primary.dropdown-toggle` "Scrape with…" +
+   an icon-only `.btn-secondary.dropdown-toggle` caret with no text at
+   all) is two Bootstrap-joined segments that read as one control only
+   because they currently share a continuous border — confirmed live
+   before writing this exclusion, not assumed. Stripping that border
+   would leave the icon-only half with nothing at all to signal it's
+   clickable. Nothing in `.scene-markers-panel` is a dropdown-toggle, so
+   that exclusion is a no-op there, kept for consistency rather than
+   need.
+
+   Also covers `:hover`/`:not(:disabled):not(.disabled):active` — the
+   mode-bar pills this is matching never show a border at any state
+   (confirmed live: `.jl-mode`'s own computed `border` is `0px none`
+   whether unselected, selected, or hovered), so borderless-at-rest but
+   bordered-on-hover would be a flicker-in effect the pills themselves
+   don't have. Restated explicitly rather than left as a side effect of
+   this rule's specificity happening to tie tier 1's `:hover`/`:active`
+   rules (same two-class count as `.btn-primary:hover`) and win on
+   source order — same "don't rely on a lower rule losing" lesson as
+   the copy-buttons plugin's own hover bug, fixed the same day this was
+   written; stated outright here so a future reorder of this file can't
+   silently reopen it.
+
+.modal-footer .btn:not(.dropdown-toggle),
+.edit-buttons-container .btn:not(.dropdown-toggle),
+.scene-markers-panel .btn-primary,
+.scene-markers-panel .btn-secondary,
+.scene-markers-panel .btn-danger {
+  border-color: transparent;
+}
+.modal-footer .btn:not(.dropdown-toggle):hover,
+.edit-buttons-container .btn:not(.dropdown-toggle):hover,
+.scene-markers-panel .btn-primary:hover,
+.scene-markers-panel .btn-secondary:hover,
+.scene-markers-panel .btn-danger:hover,
+.modal-footer .btn:not(.dropdown-toggle):not(:disabled):not(.disabled):active,
+.edit-buttons-container .btn:not(.dropdown-toggle):not(:disabled):not(.disabled):active,
+.scene-markers-panel .btn-primary:not(:disabled):not(.disabled):active,
+.scene-markers-panel .btn-secondary:not(:disabled):not(.disabled):active,
+.scene-markers-panel .btn-danger:not(:disabled):not(.disabled):active {
+  border-color: transparent;
+}
+---- end Option C ---- */

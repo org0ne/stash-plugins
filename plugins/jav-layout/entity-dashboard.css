@@ -1,0 +1,347 @@
+/* ============================================================
+ *  Entity Dashboard
+ *
+ *  Generic treatment for every "entity with a tabbed relations list"
+ *  detail page - performer, studio, group, tag, confirmed live to all
+ *  share the identical underlying components before merging anything:
+ *  Tab.Container-driven `.nav-tabs`, a `.detail-group`/`.detail-item`
+ *  list (only children are `.detail-item` divs, no scattered/shared-
+ *  parent content, so no scattered-group-card workaround needed on any
+ *  of them - see scene-dashboard's own Metadata card for what that
+ *  workaround looks like when it IS needed), and an `<entity>-name`
+ *  span. Replaces performer-dashboard.css/.js and studio-dashboard.css/
+ *  .js outright, not alongside them - see CLAUDE.md for why this
+ *  generalized now rather than from the start (two copies didn't justify
+ *  it; a third and fourth did).
+ *
+ *  Reuses the shared `.jl-modes` chrome and `--jl-*` tokens already
+ *  defined in scene-dashboard.css, and Quicksand from fonts.css - CSS/JS
+ *  load site-wide, so all of it is already available here without
+ *  redefinition. See CLAUDE.md's Non-negotiable constraints: the same
+ *  rules apply - append-only DOM writes, CSS gated on a ready attribute
+ *  so a broken script never breaks the native page.
+ * ============================================================ */
+
+/* ------------------------------------------------------------
+ *  Mode bar replaces the native tab strip - one rule per entity's own
+ *  gate attribute, since each is set independently by
+ *  entity-dashboard.js and only one is ever true on a given page.
+ * ------------------------------------------------------------ */
+.performer-tabs .nav-tabs[data-jl-perf-ready="true"],
+.studio-tabs .nav-tabs[data-jl-studio-ready="true"],
+.group-tabs .nav-tabs[data-jl-group-ready="true"],
+.tag-tabs .nav-tabs[data-jl-tag-ready="true"] {
+  display: none !important;
+}
+
+/* `.detail-header` (name/aliases/edit-buttons block, a sibling above the
+   tab strip on every one of these pages) is natively `position: relative;
+   z-index: 20`. A large enough negative margin-top on `.jl-modes-row`
+   pulls it up far enough to spatially fall behind that stacking context -
+   found live on the tag page: `document.elementFromPoint()` at the pill
+   row's own coordinates resolved to `.detail-header`, not the row, even
+   though getBoundingClientRect()/getComputedStyle() on the row itself
+   looked completely correct (right position, size, opacity, visibility -
+   none of those catch a stacking-order problem, only elementFromPoint
+   does). `position: relative` + a higher z-index makes this row always
+   paint on top regardless of how negative a future entity's own margin
+   needs to be - fixes the mechanism once, rather than capping every
+   entity's margin to "whatever stays positive enough to be safe". */
+.jl-modes-row {
+  position: relative;
+  z-index: 21;
+}
+
+/* Centering margin is deliberately NOT shared - measured per page, since
+   each entity's header content above the pill row differs in height
+   even when the button row below it is the same shape (Edit/Delete, or
+   Edit/Auto-tag/Merge/Delete). Port the mechanism, remeasure the
+   constant every time - see CLAUDE.md for each page's own number and
+   why they differ. */
+.performer-tabs > .jl-modes-row { margin: 15px 0 14px; }
+.studio-tabs > .jl-modes-row { margin: 22px 0 14px; }
+/* Group and tag each briefly shipped with a NEGATIVE top margin
+   (-25px/-59px) here, sized to numerically match the 36px gap below by
+   measuring "gap above" as the distance from the *Edit/Delete button
+   row's* own bottom edge — the wrong reference point. `.detail-header`
+   (the name/aliases/edit-buttons block, position: relative; z-index: 20,
+   see the row's own position/z-index rule above) has real padding-bottom
+   of its own past that button row, so its TRUE bottom edge sits well
+   below where the button row ends. Reported live as a visible bug
+   ("modal buttons... spanning the upper and lower sections") — confirmed
+   via getBoundingClientRect() that the pill row's box was landing
+   partway (group) or entirely (tag) *inside* `.detail-header`'s own
+   painted background, not just near it: the z-index fix above made it
+   paint on top instead of vanishing behind, but positioning it to
+   overlap a different section's own background panel at all was the
+   actual bug, independent of which one won the paint order.
+
+   The reliable reference point is `.detail-header`'s own bottom edge,
+   not the button row's: at `margin-top: 0`, the pill row's natural
+   position lands *exactly* flush with it on every entity checked
+   (confirmed for both group and tag) — because `.jl-modes-row` is the
+   first child inserted into `.group-tabs`/`.tag-tabs`, which itself
+   begins in normal flow immediately after `.detail-header` with no gap
+   of its own. That makes the rule simple and safe: 0 is flush, small
+   positive values add breathing room below the section boundary,
+   negative values are categorically wrong here — they can only ever
+   push back into the previous section's own box. */
+.group-tabs > .jl-modes-row { margin: 14px 0 14px; }
+.tag-tabs > .jl-modes-row { margin: 14px 0 14px; }
+
+/* Count badge - none of the scene page's own modes (Browse/Queue/
+   Markers/Filters/Edit) are counted lists, so this only exists here.
+   Styled as a small pill nested inside the button, not a separate flex
+   layout on `.jl-mode` itself, so the scene page's own single-text-node
+   buttons are untouched. */
+.jl-mode-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(98, 114, 164, 0.25);
+  color: var(--jl-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.jl-mode[aria-selected="true"] .jl-mode-count {
+  background: rgba(255, 128, 191, 0.25);
+  color: var(--jl-pink);
+}
+
+/* ------------------------------------------------------------
+ *  Detail list (Gender / Age / URLs / Aliases / .../ Stash IDs)
+ *  No card box (matching the reverted performer-page decision - "it felt
+ *  like a forced fit"). Scoped to `.detail-group` rather than left bare:
+ *  that's the one structural element genuinely common to all four pages
+ *  and nothing else in the app, so it's a safe generalization without
+ *  needing to enumerate `.performer-head`/`.studio-head`/`.group-head`/
+ *  `.tag-head` by hand.
+ *
+ *  `.detail-item` itself is converted from native's `display: table` to
+ *  `display: flex` (2026-09-02) - not just font/padding on top of the
+ *  native layout, the row structure itself changed. Two problems drove
+ *  this, both requests in the same session:
+ *
+ *  1. Lower visual hierarchy via padding - straightforward on its own,
+ *     but exposed problem 2 below once tested at narrow widths.
+ *  2. A long unbroken value (a Stash ID UUID, ~36 chars, monospace) was
+ *     forcing its own row's *label* to wrap onto two lines at mobile
+ *     widths ("Stash IDs:" split mid-word) instead of letting the value
+ *     truncate - confirmed live: native `table-layout: auto` shrinks
+ *     columns in proportion to a global width deficit, and does NOT
+ *     treat an `overflow: hidden` cell as free to shrink past its
+ *     content's min-content the way flexbox does. Since the label had no
+ *     `white-space: nowrap` of its own, the auto-layout algorithm took
+ *     width from the *label* column instead of the value column, which
+ *     genuinely wanted to stay at the pill's full natural width.
+ *
+ *  `white-space: nowrap` on the label alone isn't sufficient either -
+ *  confirmed live: it stops the label wrapping, but doesn't stop table
+ *  auto-layout from just growing the whole row past the viewport instead
+ *  (a hard, ellipsis-less clip at whatever ancestor happens to have
+ *  `overflow-x: hidden`, if any does). The real fix needs the *value*
+ *  side to be a genuine flexbox shrink target, which requires converting
+ *  the row to `display: flex` outright - only flex/grid items get the
+ *  "an overflow:hidden item's automatic minimum size is 0" behavior that
+ *  lets a flex-shrink:1 sibling absorb a width deficit instead of a
+ *  non-shrinking one. `.detail-item-title` keeps a *fixed* flex-basis
+ *  (130px, matching native's own value) rather than sizing to its own
+ *  content per row - confirmed live that content-sized-per-row breaks
+ *  the column alignment all rows shared under native's identical
+ *  `width: 130px` table-cell rule, which was never asked for and reads
+ *  as a regression the moment two adjacent rows have differently-length
+ *  labels. `text-overflow: ellipsis` stays on the label as a defensive
+ *  fallback (should never trigger at 130px for any current field).
+ *
+ *  Three more corrections, all reported live immediately after the above
+ *  first shipped (2026-09-02):
+ *
+ *  - **Indent.** The whole block rendered flush with the name/aliases
+ *    column above it - no left inset at all - reported as needing to
+ *    read as visually subordinate to that identity block, not flush with
+ *    it. `padding-left` on `.detail-group` itself, not on each row.
+ *  - **Row spacing overshoot.** The 12px `padding-bottom` bump above (see
+ *    point 1) was reported as too much once seen live - "too much space
+ *    between each row." Reverted to native's own 7px, kept explicit
+ *    (rather than just deleting the override and trusting the native
+ *    rule) since this block already overrides `display` and other
+ *    properties on the same selector - lower hierarchy here is carried by
+ *    the indent and the label/value color-weight contrast, not extra
+ *    row-to-row space.
+ *  - **Age's dotted underline stretched the full row width.** Native
+ *    puts `border-bottom: 1px dotted` directly on `.detail-item-value`
+ *    itself (confirmed live), which - back when value was a table-cell
+ *    sized to its own content - meant the dotted line naturally ended
+ *    right where the text did. Giving value `flex: 1 1 auto` (flex-grow:
+ *    1, to fill the row) stretched that same box to the *row's* full
+ *    remaining width, so the border-bottom rode along with it far past
+ *    "38 (1988-08-11)". Fixed by dropping flex-grow to 0
+ *    (`flex: 0 1 auto`) - shrink still applies exactly as before (shrink
+ *    and grow are independent), so the Stash ID row still truncates
+ *    correctly, but every other row's value box now hugs its own content
+ *    width again instead of stretching, matching native's original
+ *    per-row sizing and putting the dotted line back where it belongs.
+ *
+ *  One more pass (same day): "tighten up the vertical spacing... match
+ *  the vertical spacing used for the File tab/block of the scene
+ *  sidebar." File's own `<dt>`/`<dd>` (scene-dashboard.css,
+ *  `.scene-file-info dd { margin-bottom: 4px }`) carry NO vertical
+ *  padding of their own at all - their row height comes purely from
+ *  line-height (12px/18px and 13px/19.5px respectively, both a clean 1.5
+ *  ratio, confirmed live), with dd's 4px margin-bottom as the only
+ *  separator - measured live at a clean 23.5px top-to-top rhythm per row
+ *  (19.5px content + 4px gap). This block's own rows measured 32.5px
+ *  (9px more per row) before this pass - not from font-size/line-height
+ *  (already the same 12px/13px, matched deliberately, see above) but
+ *  from the 3px top+3px bottom padding this file added to title/value in
+ *  the *previous* pass (for the original "lower visual hierarchy" ask)
+ *  plus a 7px item padding-bottom, versus File's zero+4px. Matched
+ *  exactly by mirroring File's own mechanism instead of approximating
+ *  it: drop title/value's vertical padding to 0 (horizontal padding on
+ *  title - the label/value gap - stays, that's not part of *vertical*
+ *  rhythm) and drop the item's own padding-bottom from 7px to 4px,
+ *  landing on File's identical 23.5px per-row - confirmed live,
+ *  gap-to-gap, not approximated. */
+.detail-group {
+  padding-left: 16px;
+}
+.detail-group .detail-item {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  padding-bottom: 4px !important;
+}
+/* Label sans-serif, value monospace - matching the scene File section's
+   own native split (its <dt> is native "Segoe UI"/sans, its <dd> is
+   monospace). font-family is File's *exact* fallback stack, not just its
+   first name - a longer stack here once looked equivalent (Segoe UI is
+   missing either way) but wasn't: confirmed via CDP's
+   CSS.getPlatformFontsForNode that extra fallback names change the
+   browser's real substitution choice. !important: the `dracula-theme`
+   plugin (a separate, third-party base theme this instance also has
+   loaded) sets its own font/color on these via a CSS variable already,
+   and cascade order between two *different* installed plugins isn't
+   something this plugin controls. */
+.detail-group .detail-item-title {
+  flex: 0 0 130px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  padding: 0 10px 0 0 !important;
+  color: var(--jl-muted) !important;
+  font-family: "Segoe UI", sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}
+.detail-group .detail-item-value {
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  color: var(--jl-text) !important;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+}
+/* Stash IDs specifically: the pill (native markup) is several layers deep
+   - value > ul > li > .stash-id-pill > a - and flexbox's shrink-to-fit
+   only threads through elements that are themselves flex items relative
+   to an ancestor whose overflow lets their automatic minimum size be 0.
+   `<ul>`/`<li>` are native `display: block`/`display: flex` respectively,
+   neither of which inherits the value span's own `overflow: hidden` for
+   sizing purposes - confirmed live each layer needs its own `min-width: 0`
+   (and `overflow: hidden` on ul/li specifically) or the pill silently
+   renders at its full natural width regardless of how constrained its
+   ancestors are, undoing the fix above. The UUID link itself already
+   carries native `overflow:hidden; text-overflow:ellipsis;
+   white-space:nowrap` - this only has to get an actual constrained width
+   to shrink into. No other field currently has content long/unbreakable
+   enough to hit this (URLs can wrap on `/`; everything else is short) -
+   scoped to stash-ids rather than applied blanket to every `.detail-item-
+   value ul/li`, so revisit if another field needs the same treatment. */
+.detail-item-value.stash-ids ul,
+.detail-item-value.stash-ids ul li {
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+.detail-item-value.stash-ids .stash-id-pill,
+.detail-item-value.stash-ids .stash-id-pill a {
+  min-width: 0 !important;
+}
+
+/* ------------------------------------------------------------
+ *  Identity header
+ * ------------------------------------------------------------ */
+
+/* `.details-edit` (Edit / Auto tag… / Merge… / Submit to Stash-Box /
+   Delete) is native `display: flex; justify-content: left` - fine at
+   desktop widths where every button fits on one line, but at mobile
+   widths the row wraps to two lines and native's own `left` justification
+   left the second line visibly ragged/left-hugging instead of reading as
+   one balanced control cluster. Reported live on a phone-width viewport.
+   `justify-content: center` fixes both lines at once - single-line
+   desktop layouts are unaffected (a fully-filled row has no free space
+   for center vs. left to differ on), so this needs no width/media-query
+   gating. Same class the tier-2 sizing rules in buttons.css already key
+   off (`.details-edit .btn`) - this rule is layout, not button chrome,
+   so it stays here rather than in that page-agnostic file. */
+.details-edit {
+  justify-content: center !important;
+}
+
+/* Edit mode's own `.details-edit` (Cancel / Scrape with… / Set image… /
+   Clear Image / Save) has one more problem the centering fix above
+   doesn't touch: native ships `.col-md-8 .details-edit div:nth-last-
+   child(2), .detail-header.edit .details-edit div:nth-last-child(2) {
+   flex: 1 }` - a deliberate rule that grows the second-to-last child
+   (Clear Image's own unclassed wrapper div) to fill all remaining row
+   width, shoving Save alone against the row's far right edge. Confirmed
+   via CSS.getMatchedStylesForNode - not this plugin's own rule, native's.
+   By design this reads fine on desktop, where the row never wraps: a
+   deliberate gap separates the primary Save action from the rest. Once
+   the row wraps (native's own `flex-wrap: wrap`, not something this
+   plugin added - confirmed present before any of this file's rules
+   apply), that same grow-to-fill div lands alone on the row with just
+   Save, so it fills nearly the *entire second line* instead of the
+   original row - Clear Image pinned far left, Save pinned far right,
+   reported live as "too much space on the left side, and the right side
+   extends past the page" on a phone-width viewport. Neutralized
+   unconditionally (not just at narrow widths): even on desktop, a
+   stretched spacer conflicts with the "read as one balanced, centered
+   cluster" intent the justify-content:center rule above already
+   established for this exact bar - letting one child stay grow:1 would
+   silently reintroduce the same left-cluster/right-single-button split
+   this plugin already chose against. `!important` since native's own
+   rule doesn't carry one but this plugin's file loads after the app
+   bundle regardless - explicit here for the same reason it's used
+   everywhere else in this file overriding native/third-party rules. */
+.details-edit > div:nth-last-child(2) {
+  flex: 0 1 auto !important;
+}
+
+/* Name matches scene Title's color and the scene-card/performer-card
+   title font exactly (Quicksand/600, self-hosted in fonts.css) - one
+   shared rule since every entity's own name span already follows the
+   same `<entity>-name` convention. */
+.performer-name,
+.studio-name,
+.group-name,
+.tag-name {
+  color: var(--jl-lilac) !important;
+  font-family: Quicksand, "Liberation Sans", Arial, sans-serif !important;
+  font-weight: 600 !important;
+}
+
+/* Aliases brightened from the dracula-theme base plugin's near-invisible
+   #4f4f4f (`.detail-header .alias-head { color: var(--smoke_white) }`,
+   confirmed via CSS.getMatchedStylesForNode) - explicitly requested to
+   be MORE visible, not less, the opposite direction from Original
+   Title's deliberately muted treatment on the scene page. Deliberately
+   unscoped: only performer and tag pages actually render an
+   `.alias-head` element at all (studio and group never do), so this one
+   rule already covers both without any per-entity branching - confirmed
+   live that tag's alias-head picks this up automatically. */
+.alias-head {
+  color: var(--jl-muted) !important;
+}
