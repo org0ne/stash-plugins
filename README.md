@@ -21,7 +21,7 @@ Stash will list every plugin in this repo, ready to install with one click.
 | [collection-colors](plugins/collection-colors) | Colors scene cards by which configured Library path they live under, auto-discovered — no hardcoded paths. |
 | [copy-buttons](plugins/copy-buttons) | Click-to-copy buttons for performer names, performer disambiguations, and studio codes. |
 | [jav-layout](plugins/jav-layout) | Dracula Pro card/button restyle plus a mode-switcher dashboard replacing the scene page's nine-tab bar and the performer/studio/group/tag pages' own tab strip. Formerly "Dracula Layout". |
-| [title-scrubber](plugins/title-scrubber) | Strips quality/release-group clutter from scene titles on the scenes grid and the scene detail page. |
+| [title-scrubber](plugins/title-scrubber) | Strips performer name and bracketed identifiers from scene titles.  This is a very me-specific need, but it is provided as a plugin if you happen to structure your titles as {Performer name} - {[Uncensored|Censored|Decensored|etc]} Title {[Studio Code]} |
 
 ## Repo structure
 
