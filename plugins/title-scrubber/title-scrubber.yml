@@ -1,0 +1,9 @@
+name: Title Scrubber
+description: >
+  Strips quality/release-group clutter (4K, censorship/leak/subtitle
+  labels, bracketed suffixes, redundant dash-joined prefixes) from scene
+  titles on the scenes grid and the scene detail page.
+version: 1.0.0
+ui:
+  javascript:
+    - title-scrubber.js
