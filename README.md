@@ -18,9 +18,9 @@ Stash will list every plugin in this repo, ready to install with one click.
 
 | Plugin | Description |
 | --- | --- |
-| [collection-colors](plugins/collection-colors) | Colors scene cards by which configured Library path they live under, auto-discovered — no hardcoded paths. |
+| [collection-colors](plugins/collection-colors) | Adds an identifying "Pill" to the scene cards and scene details. Uses the parent Library folder, which is auto-discovered — no hardcoded paths. Useful if you have Censored, Uncensored, Decensored, etc parent folders in your JAV Library |
 | [copy-buttons](plugins/copy-buttons) | Click-to-copy buttons for performer names, performer disambiguations, and studio codes. |
-| [jav-layout](plugins/jav-layout) | Dracula Pro card/button restyle plus a mode-switcher dashboard replacing the scene page's nine-tab bar and the performer/studio/group/tag pages' own tab strip. Formerly "Dracula Layout". |
+| [jav-layout](plugins/jav-layout) | Full Stash layout modification based on Dracula color scheme.  Cards, buttons, layouts, etc are all touched and massaged into a more coherent layout.  Additional nicities for JAV collectors include promoting performer names, studio codes and original titles to a more visible and prominent location whenever possible. |
 | [title-scrubber](plugins/title-scrubber) | Strips performer name and bracketed identifiers from scene titles.  This is a very me-specific need, but it is provided as a plugin if you happen to structure your titles as {Performer name} - {[Uncensored,Censored,Decensored,etc]} Title {[Studio Code]} |
 
 ## Repo structure
