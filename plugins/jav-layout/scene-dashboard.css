@@ -1085,7 +1085,7 @@ a.jl-scene-director-value:hover {
 }
 .edit-buttons-container .scraper-menu .btn-primary:hover {
   border-color: var(--jl-accent);
-  color: var(--jl-fg);
+  color: var(--jl-text);   /* was --jl-fg; matched to the bars' other neutrals (buttons.css 4b), 2026-09-02 */
   background-color: var(--jl-accent-wash-soft);
 }
 

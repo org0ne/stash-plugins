@@ -506,29 +506,70 @@
   line-height: 26px;
 }
 /* Segments, not five bordered buttons: the pill is the boundary now, so
-   each button drops its own fill and border at rest and keeps only its
-   role's text color from tier 1 (accent / neutral / danger). Every state
-   restates both properties — a partial override leaks whatever tier 1
-   still sets for the untouched one (the CLAUDE.md lesson). */
+   each button drops its own fill and border at rest. The NEUTRAL
+   buttons (Auto tag…, Merge…) take the mode bar's own resting-segment
+   color, --jl-muted, instead of tier 1's bright --jl-fg — requested live
+   (2026-09-02, "same font color as the un-highlighted mode buttons") so
+   they read like the mode bar beside them. The ROLE buttons keep their
+   color: Edit/Submit accent, Delete danger — a first pass made all five
+   muted and was immediately reported as "too consistent, we lost the
+   role color". Hover is .jl-mode:hover for the neutrals (text brightens,
+   dim wash) and the role's own wash for accent/danger. Every state
+   restates color, background AND border — tier 1 sets all three per role
+   at rest, hover, active and disabled, and a partial override leaks
+   whichever property it left alone (the CLAUDE.md lesson). Specificity:
+   (0,4,0)+ against tier 1's (0,2,0) rest / (0,3,0) hover / (0,5,0)
+   active, so the active rules carry the same :not() chain to stay ahead. */
 .details-edit:not(.col-xl-9) .btn:not(.minimal) {
+  color: var(--jl-muted);
   background-color: transparent;
   border-color: transparent;
 }
 .details-edit:not(.col-xl-9) .btn:not(.minimal):hover {
+  color: var(--jl-text);
   background-color: color-mix(in srgb, var(--jl-dim) 15%, transparent);   /* = .jl-mode:hover */
+  border-color: transparent;
+}
+.details-edit:not(.col-xl-9) .btn:not(.minimal):not(:disabled):not(.disabled):active {
+  color: var(--jl-text);
+  background-color: color-mix(in srgb, var(--jl-dim) 25%, transparent);
+  border-color: transparent;
+}
+/* Roles, restated per state so they beat the neutral rules above at
+   equal-or-higher specificity and later source order. */
+.details-edit:not(.col-xl-9) .btn-primary:not(.minimal),
+.details-edit:not(.col-xl-9) .btn-success:not(.minimal) {
+  color: var(--jl-accent);
+  background-color: transparent;
   border-color: transparent;
 }
 .details-edit:not(.col-xl-9) .btn-primary:not(.minimal):hover,
 .details-edit:not(.col-xl-9) .btn-success:not(.minimal):hover {
+  color: var(--jl-accent);
   background-color: var(--jl-accent-wash);
   border-color: transparent;
 }
-.details-edit:not(.col-xl-9) .btn-danger:not(.minimal):hover {
-  background-color: color-mix(in srgb, var(--jl-danger) 16%, transparent);
-  color: var(--jl-danger);
+.details-edit:not(.col-xl-9) .btn-primary:not(.minimal):not(:disabled):not(.disabled):active,
+.details-edit:not(.col-xl-9) .btn-success:not(.minimal):not(:disabled):not(.disabled):active {
+  color: var(--jl-accent);
+  background-color: var(--jl-accent-wash-hover);
   border-color: transparent;
 }
-.details-edit:not(.col-xl-9) .btn:not(.minimal):not(:disabled):not(.disabled):active {
+.details-edit:not(.col-xl-9) .btn-danger:not(.minimal) {
+  color: var(--jl-danger);
+  background-color: transparent;
+  border-color: transparent;
+}
+.details-edit:not(.col-xl-9) .btn-danger:not(.minimal):hover,
+.details-edit:not(.col-xl-9) .btn-danger:not(.minimal):not(:disabled):not(.disabled):active {
+  color: var(--jl-danger);
+  background-color: color-mix(in srgb, var(--jl-danger) 16%, transparent);
+  border-color: transparent;
+}
+.details-edit:not(.col-xl-9) .btn:not(.minimal):disabled,
+.details-edit:not(.col-xl-9) .btn:not(.minimal).disabled {
+  color: var(--jl-dim);
+  background-color: transparent;
   border-color: transparent;
 }
 
@@ -588,6 +629,25 @@
 .edit-buttons-container {
   position: sticky;
   bottom: 0;
+}
+/* The bars' NEUTRAL buttons (Scrape with…, Set image…, and the scene
+   bar's demoted Scrape — see scene-dashboard.css) take the same resting
+   color as the viewing pill's neutrals and the mode bar's segments,
+   --jl-muted, instead of tier 1's brighter --jl-fg-dim; hover and press
+   brighten to --jl-text. Requested live right after the pill got the
+   same treatment. Only `color` is claimed here on purpose: the bars
+   keep tier 1's bordered ghost look (border/background per state come
+   from tier 1's own secondary rules), unlike the pill's borderless
+   segments. Cancel/Save keep the accent and Clear Image keeps danger. */
+.details-edit.col-xl-9 .btn-secondary:not(.minimal),
+.edit-buttons-container .btn-secondary:not(.minimal) {
+  color: var(--jl-muted);
+}
+.details-edit.col-xl-9 .btn-secondary:not(.minimal):hover,
+.edit-buttons-container .btn-secondary:not(.minimal):hover,
+.details-edit.col-xl-9 .btn-secondary:not(.minimal):not(:disabled):not(.disabled):active,
+.edit-buttons-container .btn-secondary:not(.minimal):not(:disabled):not(.disabled):active {
+  color: var(--jl-text);
 }
 /* On the tabbed pages the toolbar is the FIRST child of the edit form.
    Sticky can only hold an element back, never pull it forward, so it

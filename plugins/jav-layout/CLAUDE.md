@@ -211,9 +211,19 @@ here moves a React node), so it can be checked page by page:
   block, styled exactly like the mode bar** (`--jl-pill-bg`, `--jl-line`,
   8px, 3px padding, 28px segments = 36px), page-centered on the same
   axis as the mode bar and the list toolbar, 14px above the mode bar.
-  Buttons are segments: transparent at rest, role carried by text color
-  from tier 1, dim wash on hover (accent wash for primary, danger wash
-  for danger), every state restating both background and border.
+  Buttons are segments: the NEUTRAL ones (Auto tag…, Merge…) take the
+  mode bar's own resting color, `--jl-muted`, instead of tier 1's bright
+  `--jl-fg` (requested live 2026-09-02, "same font color as the
+  un-highlighted mode buttons"); the ROLE ones keep their color — Edit/
+  Submit accent, Delete danger — because a first pass that muted all
+  five was immediately reported as "too consistent, we lost the role
+  color". Hover: `.jl-mode:hover` verbatim for neutrals, the role's own
+  wash for accent/danger. Every state restates color, background and
+  border; the active rules carry tier 1's `:not(:disabled):not(.disabled)
+  :active` chain to stay ahead of it. Verified via `CSS.forcePseudoState`
+  + live computed style — note that `CSS.getComputedStyleForNode` read
+  under a forced pseudo-state returned the un-forced values and looked
+  like a failure; read `getComputedStyle` from the page instead.
 - **Editing: actions are a bar pinned to the bottom of whatever
   scrolls.** On entity pages that is a `position: fixed` footer across
   the whole viewport, with matching `padding-bottom` on
@@ -223,7 +233,21 @@ here moves a React node), so it can be checked page by page:
   the sidebar that scrolls, which the bar already spans edge to edge.
   Both use the SOLID deep surface (`--jl-surface-deep`, `!important`),
   a hairline top border and an upward shadow. Performer's top duplicate
-  is hidden. On the tabbed pages the toolbar is the form's first child
+  is hidden. The bars' neutral buttons (Scrape with…, Set image…, the
+  scene bar's demoted Scrape) rest at `--jl-muted` like the viewing
+  pill's neutrals and brighten to `--jl-text` on hover/press; they keep
+  tier 1's bordered ghost look (only `color` is claimed), and Cancel/
+  Save keep the accent, Clear Image/Delete keep danger. **The mode bar
+  is hidden while an entity is being edited** (`body:has(.detail-header.edit)
+  .jl-modes-row` — `body`, not `main`: stash's `.main` is a class on a
+  div, there is no `<main>` element, which the first draft assumed): stash hides the relations list in edit mode
+  but leaves the tab strip's box, so the mode bar was the one thing
+  left below the form and the fixed footer sat on top of it — measured
+  on all four entity pages (performer at page end, studio and group at
+  any scroll, tag clear by 44px). Nothing else exists below the header
+  in edit mode (no toolbar, cards or pager — confirmed), so that was the
+  footer's only possible overlap. The tabbed pages can't hit this: their
+  bar is sticky inside the pane, below the mode bar. On the tabbed pages the toolbar is the form's first child
   and sticky can only hold an element back, never pull it forward, so
   the form becomes a flex column and the toolbar takes `order: 99`
   first (`form:has(> .edit-buttons-container)`); verified pinned in

@@ -66,6 +66,18 @@
 .group-tabs > .jl-modes-row,
 .tag-tabs > .jl-modes-row { margin: 0 0 14px; }
 
+/* While an entity is being edited (`.detail-header.edit`), stash hides
+   the tabbed relations list itself but leaves the tab strip's box in
+   the DOM — so this plugin's mode bar, built from that strip, kept
+   rendering as the only thing below the form, where the fixed
+   Cancel/Save footer (buttons.css 4b) sits on top of it: measured live
+   on all four entity pages (performer at page end, studio and group at
+   any scroll, tag just clear by 44px). A mode bar with nothing to switch
+   is noise anyway, so it goes for the duration of the edit. Nothing
+   else below the header exists in edit mode (no toolbar, no cards, no
+   pager — confirmed), so this is the only overlap the footer can have. */
+body:has(.detail-header.edit) .jl-modes-row { display: none !important; }
+
 /* The header's height is set by whichever is taller — the image
    (`.detail-header-image`, floated beside the text) or the text column —
    plus wrapper spacing that differs per page, while the action row
