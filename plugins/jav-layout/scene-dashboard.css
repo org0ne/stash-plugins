@@ -24,14 +24,13 @@
  * ============================================================ */
 
 :root {
-  --jl-pink:   #ff80bf;
-  --jl-cyan:   #73c1e6;
-  --jl-lilac:  #e1cdfe;
-  --jl-text:   #cdd6f4;
-  --jl-muted:  #8b9bc7;
-  --jl-dim:    #6272a4;
-  --jl-line:   rgba(98, 114, 164, 0.28);
-  --jl-well:   rgba(30, 30, 50, 0.42);
+  /* Color tokens (--jl-accent/--jl-link/--jl-heading/--jl-text/--jl-muted/
+     --jl-dim/--jl-line*/--jl-well/--jl-surface*/--jl-pill-bg/...) moved to
+     themes.css in the 2026-09-02 tokenization — that file defines the
+     Dracula defaults and each selectable theme's overrides. --jl-pink,
+     --jl-link and --jl-heading were renamed --jl-accent, --jl-link and
+     --jl-heading at the same time (role names, not Dracula hue names).
+     Only the layout constant stays here. */
   --jl-gap:    14px;
 }
 
@@ -48,7 +47,7 @@
   display: inline-flex;
   gap: 2px;
   padding: 3px;
-  background: rgba(25, 24, 34, 0.7);
+  background: var(--jl-pill-bg);
   border: 1px solid var(--jl-line);
   border-radius: 8px;
   flex-wrap: wrap;
@@ -78,9 +77,9 @@
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
 }
-.jl-mode:hover { color: var(--jl-text); background: rgba(98, 114, 164, 0.15); }
-.jl-mode[aria-selected="true"] { color: var(--jl-pink); background: rgba(255, 128, 191, 0.15); }
-.jl-mode:focus-visible { outline: 1px solid var(--jl-pink); outline-offset: 1px; }
+.jl-mode:hover { color: var(--jl-text); background: color-mix(in srgb, var(--jl-dim) 15%, transparent); }
+.jl-mode[aria-selected="true"] { color: var(--jl-accent); background: color-mix(in srgb, var(--jl-accent) 15%, transparent); }
+.jl-mode:focus-visible { outline: 1px solid var(--jl-accent); outline-offset: 1px; }
 
 /* ------------------------------------------------------------
  *  Layout: flatten every wrapper standing between .scene-tabs and the
@@ -226,11 +225,11 @@
   margin-bottom: 0;
 }
 .scene-tabs[data-jl-mode] h3.scene-header                            { order: 20; }
-/* Same hue family as the title's --jl-lilac (clean-cards.css), just dimmed —
+/* Same hue family as the title's --jl-heading (clean-cards.css), just dimmed —
    reads as "the same thing, quieter" rather than an unrelated muted color. */
 .scene-tabs[data-jl-mode] .stash-original-title {
   order: 30;
-  color: rgba(225, 205, 254, 0.55) !important;
+  color: color-mix(in srgb, var(--jl-heading) 55%, transparent) !important;
   /* clean-cards.css's `.scene-details h6 { margin-bottom: 2px !important }`
      rule — the exact same "stubborn 2px seam" landmine documented in the
      scattered-group-card notes below, this time on Original Title instead
@@ -318,7 +317,7 @@
   flex: 0 0 calc(100% + 10px);
   margin-left: -5px;
   min-width: 0;
-  background: rgba(25, 24, 34, 0.7);
+  background: var(--jl-pill-bg);
   border: 1px solid var(--jl-line);
   border-radius: 8px;
   /* border-box so the added border doesn't push this taller than the
@@ -417,7 +416,7 @@
   display: none !important;
 }
 .scene-tabs[data-jl-mode] .scene-subheader .date {
-  color: var(--jl-pink) !important;
+  color: var(--jl-accent) !important;
   font-weight: 700 !important;
   /* Code and Date share one visual bar (see the note above this block)
      but were never actually unified on font — Code (.studio-code, in
@@ -502,7 +501,7 @@ a.jl-scene-director-value {
   text-decoration: none;
 }
 a.jl-scene-director-value:hover {
-  color: var(--jl-pink);
+  color: var(--jl-accent);
   text-decoration: underline;
 }
 .jl-scene-badges-row {
@@ -991,7 +990,7 @@ a.jl-scene-director-value:hover {
   transition: color 0.12s ease;
 }
 .jl-head:hover { color: var(--jl-muted); }
-.jl-head:focus-visible { outline: 1px solid var(--jl-pink); outline-offset: 2px; }
+.jl-head:focus-visible { outline: 1px solid var(--jl-accent); outline-offset: 2px; }
 .jl-head .jl-chevron {
   font-size: 9px;
   opacity: 0.7;
@@ -1085,9 +1084,9 @@ a.jl-scene-director-value:hover {
   color: var(--jl-muted);
 }
 .edit-buttons-container .scraper-menu .btn-primary:hover {
-  border-color: var(--jl-pink);
+  border-color: var(--jl-accent);
   color: var(--jl-fg);
-  background-color: var(--jl-pink-wash-soft);
+  background-color: var(--jl-accent-wash-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {

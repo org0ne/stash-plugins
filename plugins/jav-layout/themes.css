@@ -1,0 +1,322 @@
+/* ============================================================
+ *  Themes — the color token contract for every stylesheet in JAV Layout
+ *
+ *  Every color the plugin paints comes from a `--jl-*` token defined
+ *  here. The bare `:root` block is the default theme (Dracula — the
+ *  palette this plugin was built on); each `html[data-jl-theme="…"]`
+ *  block below redefines only the *base* tokens for one selectable
+ *  theme. theme.js stamps that attribute on <html> from the plugin's
+ *  `theme` setting (Settings › Plugins › JAV Layout), caching the last
+ *  value in localStorage so it applies before the first paint on later
+ *  loads.
+ *
+ *  Loaded first in jav-layout.yml, before every consumer. Tokens are
+ *  named by ROLE, never by hue — `--jl-accent`, not `--jl-pink` — because
+ *  the same rule has to read correctly under a theme whose accent isn't
+ *  pink. (Before 2026-09-02 these were --jl-pink/--jl-cyan/--jl-lilac,
+ *  defined in scene-dashboard.css; older notes in CLAUDE.md still use
+ *  those names for the same tokens.)
+ *
+ *  Two tiers:
+ *   - BASE tokens: the values a theme actually sets. A theme block only
+ *     ever needs these.
+ *   - DERIVED tokens: alpha steps computed from the base tokens with
+ *     color-mix(), so a theme never has to restate its accent at five
+ *     alphas, and the wash/line/well relationships stay consistent
+ *     across themes. Chrome 111+ / Safari 16.2+ / Firefox 113+ — the
+ *     same generation of browsers stash's own UI already requires.
+ *
+ *  A theme has two halves, both in this file: the `--jl-*` tokens for
+ *  what this plugin paints (cards, the scene sidebar, buttons, the
+ *  entity pages), in the first section, and the base-app palette —
+ *  base-theme.css's own variables, which paint everything stash itself
+ *  draws — in the second. Dracula is the default for both: the `:root`
+ *  block here for the tokens, base-theme.css's own `:root` for the app.
+ * ============================================================ */
+
+:root {
+  /* ---- BASE: Dracula (default) ---- */
+  /* Accents */
+  --jl-accent:        #ff80bf;   /* studio code, date, primary buttons, selected mode, counters */
+  --jl-link:          #73c1e6;   /* performer links, description text */
+  --jl-heading:       #e1cdfe;   /* scene title, performer/studio/group/tag names */
+  /* Sidebar text ramp */
+  --jl-text:          #cdd6f4;   /* values */
+  --jl-muted:         #8b9bc7;   /* labels, original title, aliases */
+  --jl-dim:           #6272a4;   /* idle toolbar, headings inside .scene-details; also the base for every line/border */
+  /* Neutral text pair — list surfaces and buttons, deliberately NOT the
+     blue-tinted ramp above (see buttons.css history in CLAUDE.md) */
+  --jl-fg:            #f8f8f2;
+  /* Surfaces — base color for the code/date bar, the hover popup, and
+     the translucent card well; pill-bg is the mode bar / backdrop fill */
+  --jl-surface-base:  #1e1e32;
+  --jl-surface-deep:  #14141f;   /* popup image backing */
+  --jl-pill-base:     #191822;
+  --jl-popup-text:    #ffffff;
+  /* Semantic */
+  --jl-danger:        #e0665a;
+  --jl-on-danger:     #fff6f0;   /* text on Danger's solid hover fill */
+  --jl-ok:            #50fa7b;   /* watched badge, "copied" check */
+
+  /* ---- DERIVED (do not set in theme blocks) ---- */
+  --jl-fg-dim:            color-mix(in srgb, var(--jl-fg) 72%, transparent);
+  --jl-surface:           color-mix(in srgb, var(--jl-surface-base) 95%, transparent);
+  --jl-surface-strong:    color-mix(in srgb, var(--jl-surface-base) 97%, transparent);
+  --jl-well:              color-mix(in srgb, var(--jl-surface-base) 42%, transparent);
+  --jl-pill-bg:           color-mix(in srgb, var(--jl-pill-base) 70%, transparent);
+  --jl-line:              color-mix(in srgb, var(--jl-dim) 28%, transparent);
+  --jl-line-soft:         color-mix(in srgb, var(--jl-dim) 25%, transparent);
+  --jl-line-mid:          color-mix(in srgb, var(--jl-dim) 30%, transparent);
+  --jl-line-strong:       color-mix(in srgb, var(--jl-dim) 50%, transparent);
+  --jl-accent-wash:       color-mix(in srgb, var(--jl-accent) 16%, transparent);
+  --jl-accent-wash-hover: color-mix(in srgb, var(--jl-accent) 26%, transparent);
+  --jl-accent-wash-active:color-mix(in srgb, var(--jl-accent) 34%, transparent);
+  --jl-accent-wash-soft:  color-mix(in srgb, var(--jl-accent) 10%, transparent);
+  --jl-accent-border:     color-mix(in srgb, var(--jl-accent) 40%, transparent);
+  --jl-danger-border:     color-mix(in srgb, var(--jl-danger) 40%, transparent);
+}
+
+/* ------------------------------------------------------------
+ *  Catppuccin Mocha — https://github.com/catppuccin/catppuccin (MIT)
+ *  Copyright (c) 2021 Catppuccin
+ *  pink / sky / lavender / text / subtext0 / overlay0 / mantle / crust
+ * ------------------------------------------------------------ */
+html[data-jl-theme="catppuccin-mocha"] {
+  --jl-accent:        #f5c2e7;
+  --jl-link:          #89dceb;
+  --jl-heading:       #b4befe;
+  --jl-text:          #cdd6f4;
+  --jl-muted:         #a6adc8;
+  --jl-dim:           #6c7086;
+  --jl-fg:            #cdd6f4;
+  --jl-surface-base:  #181825;
+  --jl-surface-deep:  #11111b;
+  --jl-pill-base:     #181825;
+  --jl-popup-text:    #cdd6f4;
+  --jl-danger:        #f38ba8;
+  --jl-on-danger:     #11111b;
+  --jl-ok:            #a6e3a1;
+}
+
+/* ------------------------------------------------------------
+ *  Rosé Pine Moon — https://github.com/rose-pine/rose-pine-theme (MIT)
+ *  Copyright (c) 2021 Rosé Pine
+ *  love / foam / iris / text / subtle / muted; surfaces from the main
+ *  variant (surface, base), which are the darker steps Moon lacks.
+ *  Known trade-off: love is both the accent and the palette's only red,
+ *  so Save and Delete share a hue here; there is no green, so the
+ *  watched badge uses pine.
+ * ------------------------------------------------------------ */
+html[data-jl-theme="rose-pine-moon"] {
+  --jl-accent:        #eb6f92;
+  --jl-link:          #9ccfd8;
+  --jl-heading:       #c4a7e7;
+  --jl-text:          #e0def4;
+  --jl-muted:         #908caa;
+  --jl-dim:           #6e6a86;
+  --jl-fg:            #e0def4;
+  --jl-surface-base:  #1f1d2e;
+  --jl-surface-deep:  #191724;
+  --jl-pill-base:     #1f1d2e;
+  --jl-popup-text:    #e0def4;
+  --jl-danger:        #eb6f92;
+  --jl-on-danger:     #191724;
+  --jl-ok:            #3e8fb0;
+}
+
+/* ------------------------------------------------------------
+ *  Kanagawa Wave — https://github.com/rebelot/kanagawa.nvim (MIT)
+ *  Copyright (c) 2021 rebelot
+ *  sakuraPink / springBlue / springViolet2 / fujiWhite / springViolet1 /
+ *  fujiGray / sumiInk1 / sumiInk0 / waveRed / springGreen
+ * ------------------------------------------------------------ */
+html[data-jl-theme="kanagawa-wave"] {
+  --jl-accent:        #d27e99;
+  --jl-link:          #7fb4ca;
+  --jl-heading:       #9cabca;
+  --jl-text:          #dcd7ba;
+  --jl-muted:         #938aa9;
+  --jl-dim:           #727169;
+  --jl-fg:            #dcd7ba;
+  --jl-surface-base:  #181820;
+  --jl-surface-deep:  #16161d;
+  --jl-pill-base:     #16161d;
+  --jl-popup-text:    #dcd7ba;
+  --jl-danger:        #e46876;
+  --jl-on-danger:     #16161d;
+  --jl-ok:            #98bb6c;
+}
+
+/* ============================================================
+ *  BASE-APP PALETTE per theme — the variables base-theme.css consumes
+ *
+ *  base-theme.css (the vendored dracula-for-stash stylesheet) paints the
+ *  whole app from its own `:root` variables; the blocks below redefine
+ *  those for each selectable theme, so a theme drives every surface in
+ *  the app, not only the --jl-* tokens above. Dracula needs no block:
+ *  base-theme.css's own `:root` IS the Dracula palette.
+ *
+ *  Only the base colors are set per theme. Everything upstream derives
+ *  (the `--<pct>pct_<name>` translucent steps) already derives in
+ *  base-theme.css via color-mix(), and the remaining families that
+ *  upstream hand-picked for Dracula (the pale, dark and spdk tints and
+ *  shades, the wisp/ash/smoke neutrals, muted_purple, the ANSI bright
+ *  set) are derived here with one formula per family, so they track
+ *  the theme's own hues instead of staying Dracula-colored. (Careful
+ *  writing these comments: a glob like "pale_* / dark_*" spelled with a
+ *  slash after the star ends the comment early and silently swallows
+ *  the next rule — that is exactly how the Mocha block below went
+ *  missing on the first pass.)
+ *    pale_X  = 40 % X over white      (badge/alert backgrounds)
+ *    dark_X  = 35 % X over black      (badge/alert text on pale_X)
+ *    spdk_X  = 18 % X over black      (deepest shade, rarely used)
+ *    bright  = 85 % X over white      (ANSI bright variants)
+ *    wisp / ash / smoke = foreground over background at 80 / 55 / 25 %
+ *    muted_purple = 60 % purple over background
+ *  Those ratios were picked to land near upstream's Dracula values for
+ *  purple (the most-used family) — they are approximations by design,
+ *  never applied to Dracula itself, which keeps upstream's literals.
+ *
+ *  Semantic slots and what the app uses them for, so a new theme can be
+ *  filled in without reading base-theme.css:
+ *    background / foreground   page ground and body text
+ *    superdark                 darker than background: inputs, nav, modals
+ *    alt_bg / intermediate_bg  lighter than background: cards, panels
+ *    selection                 lighter still: hover/selected rows
+ *    tag_background            tag chips
+ *    misty / overcast / gloomy three-step secondary text ramp
+ *    disabled                  disabled controls
+ *    purple                    the app's primary accent (buttons, links, active nav)
+ *    pink / cyan / green / red / orange / yellow   semantic + accent colors
+ * ============================================================ */
+
+/* ---- Catppuccin Mocha ---- */
+html[data-jl-theme="catppuccin-mocha"] {
+  --background:       #1e1e2e;   /* base */
+  --foreground:       #cdd6f4;   /* text */
+  --selection:        #45475a;   /* surface1 */
+  --comment:          #6c7086;   /* overlay0 */
+  --red:              #f38ba8;
+  --orange:           #fab387;   /* peach */
+  --yellow:           #f9e2af;
+  --green:            #a6e3a1;
+  --purple:           #cba6f7;   /* mauve */
+  --cyan:             #89dceb;   /* sky */
+  --pink:             #f5c2e7;
+  --superdark:        #11111b;   /* crust */
+  --alt_bg:           #313244;   /* surface0 */
+  --intermediate_bg:  #3b3c50;   /* between surface0 and surface1 */
+  --misty_white:      #bac2de;   /* subtext1 */
+  --overcast_white:   #a6adc8;   /* subtext0 */
+  --gloomy_white:     #9399b2;   /* overlay2 */
+  --tag_background:   #585b70;   /* surface2 */
+  --disabled:         #7f849c;   /* overlay1 */
+  --ansi_black:       #11111b;
+  --vsc_text_field:   #11111b;
+  --vsc_text_field_border: #181825;
+}
+
+/* ---- Rosé Pine Moon ---- */
+html[data-jl-theme="rose-pine-moon"] {
+  --background:       #232136;   /* base */
+  --foreground:       #e0def4;   /* text */
+  --selection:        #44415a;   /* highlight med */
+  --comment:          #6e6a86;   /* muted */
+  --red:              #eb6f92;   /* love */
+  --orange:           #ea9a97;   /* rose */
+  --yellow:           #f6c177;   /* gold */
+  --green:            #3e8fb0;   /* pine — Rosé Pine has no green */
+  --purple:           #c4a7e7;   /* iris */
+  --cyan:             #9ccfd8;   /* foam */
+  --pink:             #eb6f92;   /* love — doubles as red, by design */
+  --superdark:        #191724;   /* main base, the darker step Moon lacks */
+  --alt_bg:           #2a273f;   /* surface */
+  --intermediate_bg:  #322e49;   /* between surface and overlay */
+  --misty_white:      #d3d0e7;   /* text toward subtle */
+  --overcast_white:   #908caa;   /* subtle */
+  --gloomy_white:     #817d9b;   /* subtle toward muted */
+  --tag_background:   #524f67;   /* highlight high */
+  --disabled:         #6e6a86;   /* muted */
+  --ansi_black:       #191724;
+  --vsc_text_field:   #191724;
+  --vsc_text_field_border: #1f1d2e;
+}
+
+/* ---- Kanagawa Wave ---- */
+html[data-jl-theme="kanagawa-wave"] {
+  --background:       #1f1f28;   /* sumiInk3 */
+  --foreground:       #dcd7ba;   /* fujiWhite */
+  --selection:        #54546d;   /* sumiInk6 */
+  --comment:          #727169;   /* fujiGray */
+  --red:              #e46876;   /* waveRed */
+  --orange:           #ffa066;   /* surimiOrange */
+  --yellow:           #e6c384;   /* carpYellow */
+  --green:            #98bb6c;   /* springGreen */
+  --purple:           #957fb8;   /* oniViolet */
+  --cyan:             #7fb4ca;   /* springBlue */
+  --pink:             #d27e99;   /* sakuraPink */
+  --superdark:        #16161d;   /* sumiInk0 */
+  --alt_bg:           #2a2a37;   /* sumiInk4 */
+  --intermediate_bg:  #363646;   /* sumiInk5 */
+  --misty_white:      #c8c093;   /* oldWhite */
+  --overcast_white:   #a8a48f;   /* fujiWhite toward fujiGray */
+  --gloomy_white:     #8f8b7c;
+  --tag_background:   #49495c;   /* sumiInk5 toward sumiInk6 */
+  --disabled:         #727169;
+  --ansi_black:       #16161d;
+  --vsc_text_field:   #16161d;
+  --vsc_text_field_border: #181820;
+}
+
+/* ---- Derived families, shared by every non-Dracula theme ----
+ *  One rule keyed on "any theme attribute" so each theme block above
+ *  stays a plain list of base colors. Dracula (no attribute) never
+ *  matches, so base-theme.css's upstream literals stay in force there. */
+html[data-jl-theme] {
+  --ansi_red:      var(--red);
+  --ansi_green:    var(--green);
+  --ansi_yellow:   var(--yellow);
+  --ansi_blue:     var(--purple);
+  --ansi_magenta:  var(--pink);
+  --ansi_cyan:     var(--cyan);
+  --ansi_white:    var(--foreground);
+  --ansi_bright_black:   var(--comment);
+  --ansi_bright_red:     color-mix(in srgb, var(--red) 85%, white);
+  --ansi_bright_green:   color-mix(in srgb, var(--green) 85%, white);
+  --ansi_bright_yellow:  color-mix(in srgb, var(--yellow) 85%, white);
+  --ansi_bright_blue:    color-mix(in srgb, var(--purple) 85%, white);
+  --ansi_bright_magenta: color-mix(in srgb, var(--pink) 85%, white);
+  --ansi_bright_cyan:    color-mix(in srgb, var(--cyan) 85%, white);
+
+  --muted_purple:  color-mix(in srgb, var(--purple) 60%, var(--background));
+  --wisp_white:    color-mix(in srgb, var(--foreground) 80%, var(--background));
+  --ash_white:     color-mix(in srgb, var(--foreground) 55%, var(--background));
+  --smoke_white:   color-mix(in srgb, var(--foreground) 25%, var(--background));
+
+  --pale_comment:  color-mix(in srgb, var(--comment) 40%, white);
+  --pale_red:      color-mix(in srgb, var(--red) 40%, white);
+  --pale_orange:   color-mix(in srgb, var(--orange) 40%, white);
+  --pale_yellow:   color-mix(in srgb, var(--yellow) 40%, white);
+  --pale_green:    color-mix(in srgb, var(--green) 40%, white);
+  --pale_purple:   color-mix(in srgb, var(--purple) 40%, white);
+  --pale_cyan:     color-mix(in srgb, var(--cyan) 40%, white);
+  --pale_pink:     color-mix(in srgb, var(--pink) 40%, white);
+
+  --dark_comment:  color-mix(in srgb, var(--comment) 35%, black);
+  --dark_red:      color-mix(in srgb, var(--red) 35%, black);
+  --dark_orange:   color-mix(in srgb, var(--orange) 35%, black);
+  --dark_yellow:   color-mix(in srgb, var(--yellow) 35%, black);
+  --dark_green:    color-mix(in srgb, var(--green) 35%, black);
+  --dark_purple:   color-mix(in srgb, var(--purple) 35%, black);
+  --dark_cyan:     color-mix(in srgb, var(--cyan) 35%, black);
+  --dark_pink:     color-mix(in srgb, var(--pink) 35%, black);
+
+  --spdk_comment:  color-mix(in srgb, var(--comment) 18%, black);
+  --spdk_red:      color-mix(in srgb, var(--red) 18%, black);
+  --spdk_orange:   color-mix(in srgb, var(--orange) 18%, black);
+  --spdk_yellow:   color-mix(in srgb, var(--yellow) 18%, black);
+  --spdk_green:    color-mix(in srgb, var(--green) 18%, black);
+  --spdk_purple:   color-mix(in srgb, var(--purple) 18%, black);
+  --spdk_cyan:     color-mix(in srgb, var(--cyan) 18%, black);
+  --spdk_pink:     color-mix(in srgb, var(--pink) 18%, black);
+}

@@ -1,6 +1,6 @@
 # JAV Layout — stash UI plugin
 
-Dracula Pro card styling plus the **Option C dashboard**: stash's native
+Dracula card styling plus the **Option C dashboard**: stash's native
 nine-tab bar (scene pages) and tabbed relations list (performer/studio/
 group/tag pages) replaced by a compact mode/pill switcher in the same
 slot. On the scene page, a persistent identity header (Studio Logo/Code,
@@ -20,13 +20,16 @@ internally (every `dl-`/`data-dl-`/`--dl-` reference became `jl-`/
 | --- | --- |
 | `jav-layout.yml` | Plugin manifest. The filename sets the plugin ID. |
 | `fonts.css` | Self-hosted Quicksand SemiBold (600), embedded as base64 — no external font request. |
+| `base-theme.css` | The whole-app palette — dracula-for-stash's stylesheet, vendored (MIT), every color as a CSS variable. Replaces the separately-installed `dracula-theme` plugin. |
+| `themes.css` / `theme.js` | Every color the plugin paints, as `--jl-*` tokens, plus each selectable theme's overrides of both those tokens and `base-theme.css`'s variables. `theme.js` applies the **Color theme** setting and adds its dropdown to Settings › Plugins. See Themes below. |
 | `clean-cards.css` / `.js` | Scene card restyle (pink code, cyan performers, dynamic title scaling), studio-code relocation, popover reordering, watched badge, performer hover popup. |
 | `buttons.css` | Site-wide native-button restyle — every `.btn-primary`/`.btn-secondary`/`.btn-danger` in the app, not just this plugin's own UI. |
 | `scene-dashboard.css` / `.js` | The scene page's own Option C dashboard. |
 | `entity-dashboard.css` / `.js` | The same mode-switcher treatment for performer/studio/group/tag pages — one config-driven module for all four. |
 
-Load order is set in the manifest: `fonts` → `clean-cards` → `buttons` →
-`scene-dashboard` → `entity-dashboard`.
+Load order is set in the manifest: `fonts` → `base-theme` → `themes` →
+`clean-cards` → `buttons` → `scene-dashboard` → `entity-dashboard`, with
+`theme.js` first among the scripts.
 
 Two related features used to live in this plugin and are now separate,
 standalone plugins in this same repo — install them too if you want them:
@@ -61,6 +64,10 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
 Then in stash: **Settings → Plugins → Reload Plugins**, and refresh the
 browser. CSS and JS changes need only a browser refresh after that;
 adding or renaming a file needs another Reload Plugins.
+
+If you had the community **dracula-theme** plugin installed, disable it:
+JAV Layout ships its own copy of that stylesheet (`base-theme.css`) and
+themes it, so the external one is redundant.
 
 If you're migrating from the old "Dracula Layout" plugin, remove that
 one first (different plugin ID, so stash treats them as unrelated) — and
@@ -195,6 +202,36 @@ practice. This is a single column at every width, with a handful of
 rules (the sidebar performer grid, the mobile edit-toolbar centering)
 that specifically adapt at narrow/mobile viewports.
 
+## Themes
+
+**Settings → Plugins → JAV Layout → Color theme** is a dropdown (the
+plugin replaces stash's free-text field for this setting) with:
+
+| Theme | Palette |
+| --- | --- |
+| Dracula (default) | The look this plugin was built on. |
+| Catppuccin Mocha | pink / sky / lavender accents on Catppuccin's text ramp. |
+| Rosé Pine Moon | love / foam / iris. Rosé Pine's accent is also its only red, so Save and Delete share a hue. |
+| Kanagawa Wave | sakura pink / spring blue on paper-white text. |
+
+The choice applies immediately, is saved in the plugin's settings, and is
+cached in `localStorage` under `jl.theme` so later page loads paint in
+the right theme before the settings round trip completes. A missing or
+unknown value means Dracula.
+
+A theme recolors the **whole app**: the base palette (nav bar, lists,
+cards, forms, modals — everything stash itself draws) comes from
+`base-theme.css`, a vendored copy of the community dracula-for-stash
+stylesheet with every color as a CSS variable, and each theme redefines
+those variables alongside the plugin's own `--jl-*` tokens. **If you
+have the separate `dracula-theme` plugin installed, disable it** — this
+plugin now contains it, and there is no reason to load it twice.
+
+Adding a theme is three edits: two `html[data-jl-theme="…"]` blocks in
+`themes.css` (the `--jl-*` tokens, and the base-app palette — each
+`:root`-level list names the slots), and an entry in `THEMES` in
+`theme.js`. Palette attributions live in `THIRD-PARTY-NOTICES.md`.
+
 ## Customising
 
 - Card titles: `CARD_TITLES` at the top of `scene-dashboard.js`. They
@@ -207,6 +244,8 @@ that specifically adapt at narrow/mobile viewports.
   items.
 - Button colors/sizing: the tier-1 (color, always-on) and tier-2
   (padding/size, opt-in per container) rules in `buttons.css`.
+- Colors anywhere: change the `--jl-*` tokens in `themes.css`, never a
+  hex value in the other stylesheets — they no longer contain any.
 
 Collapsed cards persist in `localStorage` under `jl.collapsedCards`.
 
@@ -242,6 +281,21 @@ Layout, mode switching and persistent-context visibility across Browse/
 Markers/Edit were verified against a live stash instance (headless
 Chrome screenshots of real scene, performer, studio and tag pages).
 
+## Thanks
+
+The whole-app palette in `base-theme.css` is
+[dracula-for-stash](https://github.com/UncertainMongoose/dracula-for-stash)
+by **UncertainMongoose**, carried in here under its MIT license with a
+handful of documented changes. Every stash page this plugin themes
+stands on that stylesheet, and the Dracula look this plugin grew up on
+was theirs first — thank you. Thanks as well to
+[Zeno Rocha](https://github.com/zenorocha) and
+[Lucas de França](https://github.com/luxonauta) for the
+[Dracula theme](https://draculatheme.com) itself, and to the
+Catppuccin, Rosé Pine and Kanagawa projects for the palettes behind the
+other themes.
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Palette attributions for the selectable
+themes are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

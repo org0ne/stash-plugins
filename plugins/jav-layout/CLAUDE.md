@@ -1,7 +1,7 @@
 # CLAUDE.md — JAV Layout (stash UI plugin)
 
 A UI plugin for [stash](https://github.com/stashapp/stash) that restyles scene
-cards (Dracula Pro) and replaces the scene detail page's nine-tab bar with a
+cards (Dracula) and replaces the scene detail page's nine-tab bar with a
 five-mode switcher in the same slot: a persistent identity header (Studio
 Logo/Code, Title, Original Title, Toolbar), then the mode switcher, then
 Details/Tags/Performers/Metadata/File/History/Groups/Galleries/Custom Fields
@@ -33,6 +33,9 @@ accurate history rather than rewritten.
 | --- | --- |
 | `jav-layout.yml` | Manifest. **Filename sets the plugin ID.** Lists load order. |
 | `fonts.css` | Self-hosted `@font-face` for Quicksand SemiBold (600), embedded as base64 — no external request, no dependency on the viewer's OS having it installed. Loads first; has no page effect of its own. See below. |
+| `base-theme.css` | **The whole-app palette** — dracula-for-stash's `dracula-theme.css` (MIT), vendored 2026-09-02 with its Google Fonts `@import` removed and its translucent `--<pct>pct_*` variables derived via `color-mix()`; otherwise byte-for-byte upstream, so an upstream diff still applies. Makes the separately-installed `dracula-theme` plugin unnecessary (keep it disabled). Loads second, exactly where that plugin used to sit in the cascade. See the Theming section below. |
+| `themes.css` / `theme.js` | **The color token contract.** Every `--jl-*` color token, with Dracula as the bare `:root` default, plus per selectable theme one `html[data-jl-theme="…"]` block for the `--jl-*` tokens and one for `base-theme.css`'s own variables; `theme.js` stamps that attribute from the plugin's `theme` setting and replaces the setting's free-text field in Settings › Plugins with a dropdown. Loads third (CSS) / first (JS). No other stylesheet contains a color literal any more — see the Theming section below. |
+| `THIRD-PARTY-NOTICES.md` | MIT attribution for the palettes the themes reproduce. Add a row when adding a theme. |
 | `clean-cards.css` / `clean-cards.js` | The pre-existing `customJavaScript.js` v5.4, split into a stylesheet and the script. Scene cards, performer hover popup, studio-code relocation, popover reordering. Performer name/disambiguation and studio-code copy buttons moved out to the standalone `copy-buttons` plugin (2026-08-31); title cleanup moved out to the standalone `title-scrubber` plugin (2026-09-02) — see the Settled decisions entries near the bottom. |
 | `buttons.css` | Site-wide native-Bootstrap button restyle (`.btn-primary`/`.btn-secondary`/`.btn-danger`/etc.) — CSS only, no JS, no page-specific DOM assumptions. See below. |
 | `scene-dashboard.css` / `scene-dashboard.js` | The scene-page dashboard. This is the new code. |
@@ -43,6 +46,134 @@ accurate history rather than rewritten.
 `clean-cards.*`, `buttons.css`, `scene-dashboard.*` and `entity-dashboard.*`
 are independent. Changing one should not require
 touching the others.
+
+### Theming — themes.css / theme.js (2026-09-02)
+
+**Every color in this plugin is a `--jl-*` token defined in `themes.css`;
+the other four stylesheets contain zero color literals.** Tokenized in
+one pass on 2026-09-02 (about 80 literal sites across clean-cards.css,
+buttons.css, scene-dashboard.css and entity-dashboard.css, only 19
+distinct values among them) as the prerequisite for selectable themes.
+Verified pixel-identical to the pre-tokenization render on the scene,
+grid and performer pages under the Dracula default — 0 differing pixels
+across three runs — so the refactor changed no visible output.
+
+- **Tokens are named by role, not hue.** `--jl-pink` → `--jl-accent`,
+  `--jl-cyan` → `--jl-link`, `--jl-lilac` → `--jl-heading`, and
+  `--jl-pink-wash*`/`--jl-pink-border` → `--jl-accent-wash*`/
+  `--jl-accent-border`. Older entries in this file still use the old
+  names when quoting history; they mean the same tokens. Everything else
+  (`--jl-text`/`-muted`/`-dim`, `--jl-fg`/`-fg-dim`, `--jl-line`,
+  `--jl-well`, `--jl-danger`, `--jl-on-danger`) kept its name.
+- **Two tiers: base tokens a theme sets, derived tokens computed with
+  `color-mix()`.** A theme block sets ~14 base values (accent, link,
+  heading, the text ramp, fg, three surface bases, popup text, danger,
+  on-danger, ok). Every alpha step — the five accent washes, the four
+  line strengths, the well, the code/date surface, the mode-bar pill
+  fill — is `color-mix(in srgb, var(--jl-x) N%, transparent)` off a
+  base, so a theme never restates its accent at five alphas and the
+  wash/line/well relationships hold across themes. Odd one-off alphas
+  (the history badge's 13 %/33 %, the selected pill's 15 %, Original
+  Title's 55 % heading) stay as inline `color-mix()` at their original
+  percentages rather than being rounded to a named step — the
+  pixel-identical claim above depends on that.
+- **The default theme is the absence of the attribute.** `:root` holds
+  Dracula; `theme.js` never writes `data-jl-theme="dracula"`, it removes
+  the attribute. An unknown or missing setting therefore degrades to
+  Dracula with no code path involved — the same failsafe shape as
+  constraint 6.
+- **Two-stage apply, cache then setting.** `theme.js` loads first among
+  the scripts, applies the `localStorage` (`jl.theme`) value
+  synchronously to cover the gap before the settings round trip, then
+  reads `configuration.plugins["jav-layout"].theme` via GraphQL and
+  applies that as authoritative (a setting changed in another browser
+  must win over this one's cache). Both writes go through an
+  equality-guarded `apply()`.
+- **The dropdown in Settings › Plugins is a sibling row, not a
+  replacement.** Stash renders each declared setting as a `.setting` row
+  with id `plugin-jav-layout-theme` (h3 / current value / description /
+  an Edit button opening a free-text modal — confirmed live, same
+  mechanism collection-colors relies on). `theme.js` hides that row and
+  inserts its own `.setting.jl-theme-setting` row before it, built with
+  `createElement`, never re-parenting anything React owns. Saving goes
+  through `configurePlugin` with the existing settings map merged in —
+  `configurePlugin` replaces the whole map, the config-clobbering
+  landmine collection-colors already hit. The dropdown reverts itself
+  and says so if the save fails. `window.JLTheme.preview(id)` switches
+  without persisting, for other plugins or the console.
+- **Scope of a theme: the whole app, since the base theme was vendored
+  (same day, later).** The first cut recolored only what this plugin
+  paints, with the rest of the app still painted by the separately-
+  installed community `dracula-theme` plugin — a dependency the user
+  explicitly didn't want to ship on. Rather than bridge onto that
+  plugin's variable names (re-coupling to it), its stylesheet was
+  brought in as `base-theme.css` under its MIT license:
+  - Analysis before vendoring: once comments are stripped, upstream has
+    only 38 color literals outside its `:root` (a 20-step rating-color
+    ramp, black/white alphas, two odd Bootstrap validation borders) —
+    it is variable-driven end to end, so theming it means redefining
+    variables, not rewriting rules. (An earlier count of "173 literals"
+    in this file's history was inflated by comments.)
+  - Two transforms, nothing else: the leading `@import` of Google Fonts
+    is removed (stash concatenates plugin CSS into one response, and an
+    `@import` not at the very top is ignored — so it could never work
+    here, and it was already a CSP violation on stricter setups), and
+    the 48 `--<pct>pct_<name>` rgba() variables become
+    `color-mix(in srgb, var(--<name>) <pct>%, transparent)` off their
+    base — percentage taken from the upstream alpha, not the name, since
+    upstream defines `--10pct_muted_purple` twice and the later, .25
+    definition is the one that was ever in effect. Three upstream bases
+    were a few units off their own named color (alt_bg, cyan, overcast)
+    and are normalized onto it; invisible behind ≤75 % alpha.
+  - **Lato is deliberately not self-hosted** in the import's place.
+    Only `.scene-card` asks for it, and checked live via
+    `CSS.getPlatformFontsForNode` with the external stylesheet
+    injected: the Google import was never what painted Lato on this
+    instance — the OS-installed Lato faces (Medium/Semibold, which
+    Google's Lato doesn't ship) were, and a web-font declaration would
+    replace those with synthetic 400/700. So Lato stays an OS-font
+    reliance, like every non-Quicksand face here.
+  - **Verified pixel-identical to the external plugin**: grid,
+    performers list, tags list, settings at 0 differing pixels; scene
+    page 11 px and performer page 2 px, all in the video progress bar
+    and a hover state. The baseline for that comparison was taken with
+    dracula-theme *disabled* in stash (the user had already disabled
+    it) by injecting the external stylesheet's text as a `<style>` at
+    `DOMContentLoaded` — after the app bundle's `<link>`, before the
+    plugin `<link>`s React adds later, i.e. its real cascade position.
+    Injecting it at document start instead put it *before* the bundle
+    and produced a false 15 % sidebar diff from tied-rule order; if this
+    technique is reused, the injection point matters.
+  - Per theme, `themes.css` now carries a second block setting
+    base-theme.css's ~22 base variables (background/foreground/
+    selection/comment, the seven hues, superdark/alt_bg/intermediate_bg,
+    the misty/overcast/gloomy text ramp, tag_background, disabled, the
+    ansi/vsc darks), and one shared `html[data-jl-theme]` rule derives
+    the families upstream hand-picked for Dracula (pale/dark/spdk
+    tints and shades, wisp/ash/smoke neutrals, muted_purple, ANSI
+    brights) with one `color-mix()` formula per family. Dracula matches
+    no theme attribute and keeps upstream's literals exactly.
+  - **A comment landmine hit while writing that block:** a CSS comment
+    containing a glob spelled `pale_*/dark_*` ends at the `*/` and
+    silently swallows the next rule — the Mocha base block simply
+    didn't exist until the parsed stylesheet was inspected via
+    `document.styleSheets` and the `html[data-jl-theme="catppuccin-
+    mocha"]` rule with a `--background` declaration was found missing.
+    Check `cssRules` for the block you just wrote, not just the page.
+- **Adding a theme**: two `html[data-jl-theme="<id>"]` blocks in
+  `themes.css` (the `--jl-*` tokens and the base-app palette, each with
+  an attribution comment), an entry in `THEMES` in `theme.js`, a row in
+  `THIRD-PARTY-NOTICES.md`, and the name in the manifest's setting
+  description. Dark palettes only — the surface tokens and every wash
+  alpha were tuned against dark grounds, and a light flavor needs those
+  relationships redesigned, not recolored.
+- **"Dracula Pro" was dropped from every reference** the same day
+  (README, manifest, clean-cards.css/js headers, this file's opening
+  line). The accent value itself (`#ff80bf`, a Dracula PRO pink; classic
+  Dracula's is `#ff79c6`) was left as-is — a hex value isn't what that
+  product's license restricts, and changing it would have altered the
+  plugin's look. Swap it in `themes.css` if zero ambiguity is ever
+  wanted.
 
 ### fonts.css — self-hosted Quicksand
 
@@ -1371,6 +1502,35 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
 
 ## Settled decisions — do not silently redo
 
+- **`.filtered-list-toolbar` is boxed with the mode bar's own fill and
+  outline (`--jl-pill-bg`, `--jl-line`, 8px radius) — buttons.css
+  section 3, 2026-09-02.** Reported live right after the base theme was
+  vendored: the toolbar strip above every filtered list "isn't getting
+  themed." It never was — stash's bundle paints it `#202b33` and the
+  base theme's only override for it uses a `.scene-list-toolbar…`
+  selector that doesn't match current markup — it just passed under
+  Dracula because the stock ground is close to Dracula's. The rule
+  reuses the pill's tokens rather than copying numbers, adds 10px of
+  horizontal padding so the border isn't flush with the first/last
+  control, and repeats the base theme's three-class selector so it
+  keeps winning if upstream markup brings that class back. Verified on
+  the scenes grid and the performer page's relations list under Dracula
+  and Kanagawa.
+- **`markTagRows()` iterates to a fixed point (up to three passes), not
+  one measure-and-flag pass.** Found by pixel-diffing the tokenization
+  (2026-09-02): a fresh load intermittently left one tag row's first
+  chip at the 8px interior margin instead of the 14px row-start margin.
+  The flags this function writes change the chips' own margins, and a
+  wider margin on a line's last chip can push it onto the next line —
+  moving the row boundaries the flags were just computed from. Before
+  the observer filter (see the performance entry below) the constant
+  unrelated re-runs converged this by accident, one pass each; after it,
+  the last run could land one pass short. Now: measure, flag, and if any
+  flag actually changed (`setData` returns whether it wrote), measure
+  again against the resulting layout. Steady state is one read pass and
+  no writes, so the performance fix is untouched. Confirmed with three
+  consecutive fresh loads at 0 differing pixels against the pre-change
+  baseline.
 - **2026-09-02 performance pass (scene-dashboard.js only): the body
   observer is filtered to sidebar-relevant mutations, every per-run DOM
   write is equality-guarded, and the backdrop sizers no longer reset

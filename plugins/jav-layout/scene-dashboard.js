@@ -66,9 +66,17 @@
    *  `value == null` on setData means "remove the attribute", so callers
    *  can express a boolean flag as setData(el, key, on ? 'true' : null).
    * ============================ */
+  // Returns true if it actually wrote — markTagRows() uses that to know
+  // whether its layout inputs may have moved and a re-measure is due.
   function setData(el, key, value) {
-    if (value == null) { if (key in el.dataset) delete el.dataset[key]; }
-    else if (el.dataset[key] !== value) el.dataset[key] = value;
+    if (value == null) {
+      if (!(key in el.dataset)) return false;
+      delete el.dataset[key];
+      return true;
+    }
+    if (el.dataset[key] === value) return false;
+    el.dataset[key] = value;
+    return true;
   }
   function setAttr(el, name, value) {
     if (el.getAttribute(name) !== value) el.setAttribute(name, value);
@@ -280,19 +288,36 @@
    * measure before either margin is corrected below. */
   function markTagRows(tagItems) {
     if (!tagItems.length) return;
-    const tops = [...tagItems].map(item => item.getBoundingClientRect().top);
-    tagItems.forEach((item, i) => {
-      const isFirstRow = Math.abs(tops[i] - tops[0]) < 2;
-      const isRowStart = i === 0 || Math.abs(tops[i] - tops[i - 1]) >= 2;
-      const isRowEnd = i === tagItems.length - 1 || Math.abs(tops[i + 1] - tops[i]) >= 2;
-      // Guarded writes (see setData): in steady state every chip already
-      // carries the right flags, so this loop writes nothing — which is
-      // what keeps the reads above from forcing a fresh layout on every
-      // run once the cloud has settled.
-      setData(item, 'jlTagFirstRow', isFirstRow ? 'true' : null);
-      setData(item, 'jlTagRowStart', isRowStart ? 'true' : null);
-      setData(item, 'jlTagRowEnd', isRowEnd ? 'true' : null);
-    });
+    // The flags this writes change the chips' own margins (row-start/end
+    // chips get 14px instead of 8px on their outer side — see
+    // scene-dashboard.css), and a wider margin on the last chip of a line
+    // can push it onto the next line — which moves the row boundaries the
+    // flags were computed from. So this is a fixed-point iteration, not a
+    // single pass: measure, flag, and if any flag changed, measure again
+    // against the layout those flags produced. Converges in two passes in
+    // practice (a chip that wraps takes its wider margin with it and
+    // nothing else moves); capped at three so a pathological cloud can't
+    // loop. Before the 2026-09-02 observer filter this convergence
+    // happened by accident, one pass per unrelated re-run — a fresh load
+    // then occasionally froze one row's start chip at the narrow margin,
+    // a real (if subtle) visual bug the constant re-runs had been hiding.
+    for (let pass = 0; pass < 3; pass++) {
+      const tops = [...tagItems].map(item => item.getBoundingClientRect().top);
+      let changed = false;
+      tagItems.forEach((item, i) => {
+        const isFirstRow = Math.abs(tops[i] - tops[0]) < 2;
+        const isRowStart = i === 0 || Math.abs(tops[i] - tops[i - 1]) >= 2;
+        const isRowEnd = i === tagItems.length - 1 || Math.abs(tops[i + 1] - tops[i]) >= 2;
+        // Guarded writes (see setData): in steady state every chip already
+        // carries the right flags, so this loop writes nothing — which is
+        // what keeps the reads above from forcing a fresh layout on every
+        // run once the cloud has settled.
+        changed = setData(item, 'jlTagFirstRow', isFirstRow ? 'true' : null) || changed;
+        changed = setData(item, 'jlTagRowStart', isRowStart ? 'true' : null) || changed;
+        changed = setData(item, 'jlTagRowEnd', isRowEnd ? 'true' : null) || changed;
+      });
+      if (!changed) break;
+    }
   }
 
   /* One seamless background behind Studio Code and Subheader/Date, which

@@ -15,8 +15,8 @@
  *     padding (9px 18px / 8px radius) — too heavy next to the mode bar's
  *     own pills once seen live.
  *   - v2 (current) drops the invented accent entirely. Primary reuses
- *     `var(--jl-pink)` directly — not just the same hex, the mode bar's
- *     own MECHANISM: `[aria-selected="true"] { color: var(--jl-pink);
+ *     `var(--jl-accent)` directly — not just the same hex, the mode bar's
+ *     own MECHANISM: `[aria-selected="true"] { color: var(--jl-accent);
  *     background: rgba(255,128,191,.15) }`, a tinted wash, never a solid
  *     fill. Sized down to sit close to `.jl-mode`'s own 5px/13px padding
  *     and 6px radius (not `.jl-modes`' outer 8px — that mismatch was
@@ -35,32 +35,12 @@
  * ============================================================ */
 
 :root {
-  /* Primary consumes var(--jl-pink) directly (defined in scene-dashboard.css)
-     rather than a duplicate token — if that value ever moves, Save moves
-     with it. These are just the wash/border alpha steps layered on top. */
-  --jl-pink-wash:        rgba(255, 128, 191, 0.16);
-  --jl-pink-wash-hover:  rgba(255, 128, 191, 0.26);
-  --jl-pink-wash-active: rgba(255, 128, 191, 0.34);
-  --jl-pink-wash-soft:   rgba(255, 128, 191, 0.1);
-  --jl-pink-border:      rgba(255, 128, 191, 0.4);
-
-  --jl-danger:      #e0665a;
-  --jl-danger-border: rgba(224, 102, 90, 0.4);
-  --jl-on-danger:   #fff6f0;
-
-  /* Secondary's neutral text — deliberately NOT this plugin's own
-     --jl-muted/--jl-text/--jl-dim (#8b9bc7/#cdd6f4/#6272a4). All three are
-     genuinely blue-tinted (a Catppuccin-ish palette, chosen for the
-     sidebar), and Secondary governs the filtered-list toolbar/pagination
-     text site-wide — every list page, not just the sidebar — where that
-     tint reads as a drift toward blue rather than a neutral. --jl-fg is
-     Dracula's actual foreground (#f8f8f2, already used natively
-     elsewhere in this plugin, e.g. clean-cards.css's subheader divider) —
-     genuinely neutral, no hue bias. -dim is a flat opacity step off it,
-     not a separate hue, so dimming it can't reintroduce a tint. */
-  --jl-fg:     #f8f8f2;
-  --jl-fg-dim: rgba(248, 248, 242, 0.72);
-
+  /* Every color token this file consumes — --jl-accent and its wash/border
+     steps, --jl-danger/--jl-danger-border/--jl-on-danger, --jl-fg/--jl-fg-dim —
+     now lives in themes.css (loaded first), which is where a theme switch
+     redefines them. Only the non-color token stays here. Names changed in
+     the 2026-09-02 tokenization: --jl-pink-* became --jl-accent-*, so the
+     accent is described by its role, not by Dracula's hue. */
   --jl-btn-radius: 6px;
 }
 
@@ -123,7 +103,7 @@
    weight override without live comparison against both reference points
    again, and confirmation it's actually wanted this time. */
 .btn:focus-visible {
-  outline: 2px solid var(--jl-pink);
+  outline: 2px solid var(--jl-accent);
   outline-offset: 2px;
   box-shadow: none;
 }
@@ -149,7 +129,7 @@
    shape) out-ranked native's `a.minimal:active:not(:disabled)` (three
    classes + element), so ONLY the pressed state leaked: pressing any
    nav button flashed the full Primary treatment
-   (`--jl-pink-wash-active` + pink border/text), confirmed via
+   (`--jl-accent-wash-active` + pink border/text), confirmed via
    `CSS.forcePseudoState` + `getMatchedStylesForNode`, not assumed.
    `:not(.minimal)` on every rule makes the exemption explicit in all
    four states instead of an accident in two of them — scene-card
@@ -157,21 +137,21 @@
    for free. */
 .btn-primary:not(.minimal),
 .btn-success:not(.minimal) {
-  background-color: var(--jl-pink-wash);
-  border-color: var(--jl-pink-border);
-  color: var(--jl-pink);
+  background-color: var(--jl-accent-wash);
+  border-color: var(--jl-accent-border);
+  color: var(--jl-accent);
 }
 .btn-primary:not(.minimal):hover,
 .btn-success:not(.minimal):hover {
-  background-color: var(--jl-pink-wash-hover);
-  border-color: var(--jl-pink);
-  color: var(--jl-pink);
+  background-color: var(--jl-accent-wash-hover);
+  border-color: var(--jl-accent);
+  color: var(--jl-accent);
 }
 .btn-primary:not(.minimal):not(:disabled):not(.disabled):active,
 .btn-success:not(.minimal):not(:disabled):not(.disabled):active {
-  background-color: var(--jl-pink-wash-active);
-  border-color: var(--jl-pink);
-  color: var(--jl-pink);
+  background-color: var(--jl-accent-wash-active);
+  border-color: var(--jl-accent);
+  color: var(--jl-accent);
 }
 /* Disabled Save used to stay 65%-opacity purple — still reads as "on".
    Flat neutral instead, so a disabled action stops competing with an
@@ -203,14 +183,14 @@
    tie breaks on load order (this file loads after the app bundle)
    instead of losing on specificity. */
 .source-controls .btn-primary {
-  background-color: var(--jl-pink-wash);
-  border-color: var(--jl-pink-border);
-  color: var(--jl-pink);
+  background-color: var(--jl-accent-wash);
+  border-color: var(--jl-accent-border);
+  color: var(--jl-accent);
 }
 .source-controls .btn-primary:hover {
-  background-color: var(--jl-pink-wash-hover);
-  border-color: var(--jl-pink);
-  color: var(--jl-pink);
+  background-color: var(--jl-accent-wash-hover);
+  border-color: var(--jl-accent);
+  color: var(--jl-accent);
 }
 
 /* Secondary — demoted to ghost. Bootstrap's default secondary (dark
@@ -230,9 +210,9 @@
   color: var(--jl-fg-dim);
 }
 .btn-secondary:not(.minimal):hover {
-  border-color: var(--jl-pink);
+  border-color: var(--jl-accent);
   color: var(--jl-fg);
-  background-color: var(--jl-pink-wash-soft);
+  background-color: var(--jl-accent-wash-soft);
 }
 /* Matches native's own `:not(:disabled):not(.disabled):active` selector
    (plus the `.minimal` exclusion, see the Primary block's comment) —
@@ -241,9 +221,9 @@
    dark-slate active fill (`#25313a`) shows through on press, unstyled,
    the same class of bug the primary/success hover color omission had. */
 .btn-secondary:not(.minimal):not(:disabled):not(.disabled):active {
-  border-color: var(--jl-pink);
+  border-color: var(--jl-accent);
   color: var(--jl-fg);
-  background-color: var(--jl-pink-wash);
+  background-color: var(--jl-accent-wash);
 }
 .btn-secondary:not(.minimal):disabled, .btn-secondary:not(.minimal).disabled { opacity: 0.45; }
 
@@ -431,3 +411,39 @@
   border-color: transparent;
 }
 ---- end Option C ---- */
+
+/* ------------------------------------------------------------
+ *  3. Filtered-list toolbar container — boxed like the mode bar
+ *
+ *  `.filtered-list-toolbar` (the search / sort / per-page / view-mode
+ *  strip above every filtered list: scenes, performers, tags, and the
+ *  relations lists on entity pages) paints its own background from
+ *  stash's bundle — `#202b33`, the stock UI ground. The vendored base
+ *  theme only overrides it under a `.scene-list-toolbar.filtered-list-
+ *  toolbar.btn-toolbar` selector that no longer matches this stash
+ *  version's markup (confirmed via CSS.getMatchedStylesForNode: the
+ *  element carries just `filtered-list-toolbar btn-toolbar`), so it sat
+ *  as an off-color slab across the top of every list under every theme
+ *  — under the external dracula-theme plugin too, it just happened to
+ *  be close enough to Dracula's ground to pass. That three-class
+ *  selector is repeated here anyway so this rule still wins, later in
+ *  the cascade at equal specificity, if upstream markup ever brings
+ *  the class back.
+ *
+ *  Requested live (2026-09-02): box it with the same outline and fill
+ *  as `.jl-modes`, the mode-bar pill. Same tokens, not the same numbers
+ *  copied: --jl-pill-bg / --jl-line / 8px radius are exactly what
+ *  scene-dashboard.css gives the pill, so the two stay in step if either
+ *  token moves. The only addition is 10px of horizontal padding — the
+ *  pill hugs its own buttons with 3px, but this strip's controls are
+ *  laid out by stash with no inset of their own, and a border flush
+ *  against the first and last button read as clipped. Vertical padding
+ *  is stash's own .5rem, untouched. */
+.filtered-list-toolbar,
+.scene-list-toolbar.filtered-list-toolbar.btn-toolbar {
+  background-color: var(--jl-pill-bg);
+  border: 1px solid var(--jl-line);
+  border-radius: 8px;
+  padding-left: 10px;
+  padding-right: 10px;
+}

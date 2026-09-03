@@ -1,4 +1,4 @@
-/* Clean Cards — Dracula Pro scene/card styling.
+/* Clean Cards — Dracula scene/card styling.
    Extracted verbatim from customJavaScript.js v5.4; behaviour unchanged. */
 .scene-card.zoom-0 .card-section-title .TruncatedText { font-size: 16px !important; }
 .scene-card.zoom-1 .card-section-title .TruncatedText { font-size: 17px !important; }
@@ -40,7 +40,7 @@
 
 .stash-code-date {
   font-weight: 800 !important;
-  background: rgba(30, 30, 50, 0.95) !important;
+  background: var(--jl-surface) !important;
   /* 9px, not the original 4px — reported live as too close to the bar's
      own edge next to the sidebar's matching Code/Date bar (which had the
      opposite problem, too far). Split the difference against the
@@ -95,7 +95,7 @@
 }
 .stash-code-date,
 .stash-code-date .code,
-.stash-code-date .date { color: #ff80bf !important; line-height: 1.6 !important; }
+.stash-code-date .date { color: var(--jl-accent) !important; line-height: 1.6 !important; }
 .stash-code-date .code { letter-spacing: 0.5px !important; }
 /* .code already renders monospace here (native, no rule of its own
    needed) — .date never did, inheriting the card's own Lato instead.
@@ -132,7 +132,7 @@
 }
 .stash-code-copy:hover { opacity: 1 !important; }
 .stash-code-copy.copied {
-  color: #50fa7b !important;
+  color: var(--jl-ok) !important;
   opacity: 1 !important;
 }
 
@@ -150,7 +150,7 @@
 .stash-performers a,
 .stash-performers a:visited,
 .stash-performers a:hover,
-.stash-performers a:active { color: #73c1e6 !important; }
+.stash-performers a:active { color: var(--jl-link) !important; }
 
 /* =====================================================
  *  PERFORMER NAME HOVER POPUP
@@ -178,7 +178,7 @@
   height: 0 !important;
   border-left: 7px solid transparent !important;
   border-right: 7px solid transparent !important;
-  border-bottom: 7px solid rgba(30, 30, 50, 0.97) !important;
+  border-bottom: 7px solid var(--jl-surface-strong) !important;
   flex-shrink: 0 !important;
 }
 .stash-performer-popup img {
@@ -188,13 +188,13 @@
   object-position: top center !important;
   border-radius: 6px !important;
   display: block !important;
-  background: #14141f !important;
+  background: var(--jl-surface-deep) !important;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5) !important;
 }
 .stash-performer-popup .stash-performer-popup-name {
   margin-top: 4px !important;
-  background: rgba(30, 30, 50, 0.97) !important;
-  color: #ffffff !important;
+  background: var(--jl-surface-strong) !important;
+  color: var(--jl-popup-text) !important;
   font-weight: 700 !important;
   font-size: 13px !important;
   line-height: 1.3 !important;
@@ -209,7 +209,7 @@
 }
 .stash-performer-popup .stash-performer-popup-name .stash-performer-popup-disambig {
   font-weight: 500 !important;
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: color-mix(in srgb, var(--jl-popup-text) 60%, transparent) !important;
   margin-left: 4px !important;
 }
 
@@ -260,7 +260,7 @@
   align-items: center !important;
   justify-content: flex-start !important;
   gap: 8px !important;
-  border-top: 1px solid rgba(98,114,164,0.25) !important;
+  border-top: 1px solid var(--jl-line-soft) !important;
   padding: 0 8px 0 12px !important;
   margin: 0 !important;
   z-index: 2 !important;
@@ -301,7 +301,7 @@
   display: block !important;
   margin: 0 !important;
   border: 0 !important;
-  border-top: 1px solid rgba(98,114,164,0.25) !important;
+  border-top: 1px solid var(--jl-line-soft) !important;
   opacity: 1 !important;
 }
 
@@ -331,7 +331,7 @@
 }
 
 .performer-card .card-popovers > * + * {
-  border-left: 1px solid rgba(98,114,164,0.25) !important;
+  border-left: 1px solid var(--jl-line-soft) !important;
 }
 
 .performer-card .card-section {
@@ -389,7 +389,7 @@
 }
 
 .scene-header-container .scene-header .TruncatedText {
-  color: #e1cdfe !important;
+  color: var(--jl-heading) !important;
   font-family: Quicksand, "Liberation Sans", Arial, sans-serif !important;
   font-weight: 600 !important;
   font-size: 1.6rem !important;
@@ -411,10 +411,10 @@
 .scene-subheader .date,
 .scene-subheader .frame-rate,
 .scene-subheader .resolution {
-  color: #f8f8f2 !important;
+  color: var(--jl-fg) !important;
   font-weight: 700 !important;
 }
-.scene-subheader .divider { color: #f8f8f2 !important; opacity: 0.4 !important; }
+.scene-subheader .divider { color: var(--jl-fg) !important; opacity: 0.4 !important; }
 
 .scene-subheader .subheader-break { flex-basis: 100% !important; height: 0 !important; }
 .scene-header-container .studio-code {
@@ -424,9 +424,9 @@
   width: fit-content !important;
   margin: 18px auto 12px !important;
   padding: 2px 2px 2px 10px !important;
-  background: rgba(30, 30, 50, 0.95) !important;
+  background: var(--jl-surface) !important;
   border-radius: 3px !important;
-  color: #ff80bf !important;
+  color: var(--jl-accent) !important;
   font-weight: 800 !important;
   letter-spacing: 0.5px !important;
   font-size: 17px !important;
@@ -444,11 +444,11 @@
 }
 
 .scene-tabs .nav-tabs {
-  border-bottom: 1px solid rgba(98,114,164,0.3) !important;
+  border-bottom: 1px solid var(--jl-line-mid) !important;
   gap: 2px !important;
 }
 .scene-tabs .nav-tabs .nav-link {
-  color: #8b9bc7 !important;
+  color: var(--jl-muted) !important;
   font-size: 13px !important;
   font-weight: 600 !important;
   letter-spacing: 0.3px !important;
@@ -459,20 +459,20 @@
   transition: color 0.15s, border-color 0.15s !important;
 }
 .scene-tabs .nav-tabs .nav-link:hover {
-  color: #cdd6f4 !important;
-  border-bottom-color: rgba(98,114,164,0.5) !important;
+  color: var(--jl-text) !important;
+  border-bottom-color: var(--jl-line-strong) !important;
   background: transparent !important;
 }
 .scene-tabs .nav-tabs .nav-link.active {
-  color: #ff80bf !important;
-  border-bottom: 2px solid #ff80bf !important;
+  color: var(--jl-accent) !important;
+  border-bottom: 2px solid var(--jl-accent) !important;
   background: transparent !important;
 }
 
 .scene-details h6 {
   font-size: 13px !important;
   font-weight: 400 !important;
-  color: #6272a4 !important;
+  color: var(--jl-dim) !important;
   letter-spacing: 0.5px !important;
   margin-bottom: 2px !important;
 }
@@ -483,10 +483,10 @@
 }
 
 .scene-details h6 + p,
-.scene-details .pre { color: #73c1e6 !important; font-weight: 800 !important; }
+.scene-details .pre { color: var(--jl-link) !important; font-weight: 800 !important; }
 
 .scene-tabs h6:not(.scene-details h6) {
-  color: #cdd6f4 !important;
+  color: var(--jl-text) !important;
   font-size: 14px !important;
   font-weight: 800 !important;
   letter-spacing: 0.3px !important;
@@ -494,47 +494,47 @@
 }
 
 .scene-performers .performer-card .performer-card__age {
-  color: #8b9bc7 !important;
+  color: var(--jl-muted) !important;
   font-size: 12px !important;
 }
 
 .scene-toolbar .rating-stars .star-rating-number {
-  color: #ff80bf !important;
+  color: var(--jl-accent) !important;
   font-weight: 800 !important;
   font-size: 13px !important;
 }
 
 .scene-toolbar .count-button .count-icon svg,
-.scene-toolbar .count-button .count-icon span svg { color: #ff80bf !important; }
+.scene-toolbar .count-button .count-icon span svg { color: var(--jl-accent) !important; }
 
 .scene-file-info dt {
-  color: #8b9bc7 !important;
+  color: var(--jl-muted) !important;
   font-size: 12px !important;
   font-weight: 800 !important;
   letter-spacing: 0.4px !important;
 }
 .scene-file-info dd {
-  color: #cdd6f4 !important;
+  color: var(--jl-text) !important;
   font-size: 13px !important;
   font-family: monospace !important;
 }
 
 .play-history h5,
-.o-history h5 { color: #cdd6f4 !important; font-size: 14px !important; font-weight: 800 !important; }
+.o-history h5 { color: var(--jl-text) !important; font-size: 14px !important; font-weight: 800 !important; }
 .play-history .badge,
 .o-history .badge {
-  background: #ff80bf22 !important;
-  color: #ff80bf !important;
-  border: 1px solid #ff80bf55 !important;
+  background: color-mix(in srgb, var(--jl-accent) 13%, transparent) !important;
+  color: var(--jl-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--jl-accent) 33%, transparent) !important;
 }
 .scene-history li,
-.o-history li { color: #8b9bc7 !important; font-size: 13px !important; }
-.play-history .details-list dt { color: #8b9bc7 !important; font-size: 12px !important; font-weight: 800 !important; }
-.play-history .details-list dd { color: #ff80bf !important; font-weight: 600 !important; }
+.o-history li { color: var(--jl-muted) !important; font-size: 13px !important; }
+.play-history .details-list dt { color: var(--jl-muted) !important; font-size: 12px !important; font-weight: 800 !important; }
+.play-history .details-list dd { color: var(--jl-accent) !important; font-weight: 600 !important; }
 
-.queue-scene-title { color: #cdd6f4 !important; font-size: 13px !important; font-weight: 600 !important; }
-.queue-scene-studio { color: #8b9bc7 !important; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 0.4px !important; }
-.queue-scene-performers { color: #73c1e6 !important; font-size: 12px !important; font-weight: 700 !important; }
-.queue-scene-date { color: #ff80bf !important; font-size: 11px !important; font-weight: 600 !important; }
-#queue-content li.current { border-left: 3px solid #ff80bf !important; padding-left: 6px !important; }
+.queue-scene-title { color: var(--jl-text) !important; font-size: 13px !important; font-weight: 600 !important; }
+.queue-scene-studio { color: var(--jl-muted) !important; font-size: 11px !important; font-weight: 600 !important; letter-spacing: 0.4px !important; }
+.queue-scene-performers { color: var(--jl-link) !important; font-size: 12px !important; font-weight: 700 !important; }
+.queue-scene-date { color: var(--jl-accent) !important; font-size: 11px !important; font-weight: 600 !important; }
+#queue-content li.current { border-left: 3px solid var(--jl-accent) !important; padding-left: 6px !important; }
 #queue-content li { border-left: 3px solid transparent !important; padding-left: 6px !important; }

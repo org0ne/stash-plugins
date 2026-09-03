@@ -99,14 +99,14 @@
   margin-left: 6px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(98, 114, 164, 0.25);
+  background: var(--jl-line-soft);
   color: var(--jl-muted);
   font-size: 10px;
   font-weight: 700;
 }
 .jl-mode[aria-selected="true"] .jl-mode-count {
-  background: rgba(255, 128, 191, 0.25);
-  color: var(--jl-pink);
+  background: color-mix(in srgb, var(--jl-accent) 25%, transparent);
+  color: var(--jl-accent);
 }
 
 /* ------------------------------------------------------------
@@ -328,7 +328,7 @@
 .studio-name,
 .group-name,
 .tag-name {
-  color: var(--jl-lilac) !important;
+  color: var(--jl-heading) !important;
   font-family: Quicksand, "Liberation Sans", Arial, sans-serif !important;
   font-weight: 600 !important;
 }

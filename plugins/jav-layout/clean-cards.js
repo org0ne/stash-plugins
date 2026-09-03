@@ -1,5 +1,5 @@
 // ==StashScript==
-// name Clean Cards – Dracula Pro + Popover Reorder
+// name Clean Cards – Dracula + Popover Reorder
 // version 5.5
 // description Pink code, cyan performers, dynamic title scaling, 3-line clamp, batched GraphQL, popover reorder, watched badge, performer hover popup
 // match *://*/scenes*

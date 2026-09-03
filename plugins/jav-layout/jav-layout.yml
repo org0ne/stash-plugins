@@ -1,15 +1,23 @@
 name: JAV Layout
 description: >
-  Dracula Pro card styling plus the Option C scene dashboard — a single
+  Dracula card styling plus the Option C scene dashboard — a single
   reading-order sidebar (identity, description, tags, then a five-mode
   switcher with Performers/File/History swapping in below it), replacing
   the nine-tab bar.
-version: 2.0.1
+version: 2.1.0
 
 ui:
   # Loaded in order. fonts.css just registers @font-face rules (self-
   # hosted Quicksand, embedded as base64 — see that file for why) and has
   # no page effect of its own, so it loads first, ahead of every consumer.
+  # base-theme.css is the whole-app palette (vendored dracula-for-stash,
+  # every color as a CSS variable) — it must precede every file that
+  # overrides it, exactly where the external dracula-theme plugin used to
+  # sit in the cascade. themes.css is next: it defines every --jl-* color
+  # token (Dracula defaults) and, per selectable theme, overrides both
+  # the --jl-* tokens and base-theme.css's own variables. theme.js loads first among the scripts for the same
+  # reason — it stamps data-jl-theme on <html> from the `theme` setting
+  # (cached in localStorage so later loads apply it before first paint).
   # clean-cards.* is the existing v5.5 customisation (title cleanup split
   # out to the standalone title-scrubber plugin — see CLAUDE.md);
   # buttons.css is an independent, page-agnostic button restyle;
@@ -19,11 +27,26 @@ ui:
   # scene-dashboard.css since it reuses that file's --jl-* tokens.
   css:
     - fonts.css
+    - base-theme.css
+    - themes.css
     - clean-cards.css
     - buttons.css
     - scene-dashboard.css
     - entity-dashboard.css
   javascript:
+    - theme.js
     - clean-cards.js
     - scene-dashboard.js
     - entity-dashboard.js
+
+settings:
+  theme:
+    displayName: Color theme
+    description: >
+      Palette for the whole app (JAV Layout ships the base stylesheet
+      that themes stash's own pages, so the separate dracula-theme plugin
+      is no longer needed). This plugin replaces this field with a
+      dropdown in Settings › Plugins; if you ever see the raw field
+      instead, valid values are dracula (default), catppuccin-mocha,
+      rose-pine-moon and kanagawa-wave.
+    type: STRING
