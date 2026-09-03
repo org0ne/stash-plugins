@@ -996,6 +996,25 @@ a.jl-scene-director-value:hover {
   opacity: 0.7;
   transition: transform 0.15s ease;
 }
+/* Count badge mirrored from a hidden nav tab (syncHeadCount() in
+   scene-dashboard.js — today only File Info carries one, "2" when a
+   scene has two files). Same recipe as the entity pages' .jl-mode-count
+   pill (entity-dashboard.css), so it reads as the mode bar's own badge
+   moved to where the tab's content went. margin-right:auto keeps it
+   hugging the label: the head is justify-content:space-between, and
+   a third child would otherwise float to the middle. */
+.jl-head .jl-head-count {
+  display: inline-block;
+  margin-right: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--jl-line-soft);
+  color: var(--jl-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
 
 .jl-collapsed > *:not(.jl-head) { display: none !important; }
 .jl-collapsed > .jl-head { margin-bottom: 0; border-bottom-color: transparent; }

@@ -260,7 +260,16 @@ here moves a React node), so it can be checked page by page:
   the form becomes a flex column and the toolbar takes `order: 99`
   first (`form:has(> .edit-buttons-container)`); verified pinned in
   `.scene-tabs`, `.gallery-tabs` and `.image-tabs`, with "Scrape with…"
-  opening upward.
+  opening upward. The scene page's marker creation form (Markers mode →
+  Create Marker; `form > .form-container + .buttons-container > .d-flex
+  > Save, Cancel`, same shape as the Edit form) gets the identical bar
+  treatment via `.tab-pane form > .buttons-container` (2026-09-03,
+  requested to match the performer edit bar): last in a flex-column
+  form, sticky to the sidebar's bottom, deep surface, centered, tier-2
+  sized, Cancel muted. Verified on scene 10273 by injecting the
+  working-tree plugin — note the form is short enough to fit, so the
+  bar sits at the form's end there and only pins once the form is
+  taller than the sidebar, which is sticky working as intended.
 
   **Reported live twice as "the sticky bar is transparent" — it never
   was, and both real causes are worth remembering.** (1) On the scene
@@ -1664,6 +1673,22 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
 
 ## Settled decisions — do not silently redo
 
+- **The File card's head carries stash's file-count badge
+  (`.jl-head-count`, via `syncHeadCount()` in scene-dashboard.js,
+  2026-09-03).** Stash puts `<span class="badge badge-pill">N</span>`
+  on the File Info tab when a scene has more than one file; that tab is
+  hidden behind the mode bar and File lives under Browse rather than
+  being a mode, so the count is mirrored to where the tab's content
+  went — the File card's head, between the label and the chevron,
+  styled like the entity pages' `.jl-mode-count` pill. Read from the
+  nav's own DOM on every `tagPanes()` run (React can change it) with
+  every write equality-guarded; no badge means no span (removed, not
+  emptied). Deliberately NOT on the Browse mode button: a bare "2" next
+  to "Browse" says nothing about what it counts. Generic by
+  `data-rb-event-key`, so another tab growing a badge is a one-line
+  call. Verified on a two-file scene (34055) and a single-file one by
+  injecting the working-tree plugin into the page, since the plugin was
+  disabled in stash at the time.
 - **`.filtered-list-toolbar` is boxed with the mode bar's own fill and
   outline (`--jl-pill-bg`, `--jl-line`, 8px radius) — buttons.css
   section 3, 2026-09-02.** Reported live right after the base theme was

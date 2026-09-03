@@ -187,6 +187,34 @@
     applyCollapsed(host, cardId);
   }
 
+  /* Mirrors the count badge from a hidden nav tab (`.badge` inside the
+   * link with the given data-rb-event-key) into a card head as
+   * `.jl-head-count`, inserted between the label and the chevron. Read
+   * from the nav's own DOM every run — the count is React-owned and can
+   * change (files added/removed) — but every write is equality-guarded:
+   * this runs from inside the body-wide observer (see the guarded-
+   * writers note near the top of this file). No badge → no count span;
+   * a stale span is removed rather than emptied so CSS never has to
+   * special-case an empty pill. */
+  function syncHeadCount(root, host, eventKey) {
+    const head = host.querySelector(':scope > .jl-head');
+    if (!head) return;
+    const badge = root.querySelector(`.nav-tabs [data-rb-event-key="${eventKey}"] .badge`);
+    const value = badge ? badge.textContent.trim() : '';
+    let count = head.querySelector(':scope > .jl-head-count');
+    if (!value) {
+      if (count) count.remove();
+      return;
+    }
+    if (!count) {
+      count = document.createElement('span');
+      count.className = 'jl-head-count';
+      const chev = head.querySelector(':scope > .jl-chevron');
+      head.insertBefore(count, chev || null);
+    }
+    if (count.textContent !== value) count.textContent = value;
+  }
+
   /* File/History/Groups/Galleries are each one real element, so `ensureHead`
    * can toggle a class on that one host to hide its children. Metadata,
    * Details and Tags aren't: their "card" is several scattered siblings
@@ -895,7 +923,16 @@
       }
     }
 
-    if (seen.fileinfo)  ensureHead(seen.fileinfo,  'fileinfo',  CARD_TITLES.fileinfo);
+    if (seen.fileinfo) {
+      ensureHead(seen.fileinfo, 'fileinfo', CARD_TITLES.fileinfo);
+      // Stash puts a count badge on the File Info tab when a scene has
+      // more than one file (`<span class="badge badge-pill">2</span>`
+      // inside the nav link). That tab is hidden behind the mode bar,
+      // and File lives under Browse rather than being a mode of its own,
+      // so the count moves to where the tab's content went: the File
+      // card's head, styled like the mode bar's own count badges.
+      syncHeadCount(root, seen.fileinfo, 'scene-file-info-panel');
+    }
     if (seen.history)   ensureHead(seen.history,   'history',   CARD_TITLES.history);
     if (seen.groups)    ensureHead(seen.groups,    'groups',    CARD_TITLES.groups);
     if (seen.galleries) ensureHead(seen.galleries, 'galleries', CARD_TITLES.galleries);

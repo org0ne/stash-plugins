@@ -334,7 +334,8 @@
 .setting .btn:not(.btn-sm),
 .scene-markers-panel .btn-primary,
 .scene-markers-panel .btn-secondary,
-.scene-markers-panel .btn-danger {
+.scene-markers-panel .btn-danger,
+.tab-pane form > .buttons-container .btn {   /* the marker creation form's Save/Cancel — see §4b */
   padding: 5px 13px;
   font-size: 12px;
   font-weight: 600;
@@ -630,6 +631,37 @@
   position: sticky;
   bottom: 0;
 }
+/* The scene page's marker creation form (Markers mode → Create Marker)
+   has the same shape as the Edit tab's form — `form > .form-container +
+   .buttons-container > .d-flex > Save, Cancel` — but its row was left
+   native: 34px buttons at 14px/500, left-aligned, scrolling away with
+   the fields. Requested live (2026-09-03) to match the performer edit
+   bar, so it gets the identical treatment: last in a flex-column form,
+   pinned to the bottom of the sidebar, deep-surface fill, centered
+   buttons (tier 2 sizes them, below). Its native `.px-3` padding is
+   kept; only vertical padding is set here. Scoped to forms inside a
+   tab pane so a `.buttons-container` elsewhere in stash is untouched. */
+.tab-pane.active form:has(> .buttons-container) {
+  display: flex;
+  flex-direction: column;
+}
+.tab-pane form > .buttons-container {
+  order: 99;
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  background: var(--jl-surface-deep) !important;
+  border-top: 1px solid var(--jl-line);
+  box-shadow: 0 -8px 16px -12px rgba(0, 0, 0, 0.6);
+  padding-top: 8px;
+  padding-bottom: 8px;
+  margin-top: 12px;
+}
+.tab-pane form > .buttons-container > .d-flex {
+  justify-content: center;
+  gap: 8px;
+}
+.tab-pane form > .buttons-container .btn.ml-2 { margin-left: 0 !important; }   /* the gap above replaces Bootstrap's ml-2 */
 /* The bars' NEUTRAL buttons (Scrape with…, Set image…, and the scene
    bar's demoted Scrape — see scene-dashboard.css) take the same resting
    color as the viewing pill's neutrals and the mode bar's segments,
@@ -640,13 +672,16 @@
    from tier 1's own secondary rules), unlike the pill's borderless
    segments. Cancel/Save keep the accent and Clear Image keeps danger. */
 .details-edit.col-xl-9 .btn-secondary:not(.minimal),
-.edit-buttons-container .btn-secondary:not(.minimal) {
+.edit-buttons-container .btn-secondary:not(.minimal),
+.tab-pane form > .buttons-container .btn-secondary:not(.minimal) {
   color: var(--jl-muted);
 }
 .details-edit.col-xl-9 .btn-secondary:not(.minimal):hover,
 .edit-buttons-container .btn-secondary:not(.minimal):hover,
+.tab-pane form > .buttons-container .btn-secondary:not(.minimal):hover,
 .details-edit.col-xl-9 .btn-secondary:not(.minimal):not(:disabled):not(.disabled):active,
-.edit-buttons-container .btn-secondary:not(.minimal):not(:disabled):not(.disabled):active {
+.edit-buttons-container .btn-secondary:not(.minimal):not(:disabled):not(.disabled):active,
+.tab-pane form > .buttons-container .btn-secondary:not(.minimal):not(:disabled):not(.disabled):active {
   color: var(--jl-text);
 }
 /* On the tabbed pages the toolbar is the FIRST child of the edit form.
@@ -698,7 +733,13 @@
 /* Controls: 28px, the mode bar's type recipe. Scoped to THIS container
    only — the pagination row right below it is exactly what the blanket
    .btn padding in v1 broke, and it is untouched here. */
-.filtered-list-toolbar .btn,
+/* `:not(.clearable-text-field-clear)`: the search field's "×" is a .btn
+   positioned absolutely with top:0/bottom:0 and 6px margins so it
+   stretches to the input's height and centers itself; a fixed 28px
+   height overrode that stretch with a box starting 6px down and running
+   past the input's bottom — reported live (2026-09-03) as the × not
+   being vertically centered. */
+.filtered-list-toolbar .btn:not(.clearable-text-field-clear),
 .filtered-list-toolbar .form-control {
   height: 28px;
   padding-top: 0;
