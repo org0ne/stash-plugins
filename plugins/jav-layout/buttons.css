@@ -447,3 +447,229 @@
   padding-left: 10px;
   padding-right: 10px;
 }
+
+/* ------------------------------------------------------------
+ *  4. Action rows and control rows — one placement convention,
+ *     one look (2026-09-02)
+ *
+ *  Stash puts its page-level action buttons in four different places
+ *  (measured live, see CLAUDE.md "Action placement"): under the header
+ *  on entity pages, at the bottom of the form in their edit mode (and
+ *  ALSO at the top, on performer only), at the top of the Edit tab on
+ *  scene/gallery/image, and in the list toolbar once items are
+ *  selected. The convention this section enforces, with CSS only —
+ *  nothing here moves a React node (CLAUDE.md constraint 1):
+ *
+ *    VIEWING   actions sit in one pill directly under the identity
+ *              block, styled exactly like the mode bar (.jl-modes).
+ *    EDITING   actions are a bar pinned to the bottom of whatever
+ *              scrolls — the page on entity pages, the sidebar on the
+ *              tabbed pages — so Save is always in reach on a long form.
+ *
+ *  Plus the unification pass from the same review: the list toolbar's
+ *  controls take the mode bar's item treatment (ghost at rest, dim wash
+ *  on hover, accent wash when active), the toolbar hugs its content
+ *  and centers like the other two rows, the accent is the only "on"
+ *  hue (the zoom slider and icons no longer take the base theme's
+ *  purple), every control in the three rows is 28px tall inside a 36px
+ *  pill, and the rows share one 14px rhythm (the per-entity margins
+ *  that finish that rhythm live in entity-dashboard.css, next to the
+ *  mode bar's own).
+ *
+ *  Selectors distinguish the two `.details-edit` roles by the classes
+ *  stash gives them (confirmed live on all four entity pages): the
+ *  view-mode row never carries `.col-xl-9`; both edit-mode copies do,
+ *  the performer's top duplicate with `.mb-3` and every bottom one with
+ *  `.mt-3`.
+ * ------------------------------------------------------------ */
+
+/* ---- 4a. Viewing: the action pill ---- */
+.details-edit:not(.col-xl-9) {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto !important;       /* also zeroes stash's own .mb-2 — rhythm is set by the rows around it */
+  gap: 2px;
+  padding: 3px;
+  background: var(--jl-pill-bg);
+  border: 1px solid var(--jl-line);
+  border-radius: 8px;
+}
+/* 28px buttons inside 3px of padding and a 1px border = the mode bar's
+   36px exactly (its own .jl-mode buttons are 28px: 12px type at 1.5 +
+   5px padding each side). Tier 2 already gives these that type recipe;
+   the explicit height just keeps the pill from drifting to 38px when a
+   button's content is a hair taller than the type. */
+.details-edit:not(.col-xl-9) .btn:not(.minimal) {
+  height: 28px;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 26px;
+}
+/* Segments, not five bordered buttons: the pill is the boundary now, so
+   each button drops its own fill and border at rest and keeps only its
+   role's text color from tier 1 (accent / neutral / danger). Every state
+   restates both properties — a partial override leaks whatever tier 1
+   still sets for the untouched one (the CLAUDE.md lesson). */
+.details-edit:not(.col-xl-9) .btn:not(.minimal) {
+  background-color: transparent;
+  border-color: transparent;
+}
+.details-edit:not(.col-xl-9) .btn:not(.minimal):hover {
+  background-color: color-mix(in srgb, var(--jl-dim) 15%, transparent);   /* = .jl-mode:hover */
+  border-color: transparent;
+}
+.details-edit:not(.col-xl-9) .btn-primary:not(.minimal):hover,
+.details-edit:not(.col-xl-9) .btn-success:not(.minimal):hover {
+  background-color: var(--jl-accent-wash);
+  border-color: transparent;
+}
+.details-edit:not(.col-xl-9) .btn-danger:not(.minimal):hover {
+  background-color: color-mix(in srgb, var(--jl-danger) 16%, transparent);
+  color: var(--jl-danger);
+  border-color: transparent;
+}
+.details-edit:not(.col-xl-9) .btn:not(.minimal):not(:disabled):not(.disabled):active {
+  border-color: transparent;
+}
+
+/* ---- 4b. Editing: the pinned bottom bar ---- */
+/* Performer renders its edit toolbar twice, above and below the form;
+   the bottom one is the bar, so the top copy goes. */
+.details-edit.col-xl-9.mb-3 { display: none !important; }
+
+.details-edit.col-xl-9,
+.edit-buttons-container {
+  z-index: 30;
+  /* Reported live twice as "the sticky bar is transparent" (2026-09-02).
+     It never was — two separate things made it read that way, both
+     confirmed by screenshot with an image scrolled behind the bar:
+     1. On the scene page the vendored base theme paints this element
+        with `#scene-edit-details .edit-buttons-container {
+        background-color: var(--background) }` — an id selector, which
+        out-specifies any class rule here — so the bar took the PAGE
+        color. Hence !important. (Upstream also makes it sticky, to the
+        TOP of the pane, where stash keeps it natively; ordering it
+        last below overrides that.)
+     2. The plugin's own surface color (#1e1e32) is only a shade off
+        Dracula's page ground (#282a36), so even painted correctly the
+        bar hardly registered as a bar, and on entity pages it spanned
+        only the form column while the page scrolled on in plain view
+        beside it. Hence the DEEP surface (the popup's backing, clearly
+        darker on every theme's ground), a top hairline, an upward
+        shadow, and — on entity pages — a full-width fixed footer (see
+        below) instead of a column-wide sticky one. */
+  background: var(--jl-surface-deep) !important;
+  border-top: 1px solid var(--jl-line);
+  box-shadow: 0 -8px 16px -12px rgba(0, 0, 0, 0.6);
+}
+/* Entity pages: a fixed footer across the whole viewport. `position:
+   sticky` can't escape the form column horizontally, and a bar that only
+   covers the column reads as translucent next to the scrolling page.
+   The header's edit-mode wrapper takes matching bottom padding so the
+   last field can always scroll clear of the bar (the bar wraps to two
+   rows below the md breakpoint, so the padding grows there too). */
+.details-edit.col-xl-9 {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  max-width: none;
+  flex: none;
+  margin: 0 !important;
+  padding: 8px 12px;
+}
+.detail-header.edit { padding-bottom: 74px; }
+@media (max-width: 767.98px) {
+  .detail-header.edit { padding-bottom: 116px; }
+}
+/* Tabbed pages: the bar belongs inside the sidebar that scrolls, and
+   already spans it edge to edge, so sticky is right here. */
+.edit-buttons-container {
+  position: sticky;
+  bottom: 0;
+}
+/* On the tabbed pages the toolbar is the FIRST child of the edit form.
+   Sticky can only hold an element back, never pull it forward, so it
+   has to become the last item in flow first: the form turns into a
+   flex column and the toolbar takes order 99. Verified live on scene,
+   gallery and image — each pins to the bottom of its own sidebar
+   scroller (.scene-tabs / .gallery-tabs / .image-tabs). */
+.tab-pane.active form:has(> .edit-buttons-container) {
+  display: flex;
+  flex-direction: column;
+}
+.edit-buttons-container {
+  order: 99;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* ---- 4c. The list toolbar: same pill, same items, same height ---- */
+.filtered-list-toolbar,
+.scene-list-toolbar.filtered-list-toolbar.btn-toolbar {
+  width: fit-content;
+  max-width: 100%;
+  /* !important: stash sets the 40px side margins from a rule with more
+     specificity than this bare class (confirmed live — margin-top from
+     this rule applied, the side margins didn't), and without auto
+     margins a fit-content pill sits flush left instead of centered. */
+  margin-left: auto !important;
+  margin-right: auto !important;
+  margin-top: 0;
+  padding: 3px 10px;                        /* 3px + 28px controls + 1px borders = the pill's 36px */
+  gap: 6px;
+}
+/* Controls: 30px, the mode bar's type recipe. Scoped to THIS container
+   only — the pagination row right below it is exactly what the blanket
+   .btn padding in v1 broke, and it is untouched here. */
+.filtered-list-toolbar .btn,
+.filtered-list-toolbar .form-control {
+  height: 28px;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 26px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.filtered-list-toolbar input.form-control {
+  font-weight: 500;
+  letter-spacing: 0;
+  background-color: var(--jl-well);
+  border: 1px solid var(--jl-line);
+  color: var(--jl-fg);
+}
+/* Ghost items. The base theme fills every .btn-toolbar control with
+   --selection (a solid slate) — same specificity as this, later wins. */
+.filtered-list-toolbar .btn:not(.btn-danger),
+.filtered-list-toolbar select.form-control {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--jl-muted);
+}
+.filtered-list-toolbar .btn:not(.btn-danger):hover,
+.filtered-list-toolbar select.form-control:hover {
+  background-color: color-mix(in srgb, var(--jl-dim) 15%, transparent);
+  border-color: transparent;
+  color: var(--jl-fg);
+}
+.filtered-list-toolbar .btn:not(.btn-danger).active,
+.filtered-list-toolbar .btn:not(.btn-danger):not(:disabled):not(.disabled):active,
+.filtered-list-toolbar .btn:not(.btn-danger)[aria-expanded="true"] {
+  background-color: var(--jl-accent-wash);
+  border-color: transparent;
+  color: var(--jl-accent);
+}
+.filtered-list-toolbar .btn svg { color: inherit; }
+/* Group segmentation comes from one hairline between siblings instead
+   of each button's own filled box. */
+.filtered-list-toolbar .btn-group > .btn + .btn,
+.filtered-list-toolbar .btn-group > * + .btn,
+.filtered-list-toolbar .btn-group > .btn + *,
+.filtered-list-toolbar .sort-by-select > * + * {
+  box-shadow: -1px 0 0 var(--jl-line);
+}
+/* The accent is the only "on" color in the row; the zoom slider was the
+   one control still taking the base theme's purple. */
+.filtered-list-toolbar input[type="range"] { accent-color: var(--jl-accent); }

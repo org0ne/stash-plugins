@@ -160,6 +160,23 @@ across three runs — so the refactor changed no visible output.
     `document.styleSheets` and the `html[data-jl-theme="catppuccin-
     mocha"]` rule with a `--background` declaration was found missing.
     Check `cssRules` for the block you just wrote, not just the page.
+- **`--selection` is the CARD surface, not a highlight — map it as one.**
+  The base theme paints every card type (scene, performer, gallery,
+  image, marker, tag) with `.card { background-color: var(--selection) }`,
+  so whatever a palette calls "selection"/"highlight" is the wrong
+  thing to reach for; what matters is the lift over the page ground.
+  Dracula's is about +30 per channel (#282a36 → #44475a). The first
+  mappings took each palette's step by NAME and got Mocha +40
+  (surface1) and Kanagawa +53/+53/+69 (sumiInk6, its lightest ink — a
+  washed lilac slab, reported live as the worst case). Fixed 2026-09-02
+  to surface0 (#313244) and sumiInk5 (#363646), with `--alt_bg`/
+  `--intermediate_bg`/`--tag_background` re-ordered underneath so the
+  ramp superdark < background < alt_bg < intermediate_bg < selection
+  still holds; Rosé Pine's highlight-med was already at +33 and stayed.
+  Prototyped by CSS injection and screenshotted before/after on the
+  scenes grid before touching themes.css. `--selection` has 73 uses
+  (hover rows, some input fills too), so a change moves those by the
+  same step — same role, checked on the sort dropdown and Settings.
 - **Adding a theme**: two `html[data-jl-theme="<id>"]` blocks in
   `themes.css` (the `--jl-*` tokens and the base-app palette, each with
   an attribution comment), an entry in `THEMES` in `theme.js`, a row in
@@ -174,6 +191,103 @@ across three runs — so the refactor changed no visible output.
   product's license restricts, and changing it would have altered the
   plugin's look. Swap it in `themes.css` if zero ambiguity is ever
   wanted.
+
+### Action placement — one convention for every page (buttons.css §4, 2026-09-02)
+
+Stash puts its page-level action buttons in four different places,
+measured live on this instance before anything was written:
+
+| Page | Viewing | Editing |
+| --- | --- | --- |
+| performer | `.details-edit` in the header, 460px down (the photo pushes it) | `.details-edit.col-xl-9` rendered **twice**: `.mb-3` above the form, `.mt-3` below it |
+| studio / group / tag | `.details-edit` in the header near the top | `.details-edit.col-xl-9.mt-3` below the form only |
+| scene / gallery / image | nothing visible; actions live in the Edit tab | `.edit-buttons-container`, the FIRST child of the edit `<form>`, inside a scrolling sidebar |
+| list pages | nothing | the toolbar becomes a selection bar (`.has-selection`) |
+
+The convention, enforced with CSS only (constraint 1 holds — nothing
+here moves a React node), so it can be checked page by page:
+
+- **Viewing: actions sit in one pill directly under the identity
+  block, styled exactly like the mode bar** (`--jl-pill-bg`, `--jl-line`,
+  8px, 3px padding, 28px segments = 36px), page-centered on the same
+  axis as the mode bar and the list toolbar, 14px above the mode bar.
+  Buttons are segments: transparent at rest, role carried by text color
+  from tier 1, dim wash on hover (accent wash for primary, danger wash
+  for danger), every state restating both background and border.
+- **Editing: actions are a bar pinned to the bottom of whatever
+  scrolls.** On entity pages that is a `position: fixed` footer across
+  the whole viewport, with matching `padding-bottom` on
+  `.detail-header.edit` (74px, 116px below md where the bar wraps) so
+  the last field always scrolls clear — verified on desktop and at
+  390px. On the tabbed pages it is `position: sticky; bottom: 0` inside
+  the sidebar that scrolls, which the bar already spans edge to edge.
+  Both use the SOLID deep surface (`--jl-surface-deep`, `!important`),
+  a hairline top border and an upward shadow. Performer's top duplicate
+  is hidden. On the tabbed pages the toolbar is the form's first child
+  and sticky can only hold an element back, never pull it forward, so
+  the form becomes a flex column and the toolbar takes `order: 99`
+  first (`form:has(> .edit-buttons-container)`); verified pinned in
+  `.scene-tabs`, `.gallery-tabs` and `.image-tabs`, with "Scrape with…"
+  opening upward.
+
+  **Reported live twice as "the sticky bar is transparent" — it never
+  was, and both real causes are worth remembering.** (1) On the scene
+  page the vendored base theme paints the bar with `#scene-edit-details
+  .edit-buttons-container { background-color: var(--background) }` —
+  an id selector, which out-specifies any class rule — so the bar took
+  the page color: opaque, but indistinguishable from the page, with the
+  form appearing to scroll straight under the buttons. (2) Even painted
+  correctly, the first fills chosen (`--jl-surface` at 95 %, then 97 %)
+  are only a shade off Dracula's page ground, and a sticky bar inside
+  the form column left the rest of the page scrolling in plain view on
+  either side of it — which reads as a translucent strip. Diagnosed the
+  way the user suggested: scroll an image behind the bar and screenshot
+  (the performer photo at a 320px-tall viewport, the scene's cover
+  image in the form). Fixed by the id-beating `!important`, the deep
+  surface, and the full-width fixed footer. Check a bar against an
+  image, not against form fields — fields are the same color as the
+  page and hide exactly this.
+
+**How the viewing pill gets one position when the header doesn't
+give it one** (entity-dashboard.css, the block above the mode-bar
+margins): the row is the last child of the header's TEXT column, but
+the header's height is set by the image or by wrapper spacing, so the
+row ended 14/34/59/79px above the header's bottom on performer/studio/
+group/tag. A flex-column + `margin-top: auto` version was tried and
+does nothing — the text column hugs its content. What works: make the
+Bootstrap `.col` wrappers static (they're `position: relative` by
+default; performer has one extra), which makes `.detail-container`
+the containing block on all four pages; reserve a 64px band with
+`padding-bottom` on `.detail-header` (14 + 36 + 14); and absolutely
+position the row at `bottom: -50px` (14 − 64, measured against the
+container's bottom, which is the header's *content* edge) with `left:
+50%; transform: translateX(-50%)`. Below 768px the row goes back into
+flow and centers in the now full-width column, because it wraps to two
+lines there and a fixed band can't fit it. Verified live: row bottom
+to header bottom = 14px, row/mode-bar/toolbar centers equal, name
+offsets unchanged, on all four pages.
+
+**Rhythm**: with the row anchored, the mode bar's per-entity centering
+margins (15/22/14/14px, each measured to split a header of arbitrary
+height) collapsed to one `margin: 0 0 14px` for all four entities, and
+the entity tab panes' `.item-list-container` lost stash's 15px
+`padding-top`, so header→pill, pill→mode bar and mode bar→toolbar are
+all 14px on every entity page. The list pages proper keep that padding
+— there it separates the toolbar from the nav bar.
+
+**The list toolbar** (buttons.css §4c) took the same treatment: it
+hugs its content and centers (`margin-inline: auto !important` — stash
+sets its 40px side margins from a higher-specificity rule, confirmed by
+the top margin overriding while the sides didn't), its controls are
+28px ghosts with the mode bar's type recipe (dim wash on hover, accent
+wash + accent text when `.active`, `:active` or `[aria-expanded]`), the
+search field is a `--jl-well` box, group segmentation is one hairline
+`box-shadow` between siblings, and the zoom slider's `accent-color` is
+the accent — the base theme's purple no longer appears in the row.
+Sizing is scoped to `.filtered-list-toolbar` only: the pagination row
+directly beneath it is exactly what the v1 blanket `.btn` padding
+broke, and it is untouched. The `.has-selection` state (Select All /
+Play / bulk actions) inherits the same look.
 
 ### fonts.css — self-hosted Quicksand
 

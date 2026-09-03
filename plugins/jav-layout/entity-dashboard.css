@@ -52,14 +52,84 @@
   z-index: 21;
 }
 
-/* Centering margin is deliberately NOT shared - measured per page, since
-   each entity's header content above the pill row differs in height
-   even when the button row below it is the same shape (Edit/Delete, or
-   Edit/Auto-tag/Merge/Delete). Port the mechanism, remeasure the
-   constant every time - see CLAUDE.md for each page's own number and
-   why they differ. */
-.performer-tabs > .jl-modes-row { margin: 15px 0 14px; }
-.studio-tabs > .jl-modes-row { margin: 22px 0 14px; }
+/* One rhythm for the three rows (2026-09-02, superseding the per-entity
+   centering margins that used to live here — 15/22/14/14px, each
+   measured so the pill sat midway between a header of whatever height
+   and the toolbar). The header→pill gap is now the header's own 14px
+   padding-bottom and nothing else, and the pill→toolbar gap is this
+   14px bottom margin and nothing else, on every entity page — which
+   only works because the two rules below this one remove the two
+   things that used to vary: where the action row ends inside the
+   header, and the list container's own top padding. */
+.performer-tabs > .jl-modes-row,
+.studio-tabs > .jl-modes-row,
+.group-tabs > .jl-modes-row,
+.tag-tabs > .jl-modes-row { margin: 0 0 14px; }
+
+/* The header's height is set by whichever is taller — the image
+   (`.detail-header-image`, floated beside the text) or the text column —
+   plus wrapper spacing that differs per page, while the action row
+   (.details-edit, see buttons.css 4a) is simply the last child of the
+   TEXT column. Measured live: the row ended 14px above the header's
+   bottom on performer, 34px on studio, 59px on group, 79px on tag, so
+   the gap to the mode bar looked random per page, and the row was
+   centered in its column, off the page axis the mode bar and toolbar
+   share. A flex-column-and-margin-top:auto version was tried first and
+   does nothing here — the text column's row hugs its content, it never
+   stretches to the image's height.
+
+   What works, with no node moving: take the row out of the column's
+   flow and anchor it to the header's own bottom band, page-centered.
+   The Bootstrap `.col` wrappers between the row and the header are
+   position:relative by default (performer nests one more `.col` under
+   `.performer-head`), so they are made static; the containing block on
+   all four pages is then `.detail-container` (natively
+   position:relative, left alone — the floated image beside it doesn't
+   depend on it, and it spans the page width, so `left: 50%` on it is
+   the page axis). The band is reserved with extra padding-bottom on
+   `.detail-header` — 14 + 36 (pill) + 14 — so the row can never sit on
+   top of the text above it. `.detail-container`'s bottom edge is the
+   header's CONTENT edge, 64px above the header's bottom once that band
+   exists, so the row's `bottom` is expressed against that edge:
+   -50px = 14px (the gap to the mode bar) − 64px (the band). Confirmed
+   live on all four pages: row bottom to header bottom = 14px, row
+   center = mode-bar center = toolbar center. Scoped to a header that
+   actually holds a view-mode row: edit mode's `.detail-header.edit`
+   and its bottom bar are untouched. Below the md breakpoint stash
+   stacks the header and the row wraps to two lines, which a fixed band
+   can't fit — there the row goes back into flow, centered in the (now
+   full-width) column, which is the page axis anyway. */
+.performer-head,
+.studio-head,
+.group-head,
+.tag-head,
+.performer-head > .col {
+  position: static;
+}
+@media (min-width: 768px) {
+  .detail-header:not(.edit):has(.details-edit:not(.col-xl-9)) {
+    padding-bottom: 64px;
+  }
+  .detail-header:not(.edit) .details-edit:not(.col-xl-9) {
+    position: absolute;
+    bottom: -50px;                 /* see the containing-block note above */
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0 !important;
+    white-space: nowrap;
+  }
+}
+/* stash's own list container adds 15px above the toolbar on every page;
+   on these tab panes the mode bar's 14px margin is the intended gap,
+   so the extra padding goes. Scoped to the entity tab panes — the list
+   pages proper keep their padding, where it separates the toolbar from
+   the nav bar. */
+.performer-tabs .item-list-container,
+.studio-tabs .item-list-container,
+.group-tabs .item-list-container,
+.tag-tabs .item-list-container {
+  padding-top: 0;
+}
 /* Group and tag each briefly shipped with a NEGATIVE top margin
    (-25px/-59px) here, sized to numerically match the 36px gap below by
    measuring "gap above" as the distance from the *Edit/Delete button
@@ -85,9 +155,9 @@
    of its own. That makes the rule simple and safe: 0 is flush, small
    positive values add breathing room below the section boundary,
    negative values are categorically wrong here — they can only ever
-   push back into the previous section's own box. */
-.group-tabs > .jl-modes-row { margin: 14px 0 14px; }
-.tag-tabs > .jl-modes-row { margin: 14px 0 14px; }
+   push back into the previous section's own box. (The 14px top margin
+   this note originally justified is now 0 for every entity — see the
+   shared rule above; the reference-point lesson still stands.) */
 
 /* Count badge - none of the scene page's own modes (Browse/Queue/
    Markers/Filters/Edit) are counted lists, so this only exists here.

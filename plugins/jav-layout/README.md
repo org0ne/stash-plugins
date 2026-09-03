@@ -143,6 +143,24 @@ rhythm, and — on a performer's Stash ID row specifically — a long UUID
 value truncates with an ellipsis instead of forcing its own row's label
 to wrap.
 
+## Action rows and control rows
+
+Stash places its page-level actions (Edit / Auto tag / Merge / Delete,
+Save / Cancel) somewhere different on every page type. This plugin
+gives them one rule:
+
+- **Viewing**: the actions sit in a pill directly under the identity
+  block, page-centered, styled like the mode switcher, 14px above it.
+- **Editing**: the actions become a bar pinned to the bottom of whatever
+  scrolls (the page on performer/studio/group/tag, the sidebar on
+  scene/gallery/image), so Save is always in reach on a long form.
+
+The filtered-list toolbar above every list gets the same pill treatment
+as the mode switcher: same fill and outline, same 36px height, ghost
+controls with the accent as the only "on" color, and one 14px rhythm
+between the action pill, the mode switcher and the toolbar on the
+entity pages.
+
 ## Layout (scene page)
 
 ```

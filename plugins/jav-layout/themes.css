@@ -194,7 +194,7 @@ html[data-jl-theme="kanagawa-wave"] {
 html[data-jl-theme="catppuccin-mocha"] {
   --background:       #1e1e2e;   /* base */
   --foreground:       #cdd6f4;   /* text */
-  --selection:        #45475a;   /* surface1 */
+  --selection:        #313244;   /* surface0 — paints every card (.card { background: var(--selection) }); surface1 put cards +40/channel over the page vs Dracula's +30, one step too bright. surface0 is what Catppuccin's own ports use for panels */
   --comment:          #6c7086;   /* overlay0 */
   --red:              #f38ba8;
   --orange:           #fab387;   /* peach */
@@ -204,12 +204,12 @@ html[data-jl-theme="catppuccin-mocha"] {
   --cyan:             #89dceb;   /* sky */
   --pink:             #f5c2e7;
   --superdark:        #11111b;   /* crust */
-  --alt_bg:           #313244;   /* surface0 */
+  --alt_bg:           #292a3d;   /* between mantle and surface0 — headers, footers, secondary fills stay one step below the card */
   --intermediate_bg:  #3b3c50;   /* between surface0 and surface1 */
   --misty_white:      #bac2de;   /* subtext1 */
   --overcast_white:   #a6adc8;   /* subtext0 */
   --gloomy_white:     #9399b2;   /* overlay2 */
-  --tag_background:   #585b70;   /* surface2 */
+  --tag_background:   #45475a;   /* surface1 — chips one step above the card they sit on */
   --disabled:         #7f849c;   /* overlay1 */
   --ansi_black:       #11111b;
   --vsc_text_field:   #11111b;
@@ -246,7 +246,7 @@ html[data-jl-theme="rose-pine-moon"] {
 html[data-jl-theme="kanagawa-wave"] {
   --background:       #1f1f28;   /* sumiInk3 */
   --foreground:       #dcd7ba;   /* fujiWhite */
-  --selection:        #54546d;   /* sumiInk6 */
+  --selection:        #363646;   /* sumiInk5 — paints every card; sumiInk6 (#54546d), the lightest ink, put cards +53/+53/+69 over the page and read as a washed lilac slab (the worst card case of the three themes, 2026-09-02). sumiInk5 lands at +23/+23/+30, the closest step to Dracula's +30 */
   --comment:          #727169;   /* fujiGray */
   --red:              #e46876;   /* waveRed */
   --orange:           #ffa066;   /* surimiOrange */
@@ -257,7 +257,7 @@ html[data-jl-theme="kanagawa-wave"] {
   --pink:             #d27e99;   /* sakuraPink */
   --superdark:        #16161d;   /* sumiInk0 */
   --alt_bg:           #2a2a37;   /* sumiInk4 */
-  --intermediate_bg:  #363646;   /* sumiInk5 */
+  --intermediate_bg:  #30303e;   /* between sumiInk4 and sumiInk5, now that sumiInk5 is the card */
   --misty_white:      #c8c093;   /* oldWhite */
   --overcast_white:   #a8a48f;   /* fujiWhite toward fujiGray */
   --gloomy_white:     #8f8b7c;
