@@ -61,7 +61,7 @@ with the color-picker grid described above.
 If dracula-layout (or any plugin exposing the same contract) is also
 installed, the collection pill additionally appears on the scene detail
 page, in a badge slot
-(`.dl-scene-badge-slot`) reserved for exactly this purpose next to that
+(`.jl-scene-badge-slot`) reserved for exactly this purpose next to that
 plugin's own resolution/fps/director readout. This plugin only ever
 looks for that element and no-ops if it isn't there — nothing here
 depends on dracula-layout being installed, and nothing in dracula-layout

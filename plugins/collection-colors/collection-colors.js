@@ -708,12 +708,19 @@
 
   /* ============================
    *  HEADER PILL
-   *  Reaches into dracula-layout's persistent identity header, if
-   *  present — specifically `.dl-scene-badge-slot`, a stable, empty
-   *  element dracula-layout documents and reserves exactly for this
-   *  (see buildSceneBadgeRow() in its scene-dashboard.js) — and drops
-   *  the pill into it. No-op when the slot doesn't exist (dracula-layout
-   *  isn't installed, or is an old version that predates it).
+   *  Reaches into JAV Layout's persistent identity header, if present —
+   *  specifically `.jl-scene-badge-slot`, a stable, empty element that
+   *  plugin documents and reserves exactly for this (see
+   *  buildSceneBadgeRow() in its scene-dashboard.js) — and drops the
+   *  pill into it. No-op when the slot doesn't exist (JAV Layout isn't
+   *  installed, or is an old version that predates it).
+   *
+   *  2026-09-03: the slot's class was `.dl-scene-badge-slot` until JAV
+   *  Layout renamed every `dl-` prefix to `jl-` (2026-09-02, when it was
+   *  itself renamed from "dracula-layout"); this selector wasn't updated
+   *  with it, so the pill silently vanished from the sidebar for a day.
+   *  The two plugins are independent by design, which is exactly why a
+   *  rename on one side has to be mirrored by hand on the other.
    *
    *  This used to build the whole row itself (pill, an fps/resolution
    *  readout, a Director line) directly inside `.scene-details`, with
@@ -731,7 +738,7 @@
     const sceneId = match ? match[1] : null;
     if (!sceneId) return;
 
-    const slot = document.querySelector('.dl-scene-badge-slot');
+    const slot = document.querySelector('.jl-scene-badge-slot');
     if (!slot) return;
 
     if (slot.dataset.collectionColorsScene === sceneId) return;
@@ -740,7 +747,7 @@
 
     loadCollections().then(collections => {
       requestScenePath(sceneId, filePath => {
-        const liveSlot = document.querySelector('.dl-scene-badge-slot');
+        const liveSlot = document.querySelector('.jl-scene-badge-slot');
         if (!liveSlot || liveSlot.dataset.collectionColorsScene !== sceneId) return;
         if (liveSlot.firstChild) return;
         const collection = deriveCollection(collections, filePath || '');

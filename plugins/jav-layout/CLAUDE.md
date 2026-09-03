@@ -25,7 +25,15 @@ and CSS custom property (`.dl-card` → `.jl-card`, `data-dl-mode` →
 once). Dated entries below from before that day still say
 "dracula-layout" in direct quotes and historical descriptions — that's
 this same plugin under its old name, not a different one; left as
-accurate history rather than rewritten.
+accurate history rather than rewritten. **The rename had one external
+casualty, found 2026-09-03**: collection-colors drops its pill into this
+plugin's documented `.jl-scene-badge-slot`, and its selector still said
+`.dl-scene-badge-slot`, so the sidebar collection pill silently vanished
+for a day. Fixed on the collection-colors side (v1.0.1). If a `jl-`
+name that another plugin is documented to consume ever changes again,
+grep the sibling plugins in this repo for the old name before calling
+it done — they're independent by design, which is exactly why nothing
+breaks loudly.
 
 ## Files
 
@@ -308,10 +316,26 @@ wash + accent text when `.active`, `:active` or `[aria-expanded]`), the
 search field is a `--jl-well` box, group segmentation is one hairline
 `box-shadow` between siblings, and the zoom slider's `accent-color` is
 the accent — the base theme's purple no longer appears in the row.
-Sizing is scoped to `.filtered-list-toolbar` only: the pagination row
-directly beneath it is exactly what the v1 blanket `.btn` padding
-broke, and it is untouched. The `.has-selection` state (Select All /
-Play / bulk actions) inherits the same look.
+Sizing is scoped to `.filtered-list-toolbar` only — the v1 blanket
+`.btn` padding is what broke the pager, and nothing here is blanket.
+The `.has-selection` state (Select All / Play / bulk actions) inherits
+the same look.
+
+**Three follow-ups reported live from the scenes list, 2026-09-03**
+(buttons.css §4c/§4d): (1) the sort control's label button sits inside
+`.input-group-prepend`, which Bootstrap's inner-corner squaring never
+reaches, so its hover wash kept four rounded corners and ran into the
+caret segment — its right corners are squared now; (2) the pagination
+group's outline came from each button's own borders, and stash's
+bundle strips the first button's left border while the "1 of N"
+dropdown wrapper has none, so the outline dropped out at those edges —
+the pager is now the same pill as the toolbar (§4d: one outline on
+`.pagination.btn-group`, 28px borderless segments with the mode bar's
+6px radius, muted/text/accent states; `!important` on the segment
+borders because the bundle sets border-left/right per button with its
+own longhands), scoped to `.pagination` so it is still not blanket
+sizing; (3) the toolbar's bottom edge touched the pager's top edge
+(measured 0px), so the toolbar carries `margin-bottom: 8px`.
 
 ### fonts.css — self-hosted Quicksand
 

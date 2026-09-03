@@ -131,6 +131,18 @@ body:has(.detail-header.edit) .jl-modes-row { display: none !important; }
     white-space: nowrap;
   }
 }
+/* Stash's performer page ships `.detail-body { margin: 0 15px; width:
+   100% }` — full row width PLUS 15px of side margin — so below ~400px
+   the body runs 15px past the viewport and the page scrolls sideways,
+   with this plugin's mode bar and toolbar faithfully filling the
+   overflowing box (measured 2026-09-03: performer scrollWidth 415 at a
+   400px viewport; studio and tag, which lack that rule, sit at 370px
+   wide and don't overflow). The 15px overflow CLAUDE.md's mobile
+   Stash-ID notes called "pre-existing and unrelated" is this one. Keep
+   stash's intent — full width minus its own margins — with a cap;
+   a no-op on studio/tag, whose computed width already is that value. */
+.detail-body { max-width: calc(100% - 30px); }
+
 /* stash's own list container adds 15px above the toolbar on every page;
    on these tab panes the mode bar's 14px margin is the intended gap,
    so the extra padding goes. Scoped to the entity tab panes — the list

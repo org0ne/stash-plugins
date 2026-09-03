@@ -677,10 +677,25 @@
   margin-left: auto !important;
   margin-right: auto !important;
   margin-top: 0;
+  margin-bottom: 8px;                      /* the pagination pill follows directly; measured 0px between the two outlines before this */
   padding: 3px 10px;                        /* 3px + 28px controls + 1px borders = the pill's 36px */
   gap: 6px;
 }
-/* Controls: 30px, the mode bar's type recipe. Scoped to THIS container
+/* The filter-sidebar toggle (the sliders icon) is `.sidebar-toggle-button`,
+   sticky inside an absolutely positioned container that occupies the
+   first 26px of the same content box this toolbar centers in. Stash
+   kept the toolbar clear of it with a fixed 40px left margin; once the
+   toolbar became a centered content-hugging pill, any width where the
+   pill is wider than the box minus that band slid it under the toggle
+   (measured 2026-09-03: overlapping at 520/470/420px desktop and 400px
+   mobile, clear at 1400 where the pill starts at x=278). Cap the pill
+   symmetrically so it stays page-centered and never enters the band on
+   either side. `:has()`-scoped to a box that actually holds the toggle:
+   entity-page toolbars have none and keep their full width. */
+.sidebar-pane-content:has(> .sidebar-toggle-button-container) .filtered-list-toolbar {
+  max-width: calc(100% - 80px);
+}
+/* Controls: 28px, the mode bar's type recipe. Scoped to THIS container
    only — the pagination row right below it is exactly what the blanket
    .btn padding in v1 broke, and it is untouched here. */
 .filtered-list-toolbar .btn,
@@ -723,13 +738,88 @@
 }
 .filtered-list-toolbar .btn svg { color: inherit; }
 /* Group segmentation comes from one hairline between siblings instead
-   of each button's own filled box. */
+   of each button's own filled box. Bootstrap pulls every non-first
+   group button 1px LEFT (`margin-left: -1px`) so adjacent borders
+   overlap — with the borders gone that just made each segment's hover
+   wash run 2px past the hairline into its neighbour (reported live,
+   2026-09-03, on the sort control). A 1px gap instead, and the 1px
+   box-shadow drawn to the left of each following segment lands exactly
+   in that gap: the wash stops where the divider starts. */
 .filtered-list-toolbar .btn-group > .btn + .btn,
 .filtered-list-toolbar .btn-group > * + .btn,
 .filtered-list-toolbar .btn-group > .btn + *,
 .filtered-list-toolbar .sort-by-select > * + * {
+  margin-left: 1px;
   box-shadow: -1px 0 0 var(--jl-line);
 }
+/* …and the sort control's `.input-group-prepend` wrapper carries its own
+   Bootstrap `margin-right: -1px` for the same border-overlap reason,
+   which cancelled the caret's 1px gap back to zero (measured: label
+   right edge == caret left edge). */
+.filtered-list-toolbar .input-group-prepend { margin-right: 0; }
 /* The accent is the only "on" color in the row; the zoom slider was the
    one control still taking the base theme's purple. */
 .filtered-list-toolbar input[type="range"] { accent-color: var(--jl-accent); }
+/* The sort control is a label button inside `.input-group-prepend` plus
+   a caret button beside it. Bootstrap squares the inner corners of
+   direct `.btn-group > .btn` children only, so the label kept all four
+   rounded corners and its hover wash ran into the caret segment —
+   reported live as the button "spilling over its boundaries". Square
+   the side that meets the caret; the caret's own left corners are
+   already square from Bootstrap. */
+.filtered-list-toolbar .input-group-prepend > .btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* ---- 4d. Pagination: the same pill, the same segments ----
+   The « ‹ 1 of N › » group under every list is a `.pagination.btn-group`
+   whose outline came from each button's own borders — and stash's
+   bundle strips the first button's left border while the "1 of N"
+   dropdown wrapper has none at all, so the outline dropped out at those
+   edges (reported live). One outline on the group instead, exactly the
+   toolbar's, with borderless 28px segments inside; segments keep the
+   mode bar's 6px radius rather than Bootstrap's squared group corners.
+   `!important` on the segment borders is needed because the bundle
+   sets border-left/right per button (and `none` on the first child)
+   with its own longhand rules. This is scoped to `.pagination` — it is
+   NOT the blanket .btn sizing that v1 of this file broke the pager with. */
+.pagination.btn-group {
+  width: fit-content;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 3px;
+  gap: 2px;
+  background: var(--jl-pill-bg);
+  border: 1px solid var(--jl-line);
+  border-radius: 8px;
+}
+.pagination .btn:not(.minimal) {
+  height: 28px;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 26px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--jl-muted);
+  background-color: transparent;
+  border: 1px solid transparent !important;
+  border-radius: var(--jl-btn-radius) !important;
+}
+.pagination .btn:not(.minimal):hover {
+  color: var(--jl-text);
+  background-color: color-mix(in srgb, var(--jl-dim) 15%, transparent);
+}
+.pagination .btn:not(.minimal):not(:disabled):not(.disabled):active,
+.pagination .btn:not(.minimal)[aria-expanded="true"] {
+  color: var(--jl-accent);
+  background-color: var(--jl-accent-wash);
+}
+.pagination .btn:not(.minimal):disabled,
+.pagination .btn:not(.minimal).disabled {
+  color: var(--jl-dim);
+  background-color: transparent;
+  opacity: 1;
+}

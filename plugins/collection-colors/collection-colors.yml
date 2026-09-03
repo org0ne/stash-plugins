@@ -4,7 +4,7 @@ description: >
   auto-discovered from Settings > Library, no hardcoded paths. Per-folder
   colors are editable via a picker injected into this plugin's own
   Settings > Plugins section.
-version: 1.0.0
+version: 1.0.1
 settings:
   collectionColors:
     displayName: Collection colors (raw JSON)

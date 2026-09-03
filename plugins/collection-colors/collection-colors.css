@@ -12,7 +12,7 @@
      used to carry (0 top / 2px bottom, shifting the flex-centered text
      up 1px) was tuned against the card-popover-bar context only and
      read wrong once seen live in the scene-detail sidebar (the pill's
-     other placement, via .dl-scene-badge-slot — see trySetupHeaderPill()
+     other placement, via .jl-scene-badge-slot — see trySetupHeaderPill()
      in the JS). Reverted rather than given a second, context-specific
      value: one pill style, used in two places, shouldn't carry two
      different paddings for the same visual element.
@@ -286,7 +286,7 @@
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.04);
-  color: var(--dl-fg, #f8f8f2);
+  color: var(--jl-fg, #f8f8f2);
   font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
   font-size: 12px;
 }
