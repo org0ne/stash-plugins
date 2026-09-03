@@ -1,6 +1,6 @@
 // ==StashScript==
 // name Scene Dashboard (Option C)
-// version 2.0
+// version 2.0.1
 // description Reorders the scene page sidebar into one persistent-context
 //             column (identity, description, tags) with a mode switcher
 //             below it, then Performers/File/History swapping in per mode.
@@ -8,7 +8,7 @@
 ;(() => {
   'use strict';
 
-  console.log('[SceneDashboard] v2.0 loaded');
+  console.log('[SceneDashboard] v2.0.1 loaded');
 
   /* ============================
    *  CONFIG
@@ -39,6 +39,49 @@
   const BROWSE_PANES = ['details', 'fileinfo', 'history', 'groups', 'galleries'];
 
   const STORAGE_KEY = 'jl.collapsedCards';
+
+  /* ============================
+   *  GUARDED DOM WRITERS
+   *
+   *  Every attribute/style/class write this file makes on every
+   *  tagPanes() run goes through one of these, and they only touch the
+   *  DOM when the value actually changes. Two reasons, both measured
+   *  (CDP profile, 2026-09-02):
+   *
+   *  1. An attribute set to the value it already holds still queues a
+   *     MutationObserver record and still invalidates style for every
+   *     selector that keys off that attribute — which is most of
+   *     scene-dashboard.css. During video playback the player's own
+   *     ~70 mutations/s were being amplified into ~1,500 attribute
+   *     rewrites/s inside .scene-tabs by unguarded dataset/style/aria
+   *     writes, and ~50 extra style recalcs/s along with them.
+   *
+   *  2. Forced synchronous layout only costs anything when layout is
+   *     dirty. If a run writes nothing, its getBoundingClientRect() reads
+   *     (sizeTagsBackdrop/markTagRows/sizeCodeDateBackdrop) either hit a
+   *     clean layout for free or trigger the one layout the browser owed
+   *     the page anyway — instead of the ~3 forced layouts per run the
+   *     unguarded write→read→write pattern used to cost.
+   *
+   *  `value == null` on setData means "remove the attribute", so callers
+   *  can express a boolean flag as setData(el, key, on ? 'true' : null).
+   * ============================ */
+  function setData(el, key, value) {
+    if (value == null) { if (key in el.dataset) delete el.dataset[key]; }
+    else if (el.dataset[key] !== value) el.dataset[key] = value;
+  }
+  function setAttr(el, name, value) {
+    if (el.getAttribute(name) !== value) el.setAttribute(name, value);
+  }
+  function setStyle(el, prop, value) {
+    if (el.style[prop] !== value) el.style[prop] = value;
+  }
+  function addClass(el, cls) {
+    if (!el.classList.contains(cls)) el.classList.add(cls);
+  }
+  function toggleClass(el, cls, on) {
+    if (el.classList.contains(cls) !== on) el.classList.toggle(cls, on);
+  }
 
   /* ============================
    *  PANE IDENTIFICATION
@@ -98,9 +141,9 @@
    * ============================ */
   function applyCollapsed(host, cardId) {
     const isOn = collapsed.has(cardId);
-    host.classList.toggle('jl-collapsed', isOn);
+    toggleClass(host, 'jl-collapsed', isOn);
     const head = host.querySelector(':scope > .jl-head');
-    if (head) head.setAttribute('aria-expanded', String(!isOn));
+    if (head) setAttr(head, 'aria-expanded', String(!isOn));
   }
 
   /* Appends a header to `host`. Append rather than prepend: React never sees
@@ -149,8 +192,8 @@
    * rather than a `:not(.jl-head)` child rule. */
   function applyGroupCollapsed(root, groupId, head) {
     const isOn = collapsed.has(groupId);
-    root.setAttribute(`data-jl-collapsed-${groupId}`, String(isOn));
-    if (head) head.setAttribute('aria-expanded', String(!isOn));
+    setAttr(root, `data-jl-collapsed-${groupId}`, String(isOn));
+    if (head) setAttr(head, 'aria-expanded', String(!isOn));
   }
 
   function ensureGroupHead(root, parent, groupId, title) {
@@ -242,9 +285,13 @@
       const isFirstRow = Math.abs(tops[i] - tops[0]) < 2;
       const isRowStart = i === 0 || Math.abs(tops[i] - tops[i - 1]) >= 2;
       const isRowEnd = i === tagItems.length - 1 || Math.abs(tops[i + 1] - tops[i]) >= 2;
-      if (isFirstRow) item.dataset.jlTagFirstRow = 'true'; else delete item.dataset.jlTagFirstRow;
-      if (isRowStart) item.dataset.jlTagRowStart = 'true'; else delete item.dataset.jlTagRowStart;
-      if (isRowEnd) item.dataset.jlTagRowEnd = 'true'; else delete item.dataset.jlTagRowEnd;
+      // Guarded writes (see setData): in steady state every chip already
+      // carries the right flags, so this loop writes nothing — which is
+      // what keeps the reads above from forcing a fresh layout on every
+      // run once the cloud has settled.
+      setData(item, 'jlTagFirstRow', isFirstRow ? 'true' : null);
+      setData(item, 'jlTagRowStart', isRowStart ? 'true' : null);
+      setData(item, 'jlTagRowEnd', isRowEnd ? 'true' : null);
     });
   }
 
@@ -267,7 +314,7 @@
     const subheader = wrapper.querySelector('.scene-subheader');
     let backdrop = wrapper.querySelector(':scope > .jl-codedate-backdrop');
     if (!code || !subheader) {
-      if (backdrop) backdrop.style.display = 'none';
+      if (backdrop) setStyle(backdrop, 'display', 'none');
       return;
     }
     if (!backdrop) {
@@ -275,17 +322,24 @@
       backdrop.className = 'jl-codedate-backdrop';
       wrapper.appendChild(backdrop);
     }
-    backdrop.style.display = '';
-    // Reset before measuring — last run's height would otherwise throw off
-    // this run's reading (same reason sizeTagsBackdrop resets below).
-    backdrop.style.height = '0px';
-    backdrop.style.marginBottom = '0px';
+    setStyle(backdrop, 'display', '');
+    // No reset-to-zero before measuring (an earlier version did one):
+    // the two heights read here are Code's and Subheader's own intrinsic
+    // box heights, which don't depend on the backdrop's current height
+    // at all — and the reset itself was a style write that dirtied layout
+    // right before the reads, forcing a synchronous reflow on every
+    // single run. Reads first, then guarded writes, so a run whose inputs
+    // haven't changed touches nothing.
     const height = Math.round(Math.max(
       code.getBoundingClientRect().height,
       subheader.getBoundingClientRect().height,
     ));
-    backdrop.style.height = `${height}px`;
-    backdrop.style.marginBottom = `-${height}px`;
+    // Both zero means the sidebar itself isn't laid out right now (e.g.
+    // the scene-divider collapsed it) — keep the last good value rather
+    // than writing a 0px bar that stays wrong until something re-measures.
+    if (height === 0) return;
+    setStyle(backdrop, 'height', `${height}px`);
+    setStyle(backdrop, 'marginBottom', `-${height}px`);
   }
 
   /* Badge block: one combined "Resolution | fps | Director" line, above a
@@ -402,17 +456,33 @@
       contentCol.appendChild(backdrop);
     }
 
-    // Reset before measuring — last run's height/margin would otherwise
-    // throw off both readings below.
-    backdrop.style.height = '0px';
-    backdrop.style.marginBottom = '0px';
-
+    // No reset-to-zero before measuring (an earlier version zeroed
+    // height/margin-bottom first): the backdrop's height and its equal-
+    // and-opposite negative margin-bottom net to zero flow contribution
+    // by construction, so neither its own `top` nor the last chip's
+    // `bottom` below depends on whatever height the previous run left
+    // behind. The reset was a pure write→read→write pattern costing a
+    // forced synchronous layout per run for nothing — see the guarded-
+    // writers comment near the top of this file for the measurements.
     const tagItems = contentCol.querySelectorAll(':scope > .tag-item');
     if (!tagItems.length) {
-      backdrop.style.display = 'none';
+      setStyle(backdrop, 'display', 'none');
       return;
     }
-    backdrop.style.display = '';
+    // Chips that are display:none (Tags collapsed, or any non-Browse
+    // mode — both hide .tag-item and the backdrop via CSS) all measure to
+    // an empty rect, and flagging every one of them as "row 1" / sizing
+    // the backdrop off that would be garbage. Leave the last good
+    // measurement in place instead; CSS already hides the backdrop in
+    // both of those states, and the next run in a visible state (the
+    // Tags head's own click handler, or syncModeBar's mode-change
+    // re-measure) replaces it. An earlier version hid the backdrop
+    // inline here — no longer needed, and it would be one more write
+    // per run.
+    const firstRect = tagItems[0].getBoundingClientRect();
+    if (firstRect.width === 0 && firstRect.height === 0) return;
+
+    setStyle(backdrop, 'display', '');
     markTagRows(tagItems);
 
     const top = backdrop.getBoundingClientRect().top;
@@ -427,11 +497,11 @@
     // render its own 1px border-bottom as a stray floating line, so hide it
     // outright instead of trusting height alone to make it disappear.
     if (height === 0) {
-      backdrop.style.display = 'none';
+      setStyle(backdrop, 'display', 'none');
       return;
     }
-    backdrop.style.height = `${height}px`;
-    backdrop.style.marginBottom = `-${height}px`;
+    setStyle(backdrop, 'height', `${height}px`);
+    setStyle(backdrop, 'marginBottom', `-${height}px`);
   }
 
   /* Strips a literal leading label off an element's text, e.g. turning
@@ -629,10 +699,10 @@
       seen[slug] = pane;
 
       if (BROWSE_PANES.includes(slug)) {
-        pane.dataset.jlBrowse = 'true';
+        setData(pane, 'jlBrowse', 'true');
         // Details is flattened (display:contents in CSS), not boxed, so it
         // never gets the card chrome the other Browse panes get.
-        if (slug !== 'details') pane.classList.add('jl-card');
+        if (slug !== 'details') addClass(pane, 'jl-card');
       }
     }
 
@@ -663,7 +733,7 @@
           // them either way, so the real risk is just re-adding this same
           // h6 to `scenedetails` twice — once here, once below).
           if (h6.dataset.jlMirror === 'true') continue;
-          h6.dataset.jlItem = 'scenedetails';
+          setData(h6, 'jlItem', 'scenedetails');
           // Guard: this h6's text is never reset between runs, so a second
           // call here would re-scan the *value* left over from the first
           // split — and a value like "December 10, 2022 9:39 PM" contains
@@ -752,8 +822,7 @@
           }
         }
         for (const h6 of scenedetails) {
-          if (h6 === lastRow) h6.dataset.jlLastInGroup = 'true';
-          else delete h6.dataset.jlLastInGroup;
+          setData(h6, 'jlLastInGroup', h6 === lastRow ? 'true' : null);
         }
 
         ensureGroupHead(root, metaCol, 'metadata', CARD_TITLES.metadata);
@@ -765,9 +834,9 @@
       if (contentCol) {
         for (const h6 of contentCol.querySelectorAll(':scope > h6')) {
           const text = h6.textContent.trim();
-          if (text.startsWith('Details')) h6.dataset.jlItem = 'description-heading';
-          else if (text.startsWith('Tags')) h6.dataset.jlItem = 'tags-heading';
-          else if (text.startsWith('Performer')) h6.dataset.jlItem = 'performers-heading';
+          if (text.startsWith('Details')) setData(h6, 'jlItem', 'description-heading');
+          else if (text.startsWith('Tags')) setData(h6, 'jlItem', 'tags-heading');
+          else if (text.startsWith('Performer')) setData(h6, 'jlItem', 'performers-heading');
         }
 
         ensureGroupHead(root, contentCol, 'description', CARD_TITLES.description);
@@ -779,7 +848,7 @@
 
         const customFields = contentCol.querySelector(':scope > .custom-fields');
         if (customFields) {
-          customFields.classList.add('jl-card');
+          addClass(customFields, 'jl-card');
           ensureHead(customFields, 'customfields', CARD_TITLES.customfields);
 
           // Custom Fields has its own native collapse (`.collapse-header` +
@@ -900,12 +969,42 @@
     return true;
   }
 
+  /* Re-runs just the layout-dependent measurements (tag rows + both
+   * backdrops) without the rest of tagPanes(). Needed because those
+   * measurements are only valid when taken in the layout state the user
+   * actually sees — and three things change that state without any
+   * childList mutation inside .scene-tabs for the body observer to catch:
+   *   - data-jl-mode being set for the first time (the flattening CSS
+   *     kicks in and every chip moves) or changing (Browse-only content
+   *     hides/shows), which is a plain attribute write by syncModeBar;
+   *   - a font finishing loading (chip widths change → rows re-wrap);
+   *   - a viewport resize (the sidebar is full-width on mobile).
+   * Before the observer was filtered to sidebar-relevant mutations (see
+   * touchesSidebar below), the constant stream of unrelated re-runs
+   * masked all three: some later run always happened to re-measure in
+   * the right state. That's gone on purpose, so each trigger gets its
+   * own explicit re-measure instead. Cheap: each function reads first and
+   * only writes when a value actually changed. */
+  function measure(root) {
+    const details = root.querySelector('[data-jl-pane="details"]');
+    const contentRow = details && details.querySelector(':scope > .row:nth-child(2)');
+    const contentCol = contentRow && contentRow.firstElementChild;
+    if (contentCol) sizeTagsBackdrop(contentCol);
+    sizeCodeDateBackdrop(root);
+  }
+
   function syncModeBar(root) {
     const mode = currentMode(root);
     if (!mode) return;
-    if (root.dataset.jlMode !== mode) root.dataset.jlMode = mode;
+    if (root.dataset.jlMode !== mode) {
+      root.dataset.jlMode = mode;
+      // The attribute write above changes which CSS applies to every
+      // sidebar item; measure again now that the new layout state is in
+      // place (getBoundingClientRect forces the layout synchronously).
+      measure(root);
+    }
     for (const btn of root.querySelectorAll('.jl-mode')) {
-      btn.setAttribute('aria-selected', String(btn.dataset.jlModeId === mode));
+      setAttr(btn, 'aria-selected', String(btn.dataset.jlModeId === mode));
     }
     unhideFromScreenReaders(root, mode);
   }
@@ -948,9 +1047,42 @@
     syncModeBar(root);
   }
 
+  /* The observer below is body-wide (React can mount the scene page's
+   * markup anywhere, and the SPA swaps whole subtrees on navigation), but
+   * run() only ever cares about what happens inside `.scene-tabs`. The
+   * video player — a sibling of .scene-tabs, never inside it — mutates its
+   * progress bar and time tooltip ~70 times a second during playback, and
+   * before this filter every one of those batches re-ran tagPanes() and
+   * re-measured the whole tag cloud (CDP profile, 2026-09-02: +400 forced
+   * layouts and roughly double stash's own main-thread time over 6 s of
+   * playback, for zero visible change). So a batch only schedules a run
+   * when at least one record touches the sidebar:
+   *   - its target is inside the current .scene-tabs, or
+   *   - it adds a node that is / contains a .scene-tabs (a fresh scene
+   *     page mounting, or scene→scene SPA navigation replacing the old
+   *     one — the record's target is that node's *parent*, outside any
+   *     .scene-tabs, so the target check alone would miss it), or
+   *   - there is no .scene-tabs in the document at all (nothing to
+   *     protect; run() bails cheaply on its own in that case anyway, but
+   *     an old root being removed with the new one not yet mounted must
+   *     not get stuck ignoring the mount when it does arrive). */
+  function touchesSidebar(muts) {
+    const root = document.querySelector('.scene-tabs');
+    if (!root) return true;
+    for (const m of muts) {
+      if (root.contains(m.target)) return true;
+      for (const n of m.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        if (n === root || n.contains(root) || n.querySelector('.scene-tabs')) return true;
+      }
+    }
+    return false;
+  }
+
   let queued = false;
-  const observer = new MutationObserver(() => {
+  const observer = new MutationObserver(muts => {
     if (queued) return;
+    if (!touchesSidebar(muts)) return;
     queued = true;
     requestAnimationFrame(() => {
       queued = false;
@@ -959,5 +1091,21 @@
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+
+  // Layout-only triggers with no DOM mutation for the observer to see —
+  // see measure() for why each one needs its own hook.
+  let remeasureQueued = false;
+  function queueRemeasure() {
+    if (remeasureQueued) return;
+    remeasureQueued = true;
+    requestAnimationFrame(() => {
+      remeasureQueued = false;
+      const root = document.querySelector('.scene-tabs[data-jl-mode]');
+      if (root) { try { measure(root); } catch (e) { console.error('[SceneDashboard]', e); } }
+    });
+  }
+  window.addEventListener('resize', queueRemeasure);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(queueRemeasure);
+
   run();
 })();

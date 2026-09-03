@@ -1318,6 +1318,30 @@ the write is actually needed — track it down via the same equality-guard
 lens (`if (current !== next) write(next)`) applied everywhere else in
 these files, and fix the same way.
 
+**The idle check is necessary but not sufficient — also check the page
+while it is legitimately busy.** The 2026-09-02 playback finding (see
+Settled decisions) passed the idle check with 0 mutations every time,
+because the cost only appeared once *something else* (the video player)
+was mutating the DOM and waking this plugin's observers. The probe that
+caught it, worth repeating after any change to an observer callback or a
+measuring function:
+
+```js
+// on a scene page with many tags, via CDP or the console
+const v = document.querySelector('video'); v.muted = true; await v.play();
+// compare Performance.getMetrics() LayoutCount/ScriptDuration deltas over
+// ~6 s with jav-layout's JS loaded vs. blocked (Network.setBlockedURLs
+// '*/plugin/jav-layout/javascript*'); with the plugin they should be
+// within noise of each other, and Element.prototype.getBoundingClientRect
+// (wrapped to count calls from /plugin/jav-layout/ frames) should stay at 0.
+```
+
+A zero-dependency Node CDP harness that does exactly this (plus the
+per-page A/B matrix and per-plugin observer attribution) was written for
+that session; it lived in the session scratchpad, not this repo — rebuild
+from the description above if needed (Node 20 has no WebSocket, and no
+`ws` is installed, so it needs a ~100-line hand-rolled RFC 6455 client).
+
 ## Dev loop on the server
 
 Symlink rather than copy, so edits land without a re-copy:
@@ -1346,6 +1370,70 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
   stash's locale bundle. Deliberate; revisit only if the UI language changes.
 
 ## Settled decisions — do not silently redo
+
+- **2026-09-02 performance pass (scene-dashboard.js only): the body
+  observer is filtered to sidebar-relevant mutations, every per-run DOM
+  write is equality-guarded, and the backdrop sizers no longer reset
+  before measuring.** Found by a CDP A/B profile (headless Chrome,
+  jav-layout's JS/CSS blocked via `Network.setBlockedURLs` as the
+  baseline — see the Testing section for the method). Page-load cost
+  was minor everywhere (grid/performer ≈ 10 ms of plugin CPU; scene
+  ≈ 70 ms, 45 of it the `getBoundingClientRect` loop in
+  `markTagRows()`). The real cost was *ongoing*: the video player is a
+  sibling of `.scene-tabs`, never inside it, and its progress bar/time
+  tooltip mutate ~70×/s during playback — every batch re-ran
+  `tagPanes()`, which re-measured the 48-chip tag cloud with ~3 forced
+  synchronous layouts and rewrote ~1,500 unchanged attributes per
+  second. Measured over 6 s of playback: +400 layouts, +300 style
+  recalcs, ScriptDuration 283 vs 152 ms, TaskDuration 742 vs 367 ms
+  (roughly doubling stash's own playback cost). After: 173 vs 136 ms
+  script, 33 vs 27 layouts, 0 `getBoundingClientRect` calls from this
+  plugin during playback. Three changes, and one that fell out of them:
+  1. **`touchesSidebar(muts)`** — a batch schedules `run()` only if some
+     record's target is inside the current `.scene-tabs`, or adds a node
+     that is/contains one (fresh mount, scene→scene SPA navigation —
+     that record's target is the *parent*, outside any `.scene-tabs`),
+     or no `.scene-tabs` exists yet. Confirmed live that SPA navigation
+     between two scenes still gets tagged and sized.
+  2. **`setData`/`setAttr`/`setStyle`/`addClass`/`toggleClass`** — every
+     write `tagPanes()`/`markTagRows()`/`syncModeBar()`/`applyCollapsed()`
+     makes on every run goes through one of these and only touches the
+     DOM on an actual change. Same-value attribute writes still queue
+     observer records and invalidate style for every selector keyed on
+     that attribute (most of scene-dashboard.css) — and, more
+     importantly, a run that writes nothing leaves layout clean, so its
+     reads force no layout at all. Writes on freshly-created nodes are
+     left raw; they're one-time by construction.
+  3. **No reset-to-zero before measuring** in `sizeTagsBackdrop()`/
+     `sizeCodeDateBackdrop()`. The backdrop's height and its equal-and-
+     opposite negative margin-bottom net to zero flow contribution, so
+     neither its own `top` nor the last chip's `bottom` (nor Code's/
+     Subheader's intrinsic heights) ever depended on the previous value.
+     The reset was a write→read→write costing a forced layout per run.
+  4. **Explicit re-measure triggers, because the constant re-runs had
+     been silently papering over three stale-measurement cases.** The
+     first `verify` pass after (1)–(3) showed a fresh load with the tags
+     backdrop at 10px (should be 520) and Code/Date at 2px (should be
+     28): `tagPanes()` measures *before* `syncModeBar()` sets
+     `data-jl-mode` (which flips the flattening CSS and moves every
+     chip), and previously some later unrelated run always fixed it.
+     Now `measure(root)` (tag rows + both backdrops) runs from
+     `syncModeBar` whenever the mode actually changes, from
+     `document.fonts.ready`, and from a rAF-debounced `resize` listener.
+     Alongside that, both sizers return early when their subject
+     measures to an empty rect (Tags collapsed, any non-Browse mode, a
+     collapsed sidebar) instead of flagging every hidden chip as "row 1"
+     and writing a 0px height — CSS already hides the backdrop in those
+     states, and the next visible-state run replaces the kept value.
+     **If a layout-affecting state change is ever added that produces no
+     childList mutation inside `.scene-tabs`, it needs its own
+     `measure()` call — the observer will not catch it any more, by
+     design.**
+  Verified live after: fresh load, collapse→expand, load-collapsed→
+  expand, Browse→Edit→Browse, and SPA scene→scene all measure exactly
+  (backdrop height == last-chip-bottom − backdrop-top + 10; first-row/
+  row-start/row-end flag counts == measured rows), 0 idle mutations, no
+  console errors.
 
 - **`.detail-group .detail-item` (performer/studio/group/tag detail-list
   rows — Gender/Age/.../Stash IDs) is converted from native's
