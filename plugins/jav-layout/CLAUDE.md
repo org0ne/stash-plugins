@@ -1692,6 +1692,23 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
 
 ## Settled decisions — do not silently redo
 
+- **Studio, group and tag cards' name and details are styled to match
+  scene and performer cards (clean-cards.css, 2026-09-04; groups and
+  tags added the same day on request — identical `h5.card-section-title
+  > .TruncatedText` structure; groups have a `.group-card__details`
+  block, tags have no details in the grid).** The name takes the
+  performer card's exact title recipe (Quicksand 600, two-line clamp,
+  1.25 line-height) plus `--jl-heading`, the color the scene card title
+  resolves to; the "Part of … / Parent of N Studios" block is muted
+  13px with its links in `--jl-link`, the same cyan as scene-card
+  performer names. One deliberate asymmetry surfaced while matching:
+  performer CARD titles render in the body text color, not
+  `--jl-heading` (scene card titles do) — no rule of this plugin's
+  sets a color on them. Studio took the scene card's heading color, the
+  stronger of the two references; if performer cards should join it,
+  that's one `color` line on `.performer-card .card-section-title
+  .TruncatedText`, not a new decision. Verified by injecting the
+  working-tree plugin (jav-layout was disabled in stash at the time).
 - **Popover-row reordering and overflow clipping (clean-cards.js, and
   collection-colors' own copy) are scoped to `.scene-card` bars,
   positively, not by excluding known other card types (2026-09-04).**

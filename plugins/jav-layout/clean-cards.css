@@ -384,6 +384,56 @@
    to style here. */
 
 /* =====================================================
+ *  STUDIO, GROUP AND TAG CARDS (2026-09-04)
+ *  Same structure as a performer card — `h5.card-section-title >
+ *  .TruncatedText` for the name, a details block under it
+ *  (`.studio-card__details` / `.group-card__details`) — but neither had
+ *  ever been styled, so the name rendered in the body face at the
+ *  native 17.5px/500 and the details ("Part of … / Parent of N
+ *  Studios", a group's date) in plain body text. Requested live: match
+ *  scenes and performers; groups and tags added the same day (tag cards
+ *  have the title only — no details block in the grid).
+ *  The name takes the performer card's exact title recipe plus the
+ *  heading color the scene card title already resolves to; the details
+ *  take the sidebar's label treatment (muted, 13px) with their links in
+ *  the link color, the same cyan the scene card's performer names use.
+ * ===================================================== */
+.studio-card .card-section-title,
+.group-card .card-section-title,
+.tag-card .card-section-title {
+  margin-bottom: 0 !important;
+  line-height: 1.25 !important;
+}
+.studio-card .card-section-title .TruncatedText,
+.group-card .card-section-title .TruncatedText,
+.tag-card .card-section-title .TruncatedText {
+  color: var(--jl-heading) !important;
+  font-family: var(--jl-font-display) !important;
+  font-weight: 600 !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.25 !important;
+}
+.studio-card .studio-card__details,
+.group-card .group-card__details {
+  margin-top: 4px !important;
+  color: var(--jl-muted) !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+}
+.studio-card .studio-card__details a,
+.group-card .group-card__details a {
+  color: var(--jl-link) !important;
+  font-weight: 500 !important;
+  text-decoration: none !important;
+}
+.studio-card .studio-card__details a:hover,
+.group-card .group-card__details a:hover { text-decoration: underline !important; }
+
+/* =====================================================
  *  SCENE DETAIL PAGE
  * ===================================================== */
 
