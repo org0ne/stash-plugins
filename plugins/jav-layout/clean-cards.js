@@ -676,26 +676,100 @@
     // anchorButtonsRight()/reorderPopoverBar() above) so this file's own
     // native-button reordering doesn't touch or reorder it.
 
-    // ── Watched badge ────────────────────────────────────────────
-    const videoSection = card.querySelector('.video-section');
-    if (videoSection && !card.dataset.stashWatched) {
-      const isWatched =
-        scene.play_count > 0 &&
-        (scene.resume_time === 0 || (FLAG_PARTIAL_WATCH && scene.resume_time > 0)) &&
-        scene.play_duration >= 10;
-
-      if (isWatched) {
-        card.classList.add('watched');
-        card.dataset.stashWatched = "true";
-        const badge = document.createElement('div');
-        badge.className = 'watched-badge';
-        const icon = document.createElement('i');
-        icon.className = 'fa-solid fa-circle-check';
-        badge.appendChild(icon);
-        videoSection.appendChild(badge);
+    // ── Watched flag ─────────────────────────────────────────────
+    // Until 2026-09-04 this also drew a `.watched-badge` check icon over
+    // the thumbnail (`.video-section`), positioned by the user's own
+    // Custom CSS. Removed on request in favour of an explicit "✔ Watched"
+    // text badge — currently rendered in the scene page's sidebar by
+    // scene-dashboard.js via window.JLSceneData below; the card's own
+    // placement is still an open question (see CLAUDE.md). The class and
+    // data flag stay so CSS can still key off a watched card.
+    if (!card.dataset.stashWatched && isSceneWatched(scene)) {
+      card.classList.add('watched');
+      card.dataset.stashWatched = "true";
+      // The card's own indicator (chosen 2026-09-04, "option 2"): a small
+      // check glyph in the code/date bar, immediately before the date. A
+      // glyph rather than the sidebar's "✔ Watched" text because the bar
+      // has no spare width on a narrow card, and unlike the popover row
+      // nothing here is ever hidden by the overflow-priority logic, so it
+      // is always visible. Same green as the sidebar badge (--jl-ok).
+      // WATCHED_CHECK_HOST picks which half of the bar it lives in: 'code'
+      // appends it after the studio code (and its copy button), 'date'
+      // puts it immediately before the date. Trying 'code' 2026-09-04.
+      const group = WATCHED_CHECK_HOST === 'code' ? card._stashCodeGroup : card._stashDateGroup;
+      if (group && !group.querySelector('.stash-watched-check')) {
+        const check = document.createElement('span');
+        check.className = 'stash-watched-check';
+        check.setAttribute('title', 'Watched');
+        check.setAttribute('aria-label', 'Watched');
+        check.appendChild(makeWatchedCheckIcon());
+        if (WATCHED_CHECK_HOST === 'code') group.appendChild(check);
+        else group.insertBefore(check, card._stashDateSpan);
       }
     }
   }
+
+  /* The check itself is an inline SVG, not the ✔ glyph: the glyph's weight
+   * is whatever the fallback symbol font happens to draw, and at 12px it
+   * read as a speck (reported live, 2026-09-04, "easy to miss"). A stroked
+   * path has a weight that is actually ours to set — 3 units on a 16-unit
+   * box — and scales with the surrounding font-size via 1em sizing. Shared
+   * with the sidebar badge through window.JLSceneData so both checks are
+   * the same mark. */
+  const WATCHED_CHECK_HOST = 'code'; // 'code' | 'date' — see applySceneDataToCard
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function makeWatchedCheckIcon() {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', 'M2.5 8.5 L6 12 L13.5 4');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '3');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    return svg;
+  }
+
+  /* One definition of "watched", shared with the sidebar badge: played at
+   * least once, playback not left mid-way (resume_time 0 — FLAG_PARTIAL_WATCH
+   * would count partial plays too), and at least 10s of play time so a
+   * mis-click doesn't count. */
+  function isSceneWatched(scene) {
+    return !!scene &&
+      scene.play_count > 0 &&
+      (scene.resume_time === 0 || (FLAG_PARTIAL_WATCH && scene.resume_time > 0)) &&
+      scene.play_duration >= 10;
+  }
+
+  /* Fresh single-scene fetch of just the watched-state fields, for the scene
+   * page's sidebar badge. Deliberately NOT routed through the card grid's
+   * batched sceneCache: that cache is session-long, and the one place a
+   * stale watched flag is actually visible is the scene you just finished
+   * watching. One small query per scene-page load is the honest cost. */
+  async function fetchSceneWatchData(sceneId) {
+    const res = await fetch('/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // Aliased on purpose, like the card grid's batched query: another
+      // installed plugin (stashUserscriptLibrary) hooks every GraphQL
+      // response and walks `data.findScene.performers`, so an un-aliased
+      // findScene that doesn't select performers throws inside THEIR code
+      // on every scene page (seen live, 2026-09-04). Under an alias the
+      // hook never sees a `findScene` key and leaves the response alone.
+      body: JSON.stringify({ query: `{ s: findScene(id: ${Number(sceneId)}) { id play_count play_duration resume_time } }` }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    return json?.data?.s || null;
+  }
+
+  // Exposed for scene-dashboard.js (loads after this file), same pattern as
+  // window.JLPerformerPopup: one definition of watched-ness, one fetch.
+  window.JLSceneData = { isWatched: isSceneWatched, fetch: fetchSceneWatchData, checkIcon: makeWatchedCheckIcon };
 
   function enhanceCard(card) {
     if (card.dataset.stashClean) return;
@@ -753,8 +827,15 @@
     dateSpan.className = "date";
     dateSpan.textContent = "…";
 
+    // Date sits in its own group so the watched check (added later by
+    // applySceneDataToCard, only for watched scenes) can be inserted
+    // right before it while the bar stays a two-item space-between row.
+    const dateGroup = document.createElement("span");
+    dateGroup.className = "date-group";
+    dateGroup.appendChild(dateSpan);
+
     bar.appendChild(codeGroup);
-    bar.appendChild(dateSpan);
+    bar.appendChild(dateGroup);
     // Inserted as a sibling of the title's own <a> (one level up, inside
     // .card-section directly) rather than inside it alongside title/
     // performers — .card-section > a has overflow:hidden with zero slack
@@ -775,6 +856,8 @@
 
     card._stashCodeSpan = codeSpan;
     card._stashDateSpan = dateSpan;
+    card._stashDateGroup = dateGroup;
+    card._stashCodeGroup = codeGroup;
     card._stashPerf     = perf;
 
     visibilityObserver.observe(card);

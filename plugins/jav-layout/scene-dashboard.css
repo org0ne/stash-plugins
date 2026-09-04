@@ -438,7 +438,13 @@
    background/border/grid here, just bare content flush on the page. */
 .scene-tabs[data-jl-mode] .jl-scene-badges {
   order: 40;
-  flex: 0 0 auto;
+  /* Full line, like every other top-level sidebar item (was `0 0 auto`,
+     hugging its content): the badges row below needs the whole width so
+     the "✔ Watched" badge can sit at the sidebar's right edge while the
+     collection pill stays at its left — with a content-hugging block the
+     row was 165px wide and "right-justified" meant 165px in. */
+  flex: 0 0 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -508,7 +514,31 @@ a.jl-scene-director-value:hover {
   display: flex;
   align-items: center;
   gap: 8px;
+  align-self: stretch;   /* the column parent aligns children flex-start; this row spans it */
 }
+/* "✔ Watched" (syncWatchedBadge() in scene-dashboard.js) shares this line
+   with the collection pill: pill left, badge pushed to the right edge by
+   its own auto margin — which also keeps it right-justified when there is
+   no pill (the slot collapses on :empty, leaving the badge as the row's
+   only child). Same green as the card's watched state (--jl-ok) and the
+   mode bar's 12px/600 type recipe. */
+.jl-watched-badge {
+  margin-left: auto;
+  /* 4px = .scene-subheader's padding-right, so the badge's right edge
+     lands on the date TEXT's right edge (measured 424 vs 420 without it),
+     not the bar's box edge. */
+  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--jl-ok);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.jl-watched-badge .jl-watched-check { display: inline-flex; align-items: center; }
+.jl-watched-badge .jl-watched-check svg { width: 14px; height: 14px; display: block; }
 /* Reserved for other plugins (collection-colors) to drop a badge/pill
    into — dracula-layout never puts anything here itself. Collapsing on
    :empty means this costs zero layout space when no such plugin is

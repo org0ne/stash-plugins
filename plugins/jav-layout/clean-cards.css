@@ -118,6 +118,35 @@
   gap: 0px !important;
   min-width: 0 !important;
 }
+/* Right half of the bar: the date, with the watched check in front of it
+   when the scene qualifies (clean-cards.js, applySceneDataToCard). */
+.stash-code-date .date-group {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+}
+.stash-code-date .stash-watched-check {
+  color: var(--jl-ok) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  align-self: center !important;
+  line-height: 1 !important;
+}
+/* 1.25em of the bar's 12–16px type (zoom-dependent), i.e. 15–20px — larger
+   than the digits beside it on purpose, with a 3-unit stroke; the ✔ glyph
+   at 0.9em was reported as easy to miss. */
+.stash-code-date .stash-watched-check svg {
+  width: 1.25em !important;
+  height: 1.25em !important;
+  display: block !important;
+}
+/* When hosted in the code group (WATCHED_CHECK_HOST = 'code'), the group's
+   own gap is 0 (the copy button carries its spacing), so the check brings
+   its own 6px — the same gap the date group gives it. */
+.stash-code-date .code-group .stash-watched-check {
+  margin-left: 6px !important;
+}
 
 .stash-code-copy {
   background: transparent !important;

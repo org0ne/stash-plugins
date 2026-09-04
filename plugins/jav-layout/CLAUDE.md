@@ -1692,6 +1692,55 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
 
 ## Settled decisions — do not silently redo
 
+- **The watched indicator is a "✔ Watched" text badge on the scene
+  sidebar's collection-pill line, right-justified; the check icon over
+  the card thumbnail is gone (2026-09-04).** The icon was
+  `.watched-badge` in `.video-section`, created by clean-cards.js and
+  positioned by the user's own Custom CSS (those Custom CSS rules are
+  now dead and can be deleted). Replaced on request with the explicit
+  badge the scheme board mocked up: `syncWatchedBadge()` in
+  scene-dashboard.js appends `.jl-watched-badge` to
+  `.jl-scene-badges-row` (pill left, badge pushed right by
+  `margin-left: auto`, so it stays right-justified with no pill too);
+  `.jl-scene-badges` became `flex: 0 0 100%` so that row spans the
+  sidebar — as `0 0 auto` it was 165px wide and "right" meant 165px in.
+  Watched-ness has ONE definition, `isSceneWatched()` in clean-cards.js
+  (play_count > 0, resume_time 0, play_duration ≥ 10s), exposed with a
+  fresh single-scene fetch as `window.JLSceneData` — not routed through
+  the card grid's session-long sceneCache, because the scene you just
+  finished is exactly where a stale flag shows. **The fetch is aliased
+  (`{ s: findScene(...) }`) on purpose**: the installed
+  stashUserscriptLibrary plugin hooks every GraphQL response and walks
+  `data.findScene.performers`, so an un-aliased findScene that doesn't
+  select performers threw inside their code on every scene page (seen
+  live). Verified on a watched scene (badge, right edge flush with the
+  title's) and two unwatched ones (no element), zero thumbnail badges on
+  the grid, no console errors. **The card's own indicator** (chosen the
+  same day from three options: a second status pill beside the
+  collection pill in the footer, a check glyph in the code/date bar, or
+  a right-floated badge on the performers line) is the glyph:
+  `.stash-watched-check` in the code/date bar — chosen because the bar has
+  no spare width on a narrow card and, unlike the popover row, nothing in
+  it is ever hidden by the overflow-priority logic, so it is always
+  visible. It was first placed before the date (inside a `.date-group`
+  wrapper that still exists) and then moved next to the studio code, after
+  its copy button, the same day — "I prefer it next to the code"; the date
+  stands alone on the right. `WATCHED_CHECK_HOST` in clean-cards.js
+  (`'code'` | `'date'`) is the one switch between the two, and the CSS
+  for both hosts is kept. Created once per watched card (guarded by
+  `data-stash-watched`), never for unwatched ones. The sidebar badge
+  carries `margin-right: 4px` (the subheader's own padding-right) so its
+  right edge aligns with the date's TEXT edge, not the bar's box —
+  measured 424 vs 420 before the fix.
+  **Both checks (card bar and sidebar badge) are one stroked inline SVG
+  (`makeWatchedCheckIcon()` in clean-cards.js, shared as
+  `window.JLSceneData.checkIcon`), not the ✔ text glyph** — the glyph's
+  weight was whatever the fallback symbol font drew, and at 0.9em it was
+  reported "easy to miss" (2026-09-04). The SVG's 3-unit stroke on a
+  16-unit box is a weight this plugin controls; the card's copy is sized
+  1.25em (deliberately taller than the digits beside it), the sidebar's
+  14px. Bump `stroke-width` or those sizes if it ever needs to change
+  again, not the font.
 - **Studio, group and tag cards' name and details are styled to match
   scene and performer cards (clean-cards.css, 2026-09-04; groups and
   tags added the same day on request — identical `h5.card-section-title

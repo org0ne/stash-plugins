@@ -501,6 +501,49 @@
     }
   }
 
+  /* "✔ Watched" text badge on the collection pill's line (`.jl-scene-
+   * badges-row`, built by buildSceneBadgeRow above), right-justified via
+   * CSS. Requested 2026-09-04 as the explicit, durable replacement for the
+   * check icon clean-cards.js used to draw over the card thumbnail.
+   * Watched-ness and the fetch both come from window.JLSceneData
+   * (clean-cards.js) so there is exactly one definition of "watched".
+   * Fetched once per scene id — the row remembers which scene it asked
+   * about — because this runs on every tagPanes() pass; the async result
+   * lands later and is written equality-guarded, and a scene that isn't
+   * watched gets no element at all rather than an empty one. */
+  function syncWatchedBadge(metaCol) {
+    const row = metaCol.querySelector(':scope > .jl-scene-badges > .jl-scene-badges-row');
+    if (!row || !window.JLSceneData) return;
+    const match = location.pathname.match(/^\/scenes\/(\d+)/);
+    const sceneId = match ? match[1] : null;
+    if (!sceneId || row.dataset.jlWatchedScene === sceneId) return;
+    row.dataset.jlWatchedScene = sceneId;
+    window.JLSceneData.fetch(sceneId).then(scene => {
+      const live = metaCol.querySelector(':scope > .jl-scene-badges > .jl-scene-badges-row');
+      if (!live || live.dataset.jlWatchedScene !== sceneId) return;   // navigated away meanwhile
+      const watched = window.JLSceneData.isWatched(scene);
+      let badge = live.querySelector(':scope > .jl-watched-badge');
+      if (!watched) { if (badge) badge.remove(); return; }
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'jl-watched-badge';
+        badge.setAttribute('title', 'Watched');
+        const check = document.createElement('span');
+        check.className = 'jl-watched-check';
+        check.setAttribute('aria-hidden', 'true');
+        // Same stroked SVG mark as the card's code/date bar (clean-cards.js
+        // makeWatchedCheckIcon), so the two checks are one mark, not a glyph
+        // whose weight depends on the fallback symbol font.
+        check.appendChild(window.JLSceneData.checkIcon());
+        const label = document.createElement('span');
+        label.textContent = 'Watched';
+        badge.appendChild(check);
+        badge.appendChild(label);
+        live.appendChild(badge);
+      }
+    }).catch(e => console.warn('[SceneDashboard] watched badge', e));
+  }
+
   function sizeTagsBackdrop(contentCol) {
     let backdrop = contentCol.querySelector(':scope > .jl-tags-backdrop');
     if (!backdrop) {
@@ -880,6 +923,7 @@
 
         ensureGroupHead(root, metaCol, 'metadata', CARD_TITLES.metadata);
         buildSceneBadgeRow(metaCol, subheader);
+        syncWatchedBadge(metaCol);
       }
 
       const contentRow = details.querySelector(':scope > .row:nth-child(2)');
