@@ -1692,6 +1692,25 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
 
 ## Settled decisions — do not silently redo
 
+- **Popover-row reordering and overflow clipping (clean-cards.js, and
+  collection-colors' own copy) are scoped to `.scene-card` bars,
+  positively, not by excluding known other card types (2026-09-04).**
+  Reported live: studio cards' native popover buttons were being
+  suppressed. Both plugins registered every `.card-popovers.btn-group`
+  on the page and only bailed for `.performer-card`, so studio (and tag,
+  gallery, image, group) bars got the scene-card treatment: a priority
+  reorder keyed on class names that only exist on scene cards, and
+  `anchorButtonsRight()`'s overflow clipping, tuned for a scene card's
+  wide icon row, which on a studio card's short row measured wrong and
+  hid everything. Now `reorderPopoverBar()` returns (after
+  `clearAnchorState()`, so a bar touched by an earlier version is put
+  back to native) unless the bar is inside `.scene-card`, and the boot/
+  initial observers only register scene-card bars at all. The lesson:
+  when a treatment is really specific to one card type, select that
+  type — an exclusion list only covers the cards someone happened to
+  look at. Verified on studios, performers, tags and galleries (native
+  rows intact, no inline styles, no observers) and scenes (still
+  reordered, anchored, pill present).
 - **Type is Quicksand (display) + Nunito Sans (UI and body) +
   JetBrains Mono (code, date, metadata values), all self-hosted, via
   three tokens in fonts.css — `--jl-font-display`, `--jl-font-ui`,

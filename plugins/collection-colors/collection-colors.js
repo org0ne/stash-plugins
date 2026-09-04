@@ -344,7 +344,7 @@
           // pass re-applies the newly-loaded priority — reorderPopoverBar()
           // below otherwise trusts a signature computed under the default
           // order and silently no-ops.
-          const bars = document.querySelectorAll('.card-popovers.btn-group');
+          const bars = document.querySelectorAll('.scene-card .card-popovers.btn-group');
           bars.forEach(bar => { delete bar.dataset._stashPopoverSig; });
           bars.forEach(reorderPopoverBar);
         }
@@ -479,11 +479,14 @@
   function reorderPopoverBar(bar) {
     if (!bar) return;
 
-    // Performer-card bars rely on pure CSS flex-stretch for their 2-button
-    // layout and must never receive the scene-card anchoring/overflow-
-    // clipping treatment — see anchorButtonsRight's doc comment for why.
-    const isPerformerCard = !!bar.closest('.performer-card');
-    if (isPerformerCard) { clearAnchorState(bar); return; }
+    // SCENE CARDS ONLY. The pill, the priority order and the overflow
+    // clipping in anchorButtonsRight() are all scene-card concepts; on a
+    // studio card's short popover row the clipping measured wrong and hid
+    // the whole row (reported live 2026-09-04). The original exclusion
+    // named performer cards only — the honest rule is the positive one.
+    // clearAnchorState() still runs so a bar touched under an earlier
+    // version is put back exactly as native left it.
+    if (!bar.closest('.scene-card')) { clearAnchorState(bar); return; }
 
     const allKids = Array.from(bar.children);
     if (!allKids.length) return;
@@ -574,11 +577,13 @@
       popoverBootPending = [];
       popoverBootScheduled = false;
       nodes.forEach(node => {
-        if (node.matches?.('.card-popovers.btn-group')) {
+        // Scene-card bars only, same scope as reorderPopoverBar(): other
+        // card types are never registered with the live observer.
+        if (node.matches?.('.scene-card .card-popovers.btn-group')) {
           popoverObserver.observe(node, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
           reorderPopoverBar(node);
         } else {
-          node.querySelectorAll?.('.card-popovers.btn-group').forEach(bar => {
+          node.querySelectorAll?.('.scene-card .card-popovers.btn-group').forEach(bar => {
             popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
             reorderPopoverBar(bar);
           });
@@ -589,7 +594,7 @@
 
   function initPopoverReordering() {
     popoverBootObserver.observe(document.body, { childList: true, subtree: true });
-    document.querySelectorAll('.card-popovers.btn-group').forEach(bar => {
+    document.querySelectorAll('.scene-card .card-popovers.btn-group').forEach(bar => {
       popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
       reorderPopoverBar(bar);
     });

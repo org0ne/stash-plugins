@@ -101,14 +101,19 @@
   function reorderPopoverBar(bar) {
     if (!bar) return;
 
-    // Performer-card bars (.performer-card .card-popovers.btn-group) rely on
-    // pure CSS flex-stretch for their 2-button layout and must never receive
-    // the scene-card anchoring/overflow-clipping treatment — see
-    // anchorButtonsRight's doc comment for why. Reordering by
-    // POPOVER_ORDER_PARSED is also meaningless here (those classes are
-    // scene-card concepts), so bail out entirely after cleanup.
-    const isPerformerCard = !!bar.closest('.performer-card');
-    if (isPerformerCard) { clearAnchorState(bar); return; }
+    // SCENE CARDS ONLY. Every other card type — performer, studio, tag,
+    // gallery, image, group — keeps its native popover row untouched.
+    // Reordering by POPOVER_ORDER_PARSED is a scene-card concept (those
+    // class names only exist there), and the overflow clipping in
+    // anchorButtonsRight() is tuned for a scene card's wide icon set:
+    // on a studio card's short row it measured wrong and hid the whole
+    // row (reported live 2026-09-04, "suppressing the default popover
+    // buttons on studios"). The original exclusion covered performer
+    // cards only, because those were the only other cards anyone had
+    // looked at; the honest rule is the positive one. clearAnchorState()
+    // still runs so a bar this code touched under an earlier version is
+    // put back exactly as native left it.
+    if (!bar.closest('.scene-card')) { clearAnchorState(bar); return; }
 
     const kids = Array.from(bar.children);
     const reorderKids = kids.filter(el => !el.classList.contains('stash-collection-pill'));
@@ -182,11 +187,14 @@
         bootScheduled = false;
         const nodes = bootPending.splice(0);
         for (const node of nodes) {
-          if (node.matches?.('.card-popovers.btn-group')) {
+          // Same scene-card-only scope as reorderPopoverBar(): bars on
+          // other card types are never registered with the live observer,
+          // so they cost nothing and can never be touched by a later pass.
+          if (node.matches?.('.scene-card .card-popovers.btn-group')) {
             popoverObserver.observe(node, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
             reorderPopoverBar(node);
           } else {
-            node.querySelectorAll?.('.card-popovers.btn-group').forEach(bar => {
+            node.querySelectorAll?.('.scene-card .card-popovers.btn-group').forEach(bar => {
               popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
               reorderPopoverBar(bar);
             });
@@ -198,7 +206,7 @@
 
   popoverBootObserver.observe(document.body, { childList: true, subtree: true });
 
-  document.querySelectorAll('.card-popovers.btn-group').forEach(bar => {
+  document.querySelectorAll('.scene-card .card-popovers.btn-group').forEach(bar => {
     popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     reorderPopoverBar(bar);
   });
