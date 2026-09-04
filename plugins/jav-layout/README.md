@@ -231,6 +231,15 @@ plugin replaces stash's free-text field for this setting) with:
 | Catppuccin Mocha | pink / sky / lavender accents on Catppuccin's text ramp. |
 | Rosé Pine Moon | love / foam / iris. Rosé Pine's accent is also its only red, so Save and Delete share a hue. |
 | Kanagawa Wave | sakura pink / spring blue on paper-white text. |
+| Tokyo Night | violet / cyan on a cool navy ground; the most saturated of the disciplined ones. |
+| Moonlight | Dracula with the saturation turned up: pink / cyan / purple on `#222436`. |
+| Synthwave '84 | neon pink / cyan / yellow on purple-black. Loud on purpose; no glow. |
+| Night Owl | purple / teal on deep navy, high contrast. |
+| Aura Dark | neon pink / mint / purple on a very dark ground. |
+| Andromeda | hot pink / cyan / yellow. |
+| Horizon Dark | coral pink / teal, warm. Its red doubles as the accent. |
+| Sonokai | Monokai's energy with a real text ramp. Its red doubles as the accent. |
+| Poimandres | soft pink / sky on deep navy; the calm one. |
 
 The choice applies immediately, is saved in the plugin's settings, and is
 cached in `localStorage` under `jl.theme` so later page loads paint in

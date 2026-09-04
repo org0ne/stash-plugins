@@ -185,6 +185,18 @@ across three runs — so the refactor changed no visible output.
   scenes grid before touching themes.css. `--selection` has 73 uses
   (hover rows, some input fills too), so a change moves those by the
   same step — same role, checked on the sort dropdown and Settings.
+- **Nine more themes added 2026-09-03** (Tokyo Night, Moonlight,
+  Synthwave '84, Night Owl, Aura Dark, Andromeda, Horizon Dark, Sonokai,
+  Poimandres — the colorful end of the scheme review, all MIT), each as
+  ONE combined `html[data-jl-theme]` block holding both the `--jl-*`
+  tokens and the base-app variables, unlike the first three's two
+  blocks; either shape works, the combined one is just shorter. Values
+  a palette doesn't have are marked `derived` inline; three palettes
+  (Horizon, Sonokai, Poimandres) use their only red as the accent, noted
+  in their block comments. Card grounds were picked by lift over the
+  page, per the `--selection` note above, not by palette names. Every
+  block was verified live to parse (cssRules count) and to paint the
+  page ground, since a stray `*/` swallowed a whole block once before.
 - **Adding a theme**: two `html[data-jl-theme="<id>"]` blocks in
   `themes.css` (the `--jl-*` tokens and the base-app palette, each with
   an attribution comment), an entry in `THEMES` in `theme.js`, a row in

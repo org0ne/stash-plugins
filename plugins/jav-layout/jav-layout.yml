@@ -48,5 +48,7 @@ settings:
       is no longer needed). This plugin replaces this field with a
       dropdown in Settings › Plugins; if you ever see the raw field
       instead, valid values are dracula (default), catppuccin-mocha,
-      rose-pine-moon and kanagawa-wave.
+      rose-pine-moon, kanagawa-wave, tokyo-night, moonlight, synthwave-84,
+      night-owl, aura-dark, andromeda, horizon-dark, sonokai and
+      poimandres.
     type: STRING

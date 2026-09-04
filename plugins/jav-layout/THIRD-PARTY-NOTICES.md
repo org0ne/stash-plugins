@@ -22,6 +22,15 @@ projects below — no files from them ship with this plugin.
 | Catppuccin Mocha | https://github.com/catppuccin/catppuccin | Copyright (c) 2021 Catppuccin |
 | Rosé Pine Moon | https://github.com/rose-pine/rose-pine-theme | Copyright (c) 2021 Rosé Pine |
 | Kanagawa Wave | https://github.com/rebelot/kanagawa.nvim | Copyright (c) 2021 rebelot |
+| Tokyo Night | https://github.com/tokyo-night/tokyo-night-vscode-theme | Copyright (c) 2018-present Enkia |
+| Moonlight | https://github.com/atomiks/moonlight-vscode-theme | Copyright (c) 2018 atomiks |
+| Synthwave '84 | https://github.com/robb0wen/synthwave-vscode | Copyright (c) 2019 Robb Owen |
+| Night Owl | https://github.com/sdras/night-owl-vscode-theme | Copyright (c) 2018 Sarah Drasner |
+| Aura Dark | https://github.com/daltonmenezes/aura-theme | Copyright (c) 2021 Dalton Menezes |
+| Andromeda | https://github.com/EliverLara/Andromeda | Copyright (c) 2017 Eliver Lara |
+| Horizon Dark | https://github.com/jolaleye/horizon-theme-vscode | Copyright (c) 2018 Jonathan Olaleye |
+| Sonokai | https://github.com/sainnhe/sonokai | Copyright (c) 2020 sainnhe |
+| Poimandres | https://github.com/drcmda/poimandres-theme | Copyright (c) 2023 drcmda |
 
 ## MIT License
 

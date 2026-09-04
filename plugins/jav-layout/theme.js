@@ -23,6 +23,15 @@
     { id: 'catppuccin-mocha', label: 'Catppuccin Mocha' },
     { id: 'rose-pine-moon',   label: 'Rosé Pine Moon' },
     { id: 'kanagawa-wave',    label: 'Kanagawa Wave' },
+    { id: 'tokyo-night',      label: 'Tokyo Night' },
+    { id: 'moonlight',        label: 'Moonlight' },
+    { id: 'synthwave-84',     label: "Synthwave '84" },
+    { id: 'night-owl',        label: 'Night Owl' },
+    { id: 'aura-dark',        label: 'Aura Dark' },
+    { id: 'andromeda',        label: 'Andromeda' },
+    { id: 'horizon-dark',     label: 'Horizon Dark' },
+    { id: 'sonokai',          label: 'Sonokai' },
+    { id: 'poimandres',       label: 'Poimandres' },
   ];
 
   const isKnown = id => THEMES.some(t => t.id === id);
