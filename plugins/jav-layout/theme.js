@@ -26,12 +26,10 @@
     { id: 'tokyo-night',      label: 'Tokyo Night' },
     { id: 'moonlight',        label: 'Moonlight' },
     { id: 'synthwave-84',     label: "Synthwave '84" },
-    { id: 'night-owl',        label: 'Night Owl' },
     { id: 'aura-dark',        label: 'Aura Dark' },
-    { id: 'andromeda',        label: 'Andromeda' },
     { id: 'horizon-dark',     label: 'Horizon Dark' },
     { id: 'sonokai',          label: 'Sonokai' },
-    { id: 'poimandres',       label: 'Poimandres' },
+    { id: 'monokai',          label: 'Monokai' },
   ];
 
   const isKnown = id => THEMES.some(t => t.id === id);

@@ -19,7 +19,7 @@ internally (every `dl-`/`data-dl-`/`--dl-` reference became `jl-`/
 | File | What it is |
 | --- | --- |
 | `jav-layout.yml` | Plugin manifest. The filename sets the plugin ID. |
-| `fonts.css` | Self-hosted Quicksand SemiBold (600), embedded as base64 — no external font request. |
+| `fonts.css` | Self-hosted type, embedded as base64 — no external font request: Quicksand (titles), Nunito Sans (UI and body text), JetBrains Mono (studio codes, dates, metadata). Three `--jl-font-*` tokens every stylesheet uses. |
 | `base-theme.css` | The whole-app palette — dracula-for-stash's stylesheet, vendored (MIT), every color as a CSS variable. Replaces the separately-installed `dracula-theme` plugin. |
 | `themes.css` / `theme.js` | Every color the plugin paints, as `--jl-*` tokens, plus each selectable theme's overrides of both those tokens and `base-theme.css`'s variables. `theme.js` applies the **Color theme** setting and adds its dropdown to Settings › Plugins. See Themes below. |
 | `clean-cards.css` / `.js` | Scene card restyle (pink code, cyan performers, dynamic title scaling), studio-code relocation, popover reordering, watched badge, performer hover popup. |
@@ -234,12 +234,10 @@ plugin replaces stash's free-text field for this setting) with:
 | Tokyo Night | violet / cyan on a cool navy ground; the most saturated of the disciplined ones. |
 | Moonlight | Dracula with the saturation turned up: pink / cyan / purple on `#222436`. |
 | Synthwave '84 | neon pink / cyan / yellow on purple-black. Loud on purpose; no glow. |
-| Night Owl | purple / teal on deep navy, high contrast. |
 | Aura Dark | neon pink / mint / purple on a very dark ground. |
-| Andromeda | hot pink / cyan / yellow. |
 | Horizon Dark | coral pink / teal, warm. Its red doubles as the accent. |
 | Sonokai | Monokai's energy with a real text ramp. Its red doubles as the accent. |
-| Poimandres | soft pink / sky on deep navy; the calm one. |
+| Monokai | the 2006 classic: hot pink / cyan / green / orange on olive-black. |
 
 The choice applies immediately, is saved in the plugin's settings, and is
 cached in `localStorage` under `jl.theme` so later page loads paint in

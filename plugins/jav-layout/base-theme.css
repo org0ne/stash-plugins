@@ -40,6 +40,10 @@
  *     48,50,65), cyan (149 vs 139 red channel), overcast (183,186,212 vs
  *     179,182,204) — at most 10 units on one channel, behind ≤75 %
  *     alpha, invisible in a pixel diff.
+ *   - 2026-09-03: the three font-family declarations that named Lato
+ *     (`.scene-card`) and Roboto Mono (two rules) now use this plugin's
+ *     --jl-font-ui / --jl-font-mono tokens (fonts.css), so the vendored
+ *     rules follow the same self-hosted faces as everything else.
  *   - Nothing else. Rules are upstream's, formatting included, so a
  *     future upstream diff still applies cleanly.
  * ============================================================ */
@@ -3739,7 +3743,7 @@ textarea#details {
 /* ==================<< SCENE CARD >>================== */
 
 .scene-card {
-    font-family: "Lato", "Inter", Helvetica, Arial, sans-serif, sans-serif;
+    font-family: var(--jl-font-ui); /* was Lato — see header */
     font-size: 14px;
 }
 
@@ -3943,7 +3947,7 @@ textarea#details {
 }
 
 .setting-section .setting .value {
-	font-family: "Roboto Mono", SFMono, monospace;
+	font-family: var(--jl-font-mono); /* was Roboto Mono — see header */
 }
 
 .setting-group-collapse-button {
@@ -4043,7 +4047,7 @@ textarea#details {
 /* ====================<< LOGS >>==================== */
 
 .logs {
-    font-family: "Roboto Mono",source-code-pro,Menlo,Monaco,Consolas,Courier New,monospace;
+    font-family: var(--jl-font-mono); /* was Roboto Mono — see header */
 }
 
 .logs .debug {

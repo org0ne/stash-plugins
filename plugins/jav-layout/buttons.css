@@ -81,7 +81,7 @@
      the nav bar already does — normalizing to the same *fallback
      result*, not a font that's actually rendering as literal Segoe UI
      anywhere. */
-  font-family: "Segoe UI", sans-serif;
+  font-family: var(--jl-font-ui);
   font-weight: 500;
   transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }

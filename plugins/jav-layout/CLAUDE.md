@@ -187,7 +187,14 @@ across three runs — so the refactor changed no visible output.
   same step — same role, checked on the sort dropdown and Settings.
 - **Nine more themes added 2026-09-03** (Tokyo Night, Moonlight,
   Synthwave '84, Night Owl, Aura Dark, Andromeda, Horizon Dark, Sonokai,
-  Poimandres — the colorful end of the scheme review, all MIT), each as
+  Poimandres — the colorful end of the scheme review, all MIT), then
+  **Night Owl, Andromeda and Poimandres removed the same day** as
+  near-duplicates: measured by Lab ΔE on page/card/accent they sat
+  within ~10 of Tokyo Night, Horizon/Dracula and Kanagawa respectively,
+  and a theme whose only distinct role is its link color isn't a theme.
+  **Monokai (classic, from VS Code's MIT theme extension — not Monokai
+  Pro, which is commercial) added in their place**; its pink is its
+  red, so danger takes VS Code's `#f44747` error color. Each is
   ONE combined `html[data-jl-theme]` block holding both the `--jl-*`
   tokens and the base-app variables, unlike the first three's two
   blocks; either shape works, the combined one is just shorter. Values
@@ -1685,6 +1692,36 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
 
 ## Settled decisions — do not silently redo
 
+- **Type is Quicksand (display) + Nunito Sans (UI and body) +
+  JetBrains Mono (code, date, metadata values), all self-hosted, via
+  three tokens in fonts.css — `--jl-font-display`, `--jl-font-ui`,
+  `--jl-font-mono` — and NO stylesheet names a font directly any more
+  (2026-09-03).** This supersedes every earlier "Segoe UI" and Lato
+  decision in this file (buttons.css v4's Segoe normalization, the
+  Metadata/performer label stacks, the Lato sidebar-performer list):
+  those were all choices between OS fallbacks — "Segoe UI" never
+  rendered as Segoe UI on Linux or iOS, Lato only where the OS had it —
+  and the user asked for something fresher. Chosen from a live type
+  board (Manrope / Figtree / Nunito Sans, each rendered as the real
+  sidebar and card); Nunito Sans was picked over the recommended
+  Manrope for the one-rounded-family coherence with Quicksand,
+  accepting a softer overall read. Both new faces are Google's variable
+  builds (one WOFF2 per subset covers every weight used), latin +
+  latin-ext, ~150 KB of base64 added to fonts.css. The vendored
+  base-theme.css's three Lato/Roboto Mono declarations were retargeted
+  to the tokens too, noted in its header. Verified with
+  `CSS.getPlatformFontsForNode` (the only check that shows what
+  painted) on body text, nav, mode bar, buttons, sidebar and card
+  performer names, titles, studio codes and metadata rows. Two things
+  the first verification pass caught: this instance's own **Custom CSS**
+  (Settings › Interface, served at `/css` — not a plugin) carries
+  `body { font-family: "Segoe UI", sans-serif !important }`, which beat
+  the plain `body` rule and left the nav bar, mode bar and detail labels
+  in Liberation Sans — fonts.css now uses `html body … !important` to
+  out-specify it; and stash's own `code, .code` rule out-specifies
+  inheritance, so the scene-card studio code needed the mono token named
+  on it explicitly (clean-cards.css). To change a face again: edit the
+  three tokens and the @font-face blocks in fonts.css, nothing else.
 - **The File card's head carries stash's file-count badge
   (`.jl-head-count`, via `syncHeadCount()` in scene-dashboard.js,
   2026-09-03).** Stash puts `<span class="badge badge-pill">N</span>`

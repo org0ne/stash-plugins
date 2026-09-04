@@ -425,7 +425,7 @@
      surrounding body text. Same fix applied to the grid view's own
      .stash-code-date .date in clean-cards.css — the two bars now match
      each other on font, not just on color/weight/height. */
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace !important;
+  font-family: var(--jl-font-mono) !important;
 }
 /* Scene badge block: one combined "Resolution | fps | Director" readout
    above a second line holding just the collection-colors badge slot,
@@ -468,7 +468,7 @@
   align-items: baseline;
   gap: 6px;
   flex-wrap: wrap;
-  font-family: "Segoe UI", sans-serif;
+  font-family: var(--jl-font-ui);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.3px;
@@ -488,13 +488,13 @@
    inherited color — plain text color, not native link blue/visited, and
    no underline until hover. */
 .jl-scene-director-label {
-  font-family: "Segoe UI", sans-serif;
+  font-family: var(--jl-font-ui);
   font-size: 12px;
   font-weight: 800;
   color: var(--jl-muted);
 }
 a.jl-scene-director-value {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-family: var(--jl-font-mono);
   font-size: 13px;
   font-weight: 400;
   color: var(--jl-text);
@@ -552,7 +552,7 @@ a.jl-scene-director-value:hover {
      resolves to a real Lato face (Lato-Medium, confirmed installed via
      fc-list), same weight as the scene-card grid's own version now;
      16px stays (the size step past parity wasn't part of this ask). */
-  font-family: Lato, Inter, Helvetica, Arial, sans-serif;
+  font-family: var(--jl-font-ui);
   font-size: 16px;
   font-weight: 500 !important;
   /* Requested live (2026-09-02): "reduce padding between the performer
@@ -853,7 +853,7 @@ a.jl-scene-director-value:hover {
   grid-template-columns: 84px 1fr;
   column-gap: 8px;
   color: var(--jl-text) !important;
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace !important;
+  font-family: var(--jl-font-mono) !important;
   font-size: 13px !important;
   font-weight: 400 !important;
   letter-spacing: normal !important;
@@ -896,14 +896,14 @@ a.jl-scene-director-value:hover {
   content: attr(data-jl-label) ":";
   grid-column: 1;
   color: var(--jl-muted);
-  font-family: "Segoe UI", sans-serif;
+  font-family: var(--jl-font-ui);
   font-size: 12px;
   font-weight: 800;
   line-height: 1.5;
 }
 .scene-tabs[data-jl-mode] [data-jl-pane="details"] p.pre {
   color: var(--jl-text);
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-family: var(--jl-font-mono);
   font-size: 13px;
 }
 
@@ -973,7 +973,7 @@ a.jl-scene-director-value:hover {
   border: none;
   border-bottom: 1px solid var(--jl-line);
   color: var(--jl-dim);
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-family: var(--jl-font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.14em;

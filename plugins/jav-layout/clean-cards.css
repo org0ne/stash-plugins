@@ -97,14 +97,19 @@
 .stash-code-date .code,
 .stash-code-date .date { color: var(--jl-accent) !important; line-height: 1.6 !important; }
 .stash-code-date .code { letter-spacing: 0.5px !important; }
-/* .code already renders monospace here (native, no rule of its own
-   needed) — .date never did, inheriting the card's own Lato instead.
-   Unified to match: Code and Date read as one font now, not two, same
-   fix applied to the scene detail page's own Code/Date bar
-   (scene-dashboard.css's .scene-subheader .date). */
+/* .code used to render monospace natively (stash's `code, .code` rule,
+   source-code-pro stack) — .date never did, inheriting the card's own
+   Lato instead. Both now name the plugin's mono token explicitly: the
+   native `.code` rule out-specifies inheritance, so without its own
+   declaration Code kept falling through to Liberation Mono after the
+   2026-09-03 font swap while Date already rendered JetBrains Mono. Same
+   pairing as the scene page's own Code/Date bar (scene-dashboard.css). */
+.stash-code-date .code,
+.stash-code-date .date {
+  font-family: var(--jl-font-mono) !important;
+}
 .stash-code-date .date {
   font-weight: 700 !important;
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace !important;
 }
 
 .stash-code-date .code-group {
@@ -232,7 +237,7 @@
    installed on this server via `fc-list` before picking it, same as
    every other font choice in this plugin — zero new dependency. */
 .scene-card .card-section-title .TruncatedText {
-  font-family: Quicksand, "Liberation Sans", Arial, sans-serif !important;
+  font-family: var(--jl-font-display) !important;
   font-weight: 600 !important;
   display: -webkit-box !important;
   -webkit-line-clamp: 3 !important;
@@ -358,7 +363,7 @@
 }
 
 .performer-card .card-section-title .TruncatedText {
-  font-family: Quicksand, "Liberation Sans", Arial, sans-serif !important;
+  font-family: var(--jl-font-display) !important;
   font-weight: 600 !important;
   display: -webkit-box !important;
   -webkit-line-clamp: 2 !important;
@@ -390,7 +395,7 @@
 
 .scene-header-container .scene-header .TruncatedText {
   color: var(--jl-heading) !important;
-  font-family: Quicksand, "Liberation Sans", Arial, sans-serif !important;
+  font-family: var(--jl-font-display) !important;
   font-weight: 600 !important;
   font-size: 1.6rem !important;
   line-height: 1.25 !important;
@@ -432,7 +437,7 @@
   font-size: 17px !important;
   line-height: 1.6 !important;
   text-align: center !important;
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace !important;
+  font-family: var(--jl-font-mono) !important;
 }
 
 /* Studio code copy button: owned entirely by the separate copy-buttons
@@ -516,7 +521,7 @@
 .scene-file-info dd {
   color: var(--jl-text) !important;
   font-size: 13px !important;
-  font-family: monospace !important;
+  font-family: var(--jl-font-mono) !important;
 }
 
 .play-history h5,

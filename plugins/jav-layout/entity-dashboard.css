@@ -324,7 +324,7 @@ body:has(.detail-header.edit) .jl-modes-row { display: none !important; }
   text-overflow: ellipsis !important;
   padding: 0 10px 0 0 !important;
   color: var(--jl-muted) !important;
-  font-family: "Segoe UI", sans-serif !important;
+  font-family: var(--jl-font-ui) !important;
   font-size: 12px !important;
   font-weight: 800 !important;
 }
@@ -334,7 +334,7 @@ body:has(.detail-header.edit) .jl-modes-row { display: none !important; }
   overflow: hidden !important;
   padding: 0 !important;
   color: var(--jl-text) !important;
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace !important;
+  font-family: var(--jl-font-mono) !important;
   font-size: 13px !important;
   font-weight: 400 !important;
 }
@@ -423,7 +423,7 @@ body:has(.detail-header.edit) .jl-modes-row { display: none !important; }
 .group-name,
 .tag-name {
   color: var(--jl-heading) !important;
-  font-family: Quicksand, "Liberation Sans", Arial, sans-serif !important;
+  font-family: var(--jl-font-display) !important;
   font-weight: 600 !important;
 }
 

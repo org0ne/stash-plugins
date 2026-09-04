@@ -49,6 +49,5 @@ settings:
       dropdown in Settings › Plugins; if you ever see the raw field
       instead, valid values are dracula (default), catppuccin-mocha,
       rose-pine-moon, kanagawa-wave, tokyo-night, moonlight, synthwave-84,
-      night-owl, aura-dark, andromeda, horizon-dark, sonokai and
-      poimandres.
+      aura-dark, horizon-dark, sonokai and monokai.
     type: STRING

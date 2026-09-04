@@ -323,7 +323,10 @@ html[data-jl-theme] {
 
 /* ============================================================
  *  MORE THEMES (2026-09-03) — nine added in one pass on request, the
- *  colorful end of the earlier review. Each has the same two blocks as
+ *  colorful end of the earlier review; Night Owl, Andromeda and
+ *  Poimandres were removed the same day as near-duplicates (of Tokyo
+ *  Night, Horizon/Dracula and Kanagawa respectively — measured by Lab
+ *  ΔE on page/card/accent, all within ~10) and Monokai added. Each has the same two blocks as
  *  the first three: --jl-* tokens, then base-theme.css's variables.
  *  Where a palette has no step for a role, the value is derived and
  *  marked "derived"; where a palette's accent is also its only red, the
@@ -456,46 +459,6 @@ html[data-jl-theme="synthwave-84"] {
   --vsc_text_field_border: #241b2f;
 }
 
-/* ---- Night Owl — https://github.com/sdras/night-owl-vscode-theme (MIT) ---- */
-html[data-jl-theme="night-owl"] {
-  --jl-accent:        #c792ea;   /* purple */
-  --jl-link:          #7fdbca;   /* cyan */
-  --jl-heading:       #dbc4f8;   /* derived tint of purple */
-  --jl-text:          #d6deeb;   /* fg */
-  --jl-muted:         #5f7e97;
-  --jl-dim:           #4b6479;
-  --jl-fg:            #d6deeb;
-  --jl-surface-base:  #01111d;
-  --jl-surface-deep:  #010e1a;
-  --jl-pill-base:     #01111d;
-  --jl-popup-text:    #d6deeb;
-  --jl-danger:        #ff5874;
-  --jl-on-danger:     #011627;
-  --jl-ok:            #addb67;
-  --background:       #011627;
-  --foreground:       #d6deeb;
-  --selection:        #0f2e4a;   /* derived — cards */
-  --comment:          #637777;
-  --red:              #ff5874;
-  --orange:           #f78c6c;
-  --yellow:           #ecc48d;
-  --green:            #addb67;
-  --purple:           #82aaff;   /* blue — the app's primary */
-  --cyan:             #7fdbca;
-  --pink:             #c792ea;
-  --superdark:        #010e1a;
-  --alt_bg:           #062033;   /* derived */
-  --intermediate_bg:  #0b2942;
-  --misty_white:      #b7c5d8;   /* derived */
-  --overcast_white:   #8fa5bc;   /* derived */
-  --gloomy_white:     #5f7e97;
-  --tag_background:   #1d3b53;
-  --disabled:         #4b6479;
-  --ansi_black:       #010e1a;
-  --vsc_text_field:   #010e1a;
-  --vsc_text_field_border: #01111d;
-}
-
 /* ---- Aura Dark — https://github.com/daltonmenezes/aura-theme (MIT) ---- */
 html[data-jl-theme="aura-dark"] {
   --jl-accent:        #f694ff;   /* pink */
@@ -534,47 +497,6 @@ html[data-jl-theme="aura-dark"] {
   --ansi_black:       #0d0c11;
   --vsc_text_field:   #0d0c11;
   --vsc_text_field_border: #110f16;
-}
-
-/* ---- Andromeda — https://github.com/EliverLara/Andromeda (MIT) ---- */
-html[data-jl-theme="andromeda"] {
-  --jl-accent:        #e86fc2;   /* derived — the palette's #ff00aa, reported live as too hot against
-                                    body text; pulled ~40% toward the foreground for a rose pink */
-  --jl-link:          #00e8c6;   /* cyan */
-  --jl-heading:       #dbb6f0;   /* derived tint of purple */
-  --jl-text:          #d5ced9;
-  --jl-muted:         #9a94a2;   /* derived */
-  --jl-dim:           #746f77;   /* comment */
-  --jl-fg:            #d5ced9;
-  --jl-surface-base:  #1e2024;
-  --jl-surface-deep:  #181a1f;
-  --jl-pill-base:     #1e2024;
-  --jl-popup-text:    #d5ced9;
-  --jl-danger:        #ee5d43;
-  --jl-on-danger:     #23262e;
-  --jl-ok:            #96e072;
-  --background:       #23262e;
-  --foreground:       #d5ced9;
-  --selection:        #363b48;   /* derived — cards */
-  --comment:          #746f77;
-  --red:              #ee5d43;
-  --orange:           #f39c12;
-  --yellow:           #ffe66d;
-  --green:            #96e072;
-  --purple:           #c74ded;
-  --cyan:             #00e8c6;
-  --pink:             #e86fc2;   /* same softened pink as --jl-accent above */
-  --superdark:        #1b1d23;
-  --alt_bg:           #2b2f39;   /* derived */
-  --intermediate_bg:  #31363f;   /* derived */
-  --misty_white:      #bfb8c4;   /* derived */
-  --overcast_white:   #9a94a2;
-  --gloomy_white:     #857f8c;   /* derived */
-  --tag_background:   #3f4553;   /* derived */
-  --disabled:         #746f77;
-  --ansi_black:       #1b1d23;
-  --vsc_text_field:   #1b1d23;
-  --vsc_text_field_border: #23262e;
 }
 
 /* ---- Horizon Dark — https://github.com/jolaleye/horizon-theme-vscode (MIT) ---- */
@@ -658,43 +580,48 @@ html[data-jl-theme="sonokai"] {
   --vsc_text_field_border: #232429;
 }
 
-/* ---- Poimandres — https://github.com/drcmda/poimandres-theme (MIT) ----
-   Known trade-off: pink3 is the accent AND the palette's error color. */
-html[data-jl-theme="poimandres"] {
-  --jl-accent:        #d0679d;   /* pink3 */
-  --jl-link:          #89ddff;   /* blue1 */
-  --jl-heading:       #fcc5e9;   /* pink2 */
-  --jl-text:          #e4f0fb;   /* white */
-  --jl-muted:         #a6accd;   /* fg */
-  --jl-dim:           #767c9d;   /* gray */
-  --jl-fg:            #e4f0fb;
-  --jl-surface-base:  #171922;
-  --jl-surface-deep:  #12141a;   /* derived */
-  --jl-pill-base:     #171922;
-  --jl-popup-text:    #e4f0fb;
-  --jl-danger:        #d0679d;
-  --jl-on-danger:     #1b1e28;
-  --jl-ok:            #5de4c7;   /* teal */
-  --background:       #1b1e28;
-  --foreground:       #e4f0fb;
-  --selection:        #303340;   /* focus — cards */
-  --comment:          #767c9d;
-  --red:              #d0679d;
-  --orange:           #fcc5e9;   /* no orange in the palette */
-  --yellow:           #fffac2;
-  --green:            #5de4c7;
-  --purple:           #add7ff;   /* blue2 — the app's primary */
-  --cyan:             #89ddff;
-  --pink:             #fcc5e9;
-  --superdark:        #171922;
-  --alt_bg:           #232634;   /* derived */
-  --intermediate_bg:  #2a2d3b;   /* derived */
-  --misty_white:      #c4cbe3;   /* derived */
-  --overcast_white:   #a6accd;
-  --gloomy_white:     #8a91b5;   /* derived */
-  --tag_background:   #3c4057;   /* derived */
-  --disabled:         #767c9d;
-  --ansi_black:       #171922;
-  --vsc_text_field:   #171922;
-  --vsc_text_field_border: #1b1e28;
+/* ---- Monokai — the 2006 classic by Wimer Hazenberg, as shipped in VS Code
+   (microsoft/vscode, extensions/theme-monokai, MIT). Not Monokai Pro,
+   which is a separate commercial product. The palette has one text
+   tone and one comment tone, both warm, so the muted step and the
+   neutral greys are derived. Its pink IS its red, so danger takes the
+   #f44747 VS Code's Monokai uses for errors to stay distinct from the
+   accent. ---- */
+html[data-jl-theme="monokai"] {
+  --jl-accent:        #f92672;   /* pink */
+  --jl-link:          #66d9ef;   /* cyan */
+  --jl-heading:       #cdb6ff;   /* derived tint of purple */
+  --jl-text:          #f8f8f2;
+  --jl-muted:         #9e9a8a;   /* derived — between fg and comment */
+  --jl-dim:           #75715e;   /* comment */
+  --jl-fg:            #f8f8f2;
+  --jl-surface-base:  #1e1f1c;
+  --jl-surface-deep:  #191a17;   /* derived */
+  --jl-pill-base:     #1e1f1c;
+  --jl-popup-text:    #f8f8f2;
+  --jl-danger:        #f44747;
+  --jl-on-danger:     #272822;
+  --jl-ok:            #a6e22e;   /* green */
+  --background:       #272822;
+  --foreground:       #f8f8f2;
+  --selection:        #3e3d32;   /* line highlight — cards */
+  --comment:          #75715e;
+  --red:              #f44747;
+  --orange:           #fd971f;
+  --yellow:           #e6db74;
+  --green:            #a6e22e;
+  --purple:           #ae81ff;
+  --cyan:             #66d9ef;
+  --pink:             #f92672;
+  --superdark:        #1e1f1c;
+  --alt_bg:           #2f302a;   /* derived */
+  --intermediate_bg:  #35362f;   /* derived */
+  --misty_white:      #d8d6cc;   /* derived */
+  --overcast_white:   #b5b2a5;   /* derived */
+  --gloomy_white:     #918d7f;   /* derived */
+  --tag_background:   #49483e;   /* selection */
+  --disabled:         #75715e;
+  --ansi_black:       #1e1f1c;
+  --vsc_text_field:   #1e1f1c;
+  --vsc_text_field_border: #272822;
 }

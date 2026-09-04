@@ -25,12 +25,25 @@ projects below — no files from them ship with this plugin.
 | Tokyo Night | https://github.com/tokyo-night/tokyo-night-vscode-theme | Copyright (c) 2018-present Enkia |
 | Moonlight | https://github.com/atomiks/moonlight-vscode-theme | Copyright (c) 2018 atomiks |
 | Synthwave '84 | https://github.com/robb0wen/synthwave-vscode | Copyright (c) 2019 Robb Owen |
-| Night Owl | https://github.com/sdras/night-owl-vscode-theme | Copyright (c) 2018 Sarah Drasner |
 | Aura Dark | https://github.com/daltonmenezes/aura-theme | Copyright (c) 2021 Dalton Menezes |
-| Andromeda | https://github.com/EliverLara/Andromeda | Copyright (c) 2017 Eliver Lara |
 | Horizon Dark | https://github.com/jolaleye/horizon-theme-vscode | Copyright (c) 2018 Jonathan Olaleye |
 | Sonokai | https://github.com/sainnhe/sonokai | Copyright (c) 2020 sainnhe |
-| Poimandres | https://github.com/drcmda/poimandres-theme | Copyright (c) 2023 drcmda |
+| Monokai | https://github.com/microsoft/vscode (extensions/theme-monokai) | Copyright (c) 2015 - present Microsoft Corporation; palette by Wimer Hazenberg (2006) |
+
+## Fonts (SIL Open Font License 1.1)
+
+`fonts.css` embeds these faces as base64 WOFF2, subset to latin and
+latin-ext, from Google Fonts' builds. Each is licensed under the SIL Open
+Font License 1.1 (https://openfontlicense.org), which permits bundling
+and redistribution with software; none declares a Reserved Font Name
+that this use would conflict with, and the fonts are not sold on their
+own.
+
+| Face | Project | Copyright |
+| --- | --- | --- |
+| Quicksand | https://github.com/andrew-paglinawan/QuicksandFamily | Copyright 2011 The Quicksand Project Authors |
+| Nunito Sans | https://github.com/googlefonts/NunitoSans | Copyright 2014 The Nunito Sans Project Authors |
+| JetBrains Mono | https://github.com/JetBrains/JetBrainsMono | Copyright 2020 The JetBrains Mono Project Authors |
 
 ## MIT License
 
