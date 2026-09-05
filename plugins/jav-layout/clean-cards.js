@@ -1,14 +1,14 @@
 // ==StashScript==
-// name Clean Cards – Dracula + Popover Reorder
-// version 5.6
-// description Pink code, cyan performers, dynamic title scaling, 3-line clamp, batched GraphQL, popover reorder, watched badge, performer hover popup
+// name Clean Cards – Dracula
+// version 5.7
+// description Pink code, cyan performers, dynamic title scaling, 3-line clamp, batched GraphQL, watched badge, performer hover popup
 // match *://*/scenes*
 // run-at document-idle
 // ==/StashScript==
 ;(() => {
   'use strict';
 
-  console.log('[CleanCards] v5.6 loaded — performer hover popup active');
+  console.log('[CleanCards] v5.7 loaded');
 
   /* ============================
    *  CSS
@@ -16,200 +16,16 @@
   /* CSS now lives in clean-cards.css, loaded by the plugin manifest. */
 
   /* ============================
-   *  Popover Reordering
+   *  Popover Reordering — REMOVED (2026-09-04)
+   *  The scene-card popover row's priority reorder, right-anchoring and
+   *  overflow clipping now live only in collection-colors.js, which had
+   *  carried an identical copy since it became independent. Running both
+   *  meant two boot observers, two live observers and two ResizeObserver
+   *  passes per bar, sharing the same `_stashRO`/`_stashPopoverSig`
+   *  properties and disagreeing on how to hide overflow (visibility here,
+   *  display there), so each pass partly undid the other. This file no
+   *  longer touches `.card-popovers` at all.
    * ============================ */
-
-  const POPOVER_ORDER_PARSED = [
-    ["performer-count"],
-    ["count-button", "increment-only"],
-    ["marker-count"],
-    ["tag-count"],
-    ["group-count", "tag-tooltip"],
-    ["organized"],
-    ["other-copies", "extra-scene-info"]
-  ];
-
-  function matchesClassSpec(el, classes) {
-    if (classes.length === 1) return el.classList.contains(classes[0]);
-    return classes.every(cls => el.classList.contains(cls));
-  }
-
-  /* Remove any anchor/overflow state a bar may have picked up and stop
-   * watching it. Used for .performer-card bars, which must never get the
-   * scene-card-only anchoring/clipping treatment below — see clearAnchorState
-   * call sites in reorderPopoverBar. */
-  function clearAnchorState(bar) {
-    if (bar._stashRO) { bar._stashRO.disconnect(); bar._stashRO = null; }
-    Array.from(bar.children).forEach(el => {
-      el.style.removeProperty('margin-left');
-      el.style.removeProperty('visibility');
-    });
-  }
-
-  /* Push native buttons right, then hide any that overflow the bar.
-   * Uses a single persistent ResizeObserver per bar so getBoundingClientRect()
-   * is always post-layout, AND keeps tracking the bar across future resizes
-   * (window resize, sidebar toggle, etc.) instead of measuring once and going stale.
-   *
-   * SCENE-CARD ONLY. Performer-card popover bars use CSS
-   * `justify-content: stretch` + `flex: 1 1 0` so their buttons split the bar
-   * evenly on their own — this function's `margin-left: auto` and
-   * overflow-driven `visibility: hidden` actively fight that layout (breaks
-   * centering, and can hide buttons during transient reflows like the
-   * scene-tabs/scene-player draw or a window resize). Callers must route
-   * performer-card bars to clearAnchorState() instead. */
-  function anchorButtonsRight(bar) {
-    const natives = Array.from(bar.children).filter(el => !el.classList.contains('stash-collection-pill'));
-
-    // Reset all state from any prior call
-    natives.forEach(el => {
-      el.style.removeProperty('margin-left');
-      el.style.removeProperty('visibility');
-    });
-    if (!natives[0]) return;
-    natives[0].style.setProperty('margin-left', 'auto', 'important');
-
-    const recompute = () => {
-      const barRight = bar.getBoundingClientRect().right;
-      let clipping = false;
-      for (const el of natives) {
-        if (clipping) {
-          el.style.setProperty('visibility', 'hidden', 'important');
-        } else {
-          const elRight = el.getBoundingClientRect().right;
-          if (elRight > barRight - 1) {
-            clipping = true;
-            el.style.setProperty('visibility', 'hidden', 'important');
-          }
-        }
-      }
-    };
-
-    // Reuse a single long-lived RO per bar instead of creating/disconnecting
-    // a new one on every call. The callback recomputes on every firing
-    // (not just the first), so resizes that happen after the initial
-    // layout (window resize, sidebar collapse, etc.) keep overflow state correct.
-    if (!bar._stashRO) {
-      bar._stashRO = new ResizeObserver(() => recompute());
-      bar._stashRO.observe(bar);
-    } else {
-      // Bar is already being watched — just recompute against current layout.
-      recompute();
-    }
-  }
-
-  function reorderPopoverBar(bar) {
-    if (!bar) return;
-
-    // SCENE CARDS ONLY. Every other card type — performer, studio, tag,
-    // gallery, image, group — keeps its native popover row untouched.
-    // Reordering by POPOVER_ORDER_PARSED is a scene-card concept (those
-    // class names only exist there), and the overflow clipping in
-    // anchorButtonsRight() is tuned for a scene card's wide icon set:
-    // on a studio card's short row it measured wrong and hid the whole
-    // row (reported live 2026-09-04, "suppressing the default popover
-    // buttons on studios"). The original exclusion covered performer
-    // cards only, because those were the only other cards anyone had
-    // looked at; the honest rule is the positive one. clearAnchorState()
-    // still runs so a bar this code touched under an earlier version is
-    // put back exactly as native left it.
-    if (!bar.closest('.scene-card')) { clearAnchorState(bar); return; }
-
-    const kids = Array.from(bar.children);
-    const reorderKids = kids.filter(el => !el.classList.contains('stash-collection-pill'));
-    if (!reorderKids.length) return;
-
-    reorderKids.forEach((el, i) => {
-      if (!el.dataset._stashPid) el.dataset._stashPid = String(i);
-    });
-    const sig = reorderKids.map(el => el.dataset._stashPid).join('|');
-    if (bar.dataset._stashPopoverSig === sig) return;
-
-    const used = new Set();
-    const out = [];
-
-    for (const classes of POPOVER_ORDER_PARSED) {
-      const found = reorderKids.find(el => !used.has(el) && matchesClassSpec(el, classes));
-      if (found) { used.add(found); out.push(found); }
-    }
-    for (const el of reorderKids) if (!used.has(el)) out.push(el);
-
-    const changed = out.length === reorderKids.length && out.some((el, i) => el !== reorderKids[i]);
-    if (!changed) {
-      bar.dataset._stashPopoverSig = sig;
-      anchorButtonsRight(bar);
-      return;
-    }
-
-    const frag = document.createDocumentFragment();
-    out.forEach(el => frag.appendChild(el));
-    bar.appendChild(frag);
-
-    bar.dataset._stashPopoverSig = out.map(el => el.dataset._stashPid).join('|');
-    anchorButtonsRight(bar);
-  }
-
-  function reorderPopoversInCard(card) {
-    const bar = card?.querySelector?.('.card-popovers.btn-group');
-    if (!bar) return;
-    requestAnimationFrame(() => reorderPopoverBar(bar));
-  }
-
-  const popoverObserver = new MutationObserver(muts => {
-    const bars = new Set();
-    for (const m of muts) {
-      const t = m.target;
-      if (!(t instanceof Element)) continue;
-      const bar = t.matches('.card-popovers.btn-group') ? t : t.closest?.('.card-popovers.btn-group');
-      if (bar) bars.add(bar);
-    }
-    if (!bars.size) return;
-    requestAnimationFrame(() => bars.forEach(reorderPopoverBar));
-  });
-
-  let bootPending = [];
-  let bootScheduled = false;
-  const popoverBootObserver = new MutationObserver(muts => {
-    for (const m of muts)
-      for (const node of m.addedNodes)
-        if (node instanceof Element) bootPending.push(node);
-
-    // Schedule exactly one microtask per batch of pushed nodes, regardless of
-    // how many nodes arrived in this callback invocation. The previous
-    // `bootPending.length === 1` check only fired when exactly one node was
-    // added in a single MutationObserver callback — but React commonly mounts
-    // several `.card-popovers.btn-group` elements at once (e.g. a scene's
-    // performer list), so that batch landed with length > 1 and the check
-    // silently failed, leaving those bars un-observed and un-reordered forever.
-    if (bootPending.length && !bootScheduled) {
-      bootScheduled = true;
-      queueMicrotask(() => {
-        bootScheduled = false;
-        const nodes = bootPending.splice(0);
-        for (const node of nodes) {
-          // Same scene-card-only scope as reorderPopoverBar(): bars on
-          // other card types are never registered with the live observer,
-          // so they cost nothing and can never be touched by a later pass.
-          if (node.matches?.('.scene-card .card-popovers.btn-group')) {
-            popoverObserver.observe(node, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-            reorderPopoverBar(node);
-          } else {
-            node.querySelectorAll?.('.scene-card .card-popovers.btn-group').forEach(bar => {
-              popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-              reorderPopoverBar(bar);
-            });
-          }
-        }
-      });
-    }
-  });
-
-  popoverBootObserver.observe(document.body, { childList: true, subtree: true });
-
-  document.querySelectorAll('.scene-card .card-popovers.btn-group').forEach(bar => {
-    popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-    reorderPopoverBar(bar);
-  });
 
   /* ============================
    *  STUDIO CODE → SUBHEADER (Scene Detail Page)
@@ -322,9 +138,31 @@
     // was wasted reads, not a correctness bug, but the guard collapses a
     // burst to one pass per frame for free, the same win it gives
     // scene-dashboard.js.
+    /* Filtered like scene-dashboard.js's body observer (its touchesSidebar,
+       2026-09-04 review): all four functions read only the scene page's
+       sidebar, and the video player beside it mutates ~70×/s during
+       playback — before this every one of those batches re-ran the four
+       document-wide queries. A batch qualifies only on a scene page, and
+       only if a record lands inside .scene-tabs, adds a node that is or
+       contains one, or there is no .scene-tabs yet (page mounting). */
+    const SCENE_PAGE_RE = /^\/scenes\/\d+/;
+    function touchesSceneDetails(muts) {
+      if (!SCENE_PAGE_RE.test(location.pathname)) return false;
+      const root = document.querySelector('.scene-tabs');
+      if (!root) return true;
+      for (const m of muts) {
+        if (root.contains(m.target)) return true;
+        for (const n of m.addedNodes) {
+          if (n.nodeType !== 1) continue;
+          if (n === root || n.contains(root) || n.querySelector('.scene-tabs')) return true;
+        }
+      }
+      return false;
+    }
     let studioCodeScheduled = false;
-    const studioCodeObserver = new MutationObserver(() => {
+    const studioCodeObserver = new MutationObserver(muts => {
         if (studioCodeScheduled) return;
+        if (!touchesSceneDetails(muts)) return;
         studioCodeScheduled = true;
         requestAnimationFrame(() => {
           studioCodeScheduled = false;
@@ -379,6 +217,12 @@
   let highPriorityQueue = new Set();
   let lowPriorityQueue = new Set();
   const waitingCards = new Map();
+  // Ids sent in a batch that hasn't resolved yet. A second request for one
+  // of these (a card scrolling into view mid-flight, or collection-colors
+  // asking for the same scene through window.JLSceneData.path) must only
+  // add its callback — re-queueing it fetched the scene twice, and an id
+  // sitting in both queues at once was even aliased twice in one query.
+  const inFlight = new Set();
   const BATCH_SIZE = 100;
   let batchTimeout = null;
 
@@ -387,7 +231,9 @@
     if (sceneCache.has(sceneId)) { callback(sceneCacheGet(sceneId)); return; }
     if (!waitingCards.has(sceneId)) waitingCards.set(sceneId, []);
     waitingCards.get(sceneId).push(callback);
-    (isVisible ? highPriorityQueue : lowPriorityQueue).add(sceneId);
+    if (inFlight.has(sceneId)) return;
+    if (isVisible) { lowPriorityQueue.delete(sceneId); highPriorityQueue.add(sceneId); }
+    else if (!highPriorityQueue.has(sceneId)) lowPriorityQueue.add(sceneId);
     if (!batchTimeout) batchTimeout = setTimeout(runBatchQuery, 50);
   }
 
@@ -401,6 +247,7 @@
     }
 
     if (batch.length === 0) return;
+    for (const id of batch) inFlight.add(id);
 
     const query = `{
       ${batch.map(id => `
@@ -433,15 +280,18 @@
       for (const id of batch) {
         if (!sceneCache.has(id) && waitingCards.has(id)) { waitingCards.get(id).forEach(cb => cb(null)); waitingCards.delete(id); }
       }
+      for (const id of batch) inFlight.delete(id);
     } catch (err) {
       console.error("CleanCards Batch Error:", err);
       if (!retryIds) {
+        // Ids stay in flight across the retry so nothing re-queues them.
         console.warn(`CleanCards: retrying ${batch.length} scenes in 2s`);
         setTimeout(() => runBatchQuery(batch), 2000);
       } else {
         for (const id of batch) {
           if (waitingCards.has(id)) { waitingCards.get(id).forEach(cb => cb(null)); waitingCards.delete(id); }
         }
+        for (const id of batch) inFlight.delete(id);
       }
     }
 
@@ -668,13 +518,12 @@
       }
     }
 
-    // Collection pill: owned entirely by the separate collection-colors
-    // plugin (auto-discovers Library paths instead of a hardcoded map),
-    // including its own popover-priority/overflow-hide handling — this
-    // plugin is deliberately independent of that one and knows nothing
-    // about it beyond excluding its pill by class name (see
-    // anchorButtonsRight()/reorderPopoverBar() above) so this file's own
-    // native-button reordering doesn't touch or reorder it.
+    // Collection pill and the popover row's reorder/overflow handling are
+    // owned entirely by the separate collection-colors plugin; this file
+    // no longer touches `.card-popovers` (see the note where the reorder
+    // code used to be, above the studio-code section). The only link is
+    // the shared scene-path lookup exposed on window.JLSceneData below,
+    // which that plugin uses when present instead of its own fetch.
 
     // ── Watched flag ─────────────────────────────────────────────
     // Until 2026-09-04 this also drew a `.watched-badge` check icon over
@@ -769,7 +618,18 @@
 
   // Exposed for scene-dashboard.js (loads after this file), same pattern as
   // window.JLPerformerPopup: one definition of watched-ness, one fetch.
-  window.JLSceneData = { isWatched: isSceneWatched, fetch: fetchSceneWatchData, checkIcon: makeWatchedCheckIcon };
+  /* Shared scene-path lookup for other plugins (collection-colors): the
+   * card grid's batched query above already selects `files { path }` for
+   * every card, so a second plugin fetching the same field for the same
+   * ids was a duplicate request stream per page of cards (2026-09-04).
+   * Routed through requestSceneData so it shares the batch, the LRU cache
+   * and the in-flight callback list; `isVisible` is true because callers
+   * only ask for a card that is already on screen. Resolves null when the
+   * scene has no file or the fetch failed. */
+  function requestScenePath(sceneId, callback) {
+    requestSceneData(String(sceneId), scene => callback(scene?.files?.[0]?.path ?? null), true);
+  }
+  window.JLSceneData = { isWatched: isSceneWatched, fetch: fetchSceneWatchData, checkIcon: makeWatchedCheckIcon, path: requestScenePath };
 
   /* ============================
    *  CLIPBOARD
@@ -921,7 +781,6 @@
 
     visibilityObserver.observe(card);
     requestSceneData(sceneId, scene => applySceneDataToCard(card, scene), false);
-    reorderPopoversInCard(card);
 
     card.dataset.stashClean = "true";
   }

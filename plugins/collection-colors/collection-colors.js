@@ -177,9 +177,12 @@
 
   /* ============================
    *  SCENE PATH LOOKUP
-   *  Own lightweight batched-query mechanism, independent of any other
-   *  plugin — only needs `files { path }`, not the full card-enhancement
-   *  data clean-cards.js's own batcher fetches.
+   *  When JAV Layout is installed its clean-cards.js already fetches
+   *  `files { path }` for every scene card (batched, LRU-cached) and
+   *  exposes that lookup as window.JLSceneData.path — requestScenePath()
+   *  uses it when present, so the two plugins no longer issue two request
+   *  streams for the same scenes (2026-09-04). The batcher below is the
+   *  fallback that keeps this plugin working on its own.
    *
    *  Briefly extended to also carry `director` (for the header pill's
    *  Director row) — moved back out once that row itself moved to
@@ -193,6 +196,10 @@
   const BATCH_SIZE = 20;
 
   function requestScenePath(sceneId, callback) {
+    // Checked per call, not at load: plugin scripts load in no guaranteed
+    // order, and this is only ever called once a card is on screen.
+    const shared = window.JLSceneData && window.JLSceneData.path;
+    if (shared) { shared(sceneId, callback); return; }
     if (pathCache.has(sceneId)) { callback(pathCache.get(sceneId)); return; }
     if (!waiting.has(sceneId)) waiting.set(sceneId, []);
     waiting.get(sceneId).push(callback);
@@ -979,18 +986,43 @@
     buildSettingsPanel(rawSetting, container).catch(e => {
       console.error('[CollectionColors] settings panel', e);
       // Clear the claim on failure (e.g. loadCollections' GraphQL call
-      // rejects) so a later observer tick gets a real retry instead of
-      // finding 'pending' forever and silently never trying again.
+      // rejects) so a retry is possible instead of finding 'pending'
+      // forever. The body observer below is filtered now, so the retry
+      // can't count on an unrelated tick — schedule it explicitly.
       delete container.dataset.collectionColorsPanel;
+      setTimeout(trySetupSettingsPanel, 2000);
     });
   }
 
   /* ============================
    *  MAIN
    * ============================ */
+  /* Relevance filter (2026-09-04 review). This observer is body-wide and
+     the three passes below are document-wide queries, so before this
+     every mutation batch anywhere — the scene page's video player alone
+     emits ~70/s during playback — ran all three at up to 60 passes a
+     second. Each pass has a concrete trigger: scanCards() needs a new
+     .scene-card in the batch; trySetupHeaderPill() needs the badge slot
+     to appear or the URL to change (scene→scene SPA navigation keeps the
+     slot element and only changes which id it was filled for);
+     trySetupSettingsPanel() needs its own setting row to mount. A batch
+     that adds none of those is dropped before a frame is scheduled. */
+  const INTEREST_SELECTOR = `.scene-card, .jl-scene-badge-slot, #${SETTING_ID}`;
+  let lastPathname = location.pathname;
+  function isRelevant(muts) {
+    if (location.pathname !== lastPathname) { lastPathname = location.pathname; return true; }
+    for (const m of muts) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        if (n.matches(INTEREST_SELECTOR) || n.querySelector(INTEREST_SELECTOR)) return true;
+      }
+    }
+    return false;
+  }
   let queued = false;
-  const observer = new MutationObserver(() => {
+  const observer = new MutationObserver(muts => {
     if (queued) return;
+    if (!isRelevant(muts)) return;
     queued = true;
     requestAnimationFrame(() => {
       queued = false;

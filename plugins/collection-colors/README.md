@@ -45,11 +45,15 @@ renaming a file needs another Reload Plugins.
 
 ## How it works
 
-`collection-colors.js` batches a `findScene(id) { files { path } }` query
-per visible card (an `IntersectionObserver` avoids querying cards that
-are never scrolled into view), matches each scene's file path against the
-longest configured Library path it starts with, and renders a pill in
-that collection's saved-or-default color.
+`collection-colors.js` looks up each visible card's file path (an
+`IntersectionObserver` avoids querying cards that are never scrolled into
+view), matches it against the longest configured Library path it starts
+with, and renders a pill in that collection's saved-or-default color. When
+the JAV Layout plugin is installed the lookup goes through its
+`window.JLSceneData.path`, which already fetches `files { path }` for
+every card in one batched query, so the two plugins share one request per
+scene; on its own, this plugin batches a `findScene(id) { files { path } }`
+query itself.
 
 Colors are stored as one JSON object (path → hex) in the plugin's own
 `collectionColors` setting, written through stash's `configurePlugin`

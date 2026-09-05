@@ -44,7 +44,7 @@ breaks loudly.
 | `base-theme.css` | **The whole-app palette** — dracula-for-stash's `dracula-theme.css` (MIT), vendored 2026-09-02 with its Google Fonts `@import` removed and its translucent `--<pct>pct_*` variables derived via `color-mix()`; otherwise byte-for-byte upstream, so an upstream diff still applies. Makes the separately-installed `dracula-theme` plugin unnecessary (keep it disabled). Loads second, exactly where that plugin used to sit in the cascade. See the Theming section below. |
 | `themes.css` / `theme.js` | **The color token contract.** Every `--jl-*` color token, with Dracula as the bare `:root` default, plus per selectable theme one `html[data-jl-theme="…"]` block for the `--jl-*` tokens and one for `base-theme.css`'s own variables; `theme.js` stamps that attribute from the plugin's `theme` setting and replaces the setting's free-text field in Settings › Plugins with a dropdown. Loads third (CSS) / first (JS). No other stylesheet contains a color literal any more — see the Theming section below. |
 | `THIRD-PARTY-NOTICES.md` | MIT attribution for the palettes the themes reproduce. Add a row when adding a theme. |
-| `clean-cards.css` / `clean-cards.js` | The pre-existing `customJavaScript.js` v5.4, split into a stylesheet and the script. Scene cards, performer hover popup, studio-code relocation, popover reordering. Performer name/disambiguation and studio-code copy buttons moved out to the standalone `copy-buttons` plugin (2026-08-31); title cleanup moved out to the standalone `title-scrubber` plugin (2026-09-02) — see the Settled decisions entries near the bottom. |
+| `clean-cards.css` / `clean-cards.js` | The pre-existing `customJavaScript.js` v5.4, split into a stylesheet and the script. Scene cards, performer hover popup, studio-code relocation. Performer name/disambiguation and studio-code copy buttons moved out to the standalone `copy-buttons` plugin (2026-08-31); title cleanup moved out to the standalone `title-scrubber` plugin (2026-09-02); popover-row reordering removed in favour of collection-colors' identical copy (2026-09-04) — see the Settled decisions entries near the bottom. Also exposes `window.JLSceneData.path`, the batched scene-path lookup collection-colors uses instead of its own fetch. |
 | `chips.css` | Every `.tag-item` chip (sidebar Tags card, card tag/marker/performer popovers, entity-page tag lists) colored by role: tags and performers in `--jl-link`, marker chips (told apart by their `?t=` timestamp link) in `--jl-accent`, all `color-mix()` washes off the tokens. CSS only. See Settled decisions. |
 | `buttons.css` | Site-wide native-Bootstrap button restyle (`.btn-primary`/`.btn-secondary`/`.btn-danger`/etc.) — CSS only, no JS, no page-specific DOM assumptions. See below. |
 | `scene-dashboard.css` / `scene-dashboard.js` | The scene-page dashboard. This is the new code. |
@@ -1848,6 +1848,50 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
   look at. Verified on studios, performers, tags and galleries (native
   rows intact, no inline styles, no observers) and scenes (still
   reordered, anchored, pill present).
+- **clean-cards.js's copy of the popover reordering is gone; collection-
+  colors owns it outright (2026-09-04 performance review).** Both files
+  had the same boot observer, per-bar live observer and per-bar
+  ResizeObserver, stored on the same `bar._stashRO` and keyed by the same
+  `_stashPopoverSig`/`_stashPid`, and they disagreed on how to hide
+  overflow (visibility here, display there), so every bar got at least
+  four passes at mount and each pass partly undid the other. The section
+  is replaced by a note at the same spot in clean-cards.js. If
+  collection-colors is not installed, scene-card popover rows are now
+  native — accepted, since this install always has both.
+- **The three unfiltered body-wide observers got relevance filters
+  (2026-09-04).** scene-dashboard.js's `touchesSidebar` was the model:
+  clean-cards.js's studio-code/original-title/date pass now runs only on
+  a `/scenes/<id>` route and only when a record lands inside (or mounts)
+  `.scene-tabs`; entity-dashboard.js only on an entity route and only
+  when a record touches (or mounts) the entity's `.nav-tabs` or the URL
+  changed, since the mode bar reads nothing else. **That filter exposed a
+  dependency the old firehose had been hiding**: same-type SPA navigation
+  (performer 8 → performer 476, confirmed live) reuses the nav element
+  and React rewrites its count badges' text nodes in place, which a
+  childList observer never sees — the first filtered version left the
+  second performer wearing the first one's counts. The per-nav observer
+  in `watchNav()` now watches childList + characterData as well as the
+  class attribute and calls the signature-guarded `buildModeBar()`, so
+  count changes rebuild the bar directly (it writes only to the nav's
+  sibling row, so it cannot re-trigger itself). Verified: fresh-load
+  counts match the native badges on both performers, and the
+  navigated-to page shows its own; collection-colors.js only when a batch
+  adds a `.scene-card`, the `.jl-scene-badge-slot`, its own setting row,
+  or the pathname changed (scene→scene SPA navigation keeps the slot
+  element, so the URL is the only signal). Its settings-panel failure
+  path schedules its own retry now instead of relying on an unrelated
+  tick. Before this the video player's ~70 mutations/s during playback
+  drove all three at up to 60 passes a second for nothing.
+- **One scene-path fetch per card, not two (2026-09-04).** clean-cards.js
+  already batched `files { path }` for every card; collection-colors
+  fetched the same field again for the same ids. clean-cards now exposes
+  `window.JLSceneData.path(sceneId, cb)` over the same batcher, cache and
+  callback list, and collection-colors uses it when present (checked per
+  call — plugin load order is not guaranteed — with its own batcher as
+  the standalone fallback). The batcher gained an in-flight set so a
+  second request for an id already sent only adds its callback; before,
+  it re-queued the id, and an id in both priority queues was aliased
+  twice in one query.
 - **Type is Quicksand (display) + Nunito Sans (UI and body) +
   JetBrains Mono (code, date, metadata values), all self-hosted, via
   three tokens in fonts.css — `--jl-font-display`, `--jl-font-ui`,

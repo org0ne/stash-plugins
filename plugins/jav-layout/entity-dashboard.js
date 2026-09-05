@@ -139,10 +139,25 @@
   function watchNav(nav) {
     if (watchedNavs.has(nav)) return;
     watchedNavs.add(nav);
-    new MutationObserver(() => syncModeBar(nav)).observe(nav, {
+    /* childList + characterData as well as the class attribute (2026-09-04):
+       SPA navigation to another entity of the same type REUSES this nav
+       element — confirmed live, performer 8 → performer 476 — and React
+       updates the count badges by rewriting their text nodes in place,
+       which a childList-only observer never sees. Before the body observer
+       below was filtered, unrelated grid mutations happened to re-run
+       buildModeBar() and pick the new counts up; now this observer has to
+       see them itself. buildModeBar() is signature-guarded, so a class
+       flip that changes no count costs one string compare, and it writes
+       only outside the nav (the row is the nav's sibling), so it cannot
+       re-trigger itself. */
+    new MutationObserver(() => {
+      if (buildModeBar(nav)) syncModeBar(nav);
+    }).observe(nav, {
       subtree: true,
       attributes: true,
       attributeFilter: ['class'],
+      childList: true,
+      characterData: true,
     });
   }
 
@@ -167,9 +182,40 @@
     }
   }
 
+  /* Relevance filter (2026-09-04 review). run() only reads the entity
+     page's own .nav-tabs (keys, labels, count badges — the active class is
+     the nav observer's job), so a batch matters only on an entity route,
+     and only if a record's target is inside that nav, or it adds a node
+     that is or contains a .nav-tabs (page mount, or SPA navigation to
+     another entity of the same type, which produces a fresh nav), or no
+     nav exists yet. Everything else — the relations grid loading and
+     scrolling under the tabs, which used to re-run readTabs()'s per-tab
+     cloneNode on every frame — is dropped. */
+  const ENTITY_ROUTE_RE = /^\/(performers|studios|groups|tags)\/\d+/;
+  const NAV_SELECTOR = ENTITIES.map(e => `${e.tabsRoot} .nav-tabs`).join(', ');
+  let lastPathname = location.pathname;
+  function isRelevant(muts) {
+    if (!ENTITY_ROUTE_RE.test(location.pathname)) return false;
+    // A URL change is always worth one run: same-type SPA navigation keeps
+    // the nav element (its in-place count updates are the per-nav
+    // observer's job, see watchNav), but a fresh run here is the cheap
+    // way to be sure nothing about the new page is missed.
+    if (location.pathname !== lastPathname) { lastPathname = location.pathname; return true; }
+    const nav = document.querySelector(NAV_SELECTOR);
+    if (!nav) return true;
+    for (const m of muts) {
+      if (nav.contains(m.target)) return true;
+      for (const n of m.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        if (n.contains(nav) || n.matches('.nav-tabs') || n.querySelector('.nav-tabs')) return true;
+      }
+    }
+    return false;
+  }
   let queued = false;
-  const observer = new MutationObserver(() => {
+  const observer = new MutationObserver(muts => {
     if (queued) return;
+    if (!isRelevant(muts)) return;
     queued = true;
     requestAnimationFrame(() => {
       queued = false;

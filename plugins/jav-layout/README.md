@@ -22,7 +22,7 @@ internally (every `dl-`/`data-dl-`/`--dl-` reference became `jl-`/
 | `fonts.css` | Self-hosted type, embedded as base64 — no external font request: Quicksand (titles), Nunito Sans (UI and body text), JetBrains Mono (studio codes, dates, metadata). Three `--jl-font-*` tokens every stylesheet uses. |
 | `base-theme.css` | The whole-app palette — dracula-for-stash's stylesheet, vendored (MIT), every color as a CSS variable. Replaces the separately-installed `dracula-theme` plugin. |
 | `themes.css` / `theme.js` | Every color the plugin paints, as `--jl-*` tokens, plus each selectable theme's overrides of both those tokens and `base-theme.css`'s variables. `theme.js` applies the **Color theme** setting and adds its dropdown to Settings › Plugins. See Themes below. |
-| `clean-cards.css` / `.js` | Scene card restyle (pink code, cyan performers, dynamic title scaling), studio-code relocation, popover reordering, watched badge, performer hover popup. |
+| `clean-cards.css` / `.js` | Scene card restyle (pink code, cyan performers, dynamic title scaling), studio-code relocation, watched badge, performer hover popup. Popover-row reordering lives in the collection-colors plugin. |
 | `buttons.css` | Site-wide native-button restyle — every `.btn-primary`/`.btn-secondary`/`.btn-danger` in the app, not just this plugin's own UI. |
 | `scene-dashboard.css` / `.js` | The scene page's own Option C dashboard. |
 | `chips.css` | Tag chips in the link color, marker chips in the accent, everywhere stash draws them (sidebar, card popovers, entity pages). |
