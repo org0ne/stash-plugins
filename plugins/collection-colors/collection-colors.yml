@@ -18,10 +18,7 @@ settings:
     description: >
       Comma-separated priority order for the native icons on the right
       side of the scene-card popover row (rating/tag/performer counts,
-      organized flag, etc) — the collection pill itself is a fixed left
-      anchor and isn't part of this list. On a card too narrow to show
-      every icon, the lowest-priority ones are hidden first rather than
-      wrapping to a second line. Known keys: performer-count, count-button,
+      organized flag, etc) Known keys: performer-count, count-button,
       marker-count, tag-count, group-count, organized, other-copies.
       Unknown keys are ignored; omitted known keys still appear, just
       last, after every key you listed. Default:
@@ -30,10 +27,9 @@ settings:
   pillStyle:
     displayName: Collection pill style
     description: >
-      How the collection pill is drawn: "outline" (default) leaves the
-      pill transparent with just a colored border and text, so it can
-      never be mistaken for a themed action button. "solid" instead
-      fills the pill with the collection's color and picks black or
+      "Default" leaves the pill transparent with just a colored border 
+      and text, so it can never be mistaken for a themed action button.
+      "Solid" fills the pill with the collection's color and picks black or
       white text automatically for contrast, matching stash's own
       native tag chips. Any other value falls back to outline.
     type: STRING
