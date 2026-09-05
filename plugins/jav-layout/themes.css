@@ -60,6 +60,10 @@
 
   /* ---- DERIVED (do not set in theme blocks) ---- */
   --jl-fg-dim:            color-mix(in srgb, var(--jl-fg) 72%, transparent);
+  /* A faint lift off whatever is behind it — secondary buttons' resting
+     fill (buttons.css tier 1). Foreground-based on purpose: a surface
+     token would match the settings cards it has to stand out from. */
+  --jl-fg-wash:           color-mix(in srgb, var(--jl-fg) 6%, transparent);
   --jl-surface:           color-mix(in srgb, var(--jl-surface-base) 95%, transparent);
   --jl-surface-strong:    color-mix(in srgb, var(--jl-surface-base) 97%, transparent);
   --jl-well:              color-mix(in srgb, var(--jl-surface-base) 42%, transparent);

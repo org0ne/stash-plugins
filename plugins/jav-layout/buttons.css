@@ -203,10 +203,22 @@
    Hover/active tint the border/background pink (the one identity color)
    while text just brightens along the same neutral, never turning pink
    itself — this is the one lower-emphasis control that still points at
-   primary's color without wearing it outright. */
+   primary's color without wearing it outright.
+
+   Resting fill is `--jl-fg-wash`, not transparent (2026-09-05). Fully
+   transparent with a 28 %-alpha border worked on the dark page ground
+   but vanished on Settings' lighter cards — reported from Settings ›
+   Tasks, where Scan / Selective scan / Auto tag… sat on a card of the
+   same color as the button's own (non-)fill and read as loose text. A
+   6 % foreground wash is a lift relative to whatever is behind it, so
+   it reads as a button on the page, on a card and on the pinned bars'
+   deep surface alike; the border steps up to `--jl-line-strong` for
+   the same reason. Still well short of primary's 16 % accent wash.
+   The toolbar and pagination pills set their own transparent fill
+   (§4c/§4d) and are unaffected. */
 .btn-secondary:not(.minimal) {
-  background-color: transparent;
-  border-color: var(--jl-line);
+  background-color: var(--jl-fg-wash);
+  border-color: var(--jl-line-strong);
   color: var(--jl-fg-dim);
 }
 .btn-secondary:not(.minimal):hover {

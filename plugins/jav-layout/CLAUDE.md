@@ -703,7 +703,21 @@ don't silently revert to v1:**
    - **Secondary** stays neutral/ghost at rest, but its hover wash now
      tints pink (`--jl-pink-wash-soft`) instead of a neutral tint, so even
      a lower-emphasis button's hover state points at the one identity
-     color, without secondary ever wearing it at rest.
+     color, without secondary ever wearing it at rest. **"Ghost" no
+     longer means fully transparent (2026-09-05):** reported from
+     Settings › Tasks that Scan / Selective scan / Auto tag… were
+     invisible as buttons — a transparent fill and a 28 %-alpha border on
+     a card the same color read as loose text. Rest is now
+     `--jl-fg-wash` (a new derived token in themes.css: 6 % of the
+     foreground over transparent) with `--jl-line-strong` for the border.
+     Foreground-based rather than a surface token on purpose: it is a
+     lift relative to whatever is behind the button, so it works on the
+     page ground, on Settings' lighter cards and on the pinned bars' deep
+     surface without per-context rules, and every theme derives it from
+     its own `--jl-fg`. Verified live: Tasks buttons computed to the 6 %
+     wash; the viewing pill's `.minimal` items (performer page) and the
+     list toolbar/pagination pills (which set their own transparent fill
+     in §4c/§4d) are unchanged.
 
    `.btn-success` is folded into the same treatment as `.btn-primary`: stash
    itself isn't consistent about which class a page's own Save button uses
