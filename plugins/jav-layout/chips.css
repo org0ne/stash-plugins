@@ -1,0 +1,57 @@
+/* ============================================================
+ *  chips.css — tag / marker / performer chips, colored by role
+ *
+ *  Every chip in stash is the same `.tag-item.badge.badge-secondary`
+ *  span: the scene sidebar's Tags card, the scene card's tag popover, its
+ *  marker popover ("title - m:ss" chips), the performer popover's name
+ *  chip, and tag lists on the other entity pages. Natively they are one
+ *  flat gray (`--tag_background`). Chosen live 2026-09-04 from three
+ *  rendered options ("Option B"): tags in the link cyan, markers in the
+ *  pink accent, performers in the link cyan — so every chip that leads
+ *  out of a scene by tag or performer is one color, and a time-point
+ *  marker reads as part of the studio-code/date accent family.
+ *
+ *  Recipe is the button wash from buttons.css: 14% tint fill, 34%
+ *  border, full-strength text, all `color-mix()` off a theme token so the
+ *  other themes follow with no per-theme values. No `!important`: the
+ *  base theme's `.tag-item` and Bootstrap's `.badge-secondary` are the
+ *  same specificity and this file loads after both (manifest order).
+ *
+ *  Marker chips are told apart from tag chips by their link — a marker
+ *  chip links to `/scenes/<id>?t=<seconds>`; a tag chip links to a
+ *  filtered list. The popover is portaled to <body>, so nothing about
+ *  the trigger button is available to scope on; the link is the only
+ *  distinguishing markup. `:has()` is fine here — the same selector
+ *  family already gates the mode bar in entity-dashboard.css.
+ * ============================================================ */
+
+.tag-item {
+  background: color-mix(in srgb, var(--jl-link) 14%, transparent);
+  color: var(--jl-link);
+  border: 1px solid color-mix(in srgb, var(--jl-link) 34%, transparent);
+}
+.tag-item > a,
+.tag-item .btn,
+.tag-item .tag-icon,
+.tag-item .icon-wrapper {
+  color: var(--jl-link);
+}
+.tag-item:hover {
+  background: color-mix(in srgb, var(--jl-link) 22%, transparent);
+  border-color: color-mix(in srgb, var(--jl-link) 50%, transparent);
+}
+
+/* Marker chips: accent. Every property the base rule sets is restated,
+   per the partial-override lesson in buttons.css. */
+.tag-item:has(> a[href*="?t="]) {
+  background: color-mix(in srgb, var(--jl-accent) 14%, transparent);
+  color: var(--jl-accent);
+  border-color: color-mix(in srgb, var(--jl-accent) 34%, transparent);
+}
+.tag-item:has(> a[href*="?t="]) > a {
+  color: var(--jl-accent);
+}
+.tag-item:has(> a[href*="?t="]):hover {
+  background: color-mix(in srgb, var(--jl-accent) 22%, transparent);
+  border-color: color-mix(in srgb, var(--jl-accent) 50%, transparent);
+}

@@ -45,6 +45,7 @@ breaks loudly.
 | `themes.css` / `theme.js` | **The color token contract.** Every `--jl-*` color token, with Dracula as the bare `:root` default, plus per selectable theme one `html[data-jl-theme="…"]` block for the `--jl-*` tokens and one for `base-theme.css`'s own variables; `theme.js` stamps that attribute from the plugin's `theme` setting and replaces the setting's free-text field in Settings › Plugins with a dropdown. Loads third (CSS) / first (JS). No other stylesheet contains a color literal any more — see the Theming section below. |
 | `THIRD-PARTY-NOTICES.md` | MIT attribution for the palettes the themes reproduce. Add a row when adding a theme. |
 | `clean-cards.css` / `clean-cards.js` | The pre-existing `customJavaScript.js` v5.4, split into a stylesheet and the script. Scene cards, performer hover popup, studio-code relocation, popover reordering. Performer name/disambiguation and studio-code copy buttons moved out to the standalone `copy-buttons` plugin (2026-08-31); title cleanup moved out to the standalone `title-scrubber` plugin (2026-09-02) — see the Settled decisions entries near the bottom. |
+| `chips.css` | Every `.tag-item` chip (sidebar Tags card, card tag/marker/performer popovers, entity-page tag lists) colored by role: tags and performers in `--jl-link`, marker chips (told apart by their `?t=` timestamp link) in `--jl-accent`, all `color-mix()` washes off the tokens. CSS only. See Settled decisions. |
 | `buttons.css` | Site-wide native-Bootstrap button restyle (`.btn-primary`/`.btn-secondary`/`.btn-danger`/etc.) — CSS only, no JS, no page-specific DOM assumptions. See below. |
 | `scene-dashboard.css` / `scene-dashboard.js` | The scene-page dashboard. This is the new code. |
 | `entity-dashboard.css` / `entity-dashboard.js` | One config-driven module for every "entity with a tabbed relations list" page — performer, studio, group, tag. Restyles each one's native tab strip as a `.jl-modes` pill row, plus identity-header font/color tweaks. Replaced separate performer-dashboard.\*/studio-dashboard.\* files once a third and fourth page made the duplication itself the problem — see below. |
@@ -1692,6 +1693,29 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
 
 ## Settled decisions — do not silently redo
 
+- **Chips are colored by role — Option B, chosen 2026-09-04 from three
+  live-rendered options (`chips.css`).** Tag chips and the performer
+  popover's name chip take `--jl-link` (cyan), marker chips take
+  `--jl-accent` (pink); fill 14 %, border 34 %, hover 22 %/50 %, the
+  button wash recipe, all `color-mix()` off the tokens so every theme
+  follows. The alternatives were A (lilac tags / orange markers, my
+  recommendation, on the grounds that orange was an unused hue) and C
+  (green tags / orange markers); B was picked for one "leads out of this
+  scene" color across tags and performers, with markers joining the
+  code/date accent family. Inventory, measured live before proposing:
+  every chip in stash is the same `.tag-item.badge.badge-secondary` span
+  and they render in the scene sidebar's Tags card, the scene card's tag
+  popover, its marker popover ("title - m:ss") and its performer popover;
+  the Markers mode panel has no chips, only `.btn-link` rows. The card
+  popovers are portaled to `<body>` and open on hover (`HoverPopover`),
+  so a marker chip can only be recognized by its own link
+  (`a[href*="?t="]`) — nothing about the trigger is available to scope
+  on. The 1px border grows each chip by 2px; `markTagRows()`'s fixed-
+  point pass absorbs that (5 row-start flags on scene 34396, unchanged).
+  Verified live under Dracula, Kanagawa Wave and Synthwave '84 via
+  `JLTheme.preview`, 0 idle mutations, no console errors. Not touched:
+  `.wall-tag` on the markers wall (`rgb(68,68,68)` on a gradient, close
+  to invisible natively) — a separate ask if wanted.
 - **Copy buttons work over plain http (2026-09-04).** `navigator.clipboard`
   exists only in a secure context (https, or localhost/127.0.0.1); reached
   over a LAN IP on http it is undefined, and the scene-card studio-code

@@ -21,6 +21,8 @@ ui:
   # clean-cards.* is the existing v5.5 customisation (title cleanup split
   # out to the standalone title-scrubber plugin — see CLAUDE.md);
   # buttons.css is an independent, page-agnostic button restyle;
+  # chips.css colors every .tag-item chip by role (tags/markers) and
+  # only needs the --jl-* tokens, so it sits with buttons.css;
   # scene-dashboard.* is the scene page's own layout; entity-dashboard.*
   # is the shared performer/studio/group/tag layout (one config-driven
   # module, not four near-identical files) and must come after
@@ -31,6 +33,7 @@ ui:
     - themes.css
     - clean-cards.css
     - buttons.css
+    - chips.css
     - scene-dashboard.css
     - entity-dashboard.css
   javascript:

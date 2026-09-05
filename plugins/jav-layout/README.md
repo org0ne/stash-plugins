@@ -25,6 +25,7 @@ internally (every `dl-`/`data-dl-`/`--dl-` reference became `jl-`/
 | `clean-cards.css` / `.js` | Scene card restyle (pink code, cyan performers, dynamic title scaling), studio-code relocation, popover reordering, watched badge, performer hover popup. |
 | `buttons.css` | Site-wide native-button restyle — every `.btn-primary`/`.btn-secondary`/`.btn-danger` in the app, not just this plugin's own UI. |
 | `scene-dashboard.css` / `.js` | The scene page's own Option C dashboard. |
+| `chips.css` | Tag chips in the link color, marker chips in the accent, everywhere stash draws them (sidebar, card popovers, entity pages). |
 | `entity-dashboard.css` / `.js` | The same mode-switcher treatment for performer/studio/group/tag pages — one config-driven module for all four. |
 
 Load order is set in the manifest: `fonts` → `base-theme` → `themes` →
