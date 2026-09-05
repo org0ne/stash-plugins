@@ -291,6 +291,28 @@ here moves a React node), so it can be checked page by page:
   bar sits at the form's end there and only pins once the form is
   taller than the sidebar, which is sticky working as intended.
 
+  **On phones the navbar covered both scene-page bars (reported from
+  iOS, 2026-09-04; buttons.css §4b, bottom of the section).** Two
+  upstream facts, both confirmed from the served CSS bundle: `.scene-tabs`
+  carries `max-height: calc(100vh - 4rem)` at every width but gets
+  `overflow: auto` only inside the `min-width: 1200px` block, so below
+  xl the column is capped and never scrolls — the form simply spills
+  past the box, and the body's bottom padding for the navbar (portrait
+  < 576px: `.top-nav { bottom: 0; top: auto }`, 48.75px tall, `body
+  { padding-bottom: 48.75px }`) is laid out above the spilled form's
+  end, leaving the fixed navbar on top of the bar at the end of the
+  scroll. And a bar stuck at `bottom: 0` is stuck under that bottom
+  navbar the whole time the form is taller than the screen. Fix: lift
+  the cap below 1200px (desktop keeps its own-scroller pairing), and in
+  the portrait-phone layout stick both bars at `bottom: 48.75px`.
+  Diagnosed and verified with a no-deps CDP script (`node
+  --experimental-websocket`, Chrome 151 `--headless=new`, iPhone
+  metrics + UA, 390×844 and 390×560): `document.elementFromPoint` at
+  Save's centre returned the navbar before and the button after, for
+  the marker form and the Edit form, mid-scroll and at the end. The
+  "fixture + check.js" harness under Testing is stale; this script is
+  the working replacement pattern if the chat history is gone.
+
   **Reported live twice as "the sticky bar is transparent" — it never
   was, and both real causes are worth remembering.** (1) On the scene
   page the vendored base theme paints the bar with `#scene-edit-details

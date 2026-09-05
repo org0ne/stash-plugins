@@ -700,6 +700,41 @@
   padding-bottom: 8px;
 }
 
+/* Phones (reported on iOS, 2026-09-04): stash's navbar covered Save/Cancel
+   on the marker creation form, and on the scene Edit form. Two upstream
+   facts combine below the xl breakpoint:
+   1. `.scene-tabs { max-height: calc(100vh - 4rem) }` applies at EVERY
+      width, but `overflow: auto` only from 1200px up. Below that the
+      column is capped yet never scrolls, so a form taller than the cap
+      just spills past the box (measured at 390x844: box 788px, content
+      978px). The page's own bottom clearance for the navbar (see 2) is
+      laid out after the capped box, i.e. ABOVE the spilled form's end,
+      so the document ends exactly at the bar and the fixed navbar sits
+      on top of it. Lifting the cap lets the column hold its content, so
+      that clearance lands after the form again. Desktop is untouched:
+      the cap + overflow:auto pair that makes the sidebar its own
+      scroller lives inside upstream's min-width:1200px block.
+   2. In portrait below 576px stash moves `.top-nav` to `bottom: 0`
+      (48.75px tall, z-index 1030) and pads `body` by the same 48.75px.
+      A bar stuck at `bottom: 0` is therefore stuck UNDER the navbar the
+      whole time the form is taller than the screen, surfacing only at
+      the very end of the scroll (confirmed at 390x560: elementFromPoint
+      over Save returned the navbar mid-scroll). So on that layout the
+      bars stick 48.75px up, flush with the navbar's top edge.
+   Verified via headless Chrome with iPhone emulation, marker and Edit
+   forms, mid-scroll and end-of-scroll: Save is the top-most element at
+   its own centre in all four states; before, it was the navbar in all
+   but one. `.image-tabs` has the same unscrolled cap below 1200px but
+   no plugin bar to pin, and `.gallery-tabs` scrolls at every width, so
+   neither is touched here. */
+@media (max-width: 1199px) {
+  .scene-tabs { max-height: none; }
+}
+@media (max-width: 575.98px) and (orientation: portrait) {
+  .tab-pane form > .buttons-container,
+  .edit-buttons-container { bottom: 48.75px; }
+}
+
 /* ---- 4c. The list toolbar: same pill, same items, same height ---- */
 .filtered-list-toolbar,
 .scene-list-toolbar.filtered-list-toolbar.btn-toolbar {
