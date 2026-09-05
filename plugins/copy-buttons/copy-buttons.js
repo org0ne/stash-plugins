@@ -1,34 +1,62 @@
 // ==StashScript==
 // name Copy Buttons
-// version 1.0.0
+// version 1.0.1
 // description Click-to-copy buttons for performer names, performer
 //             disambiguations, and studio codes.
 // ==/StashScript==
 ;(() => {
   'use strict';
 
-  console.log('[CopyButtons] v1.0.0 loaded');
+  console.log('[CopyButtons] v1.0.1 loaded');
 
   /* ============================
    *  CLIPBOARD
-   *  navigator.clipboard needs a secure context — true for http://localhost,
-   *  but stash is often also reached over plain http via a LAN IP (no TLS),
-   *  where it's simply absent. Fall back to the classic hidden-textarea +
-   *  execCommand('copy') trick so Copy still works from a LAN client.
+   *  navigator.clipboard exists only in a secure context — https, or
+   *  localhost/127.0.0.1. Stash is routinely reached over plain http via a
+   *  LAN IP, where it is simply undefined (reported live 2026-09-04: "only
+   *  works with https hosts"). The fallback is the classic hidden-textarea
+   *  + document.execCommand('copy') — deprecated, still shipped by every
+   *  current browser, and the only thing that works in an insecure
+   *  context. Three details make it actually work everywhere:
+   *    - iOS Safari ignores textarea.select(); it needs an explicit
+   *      setSelectionRange over the whole value, and the element must be
+   *      readonly so the keyboard doesn't pop.
+   *    - execCommand returns false instead of throwing when the copy is
+   *      refused (no user activation, unfocused document), so the return
+   *      value is checked and turned into a rejection — the button then
+   *      shows a failure instead of a false green check.
+   *    - Focus moves to the textarea for the copy; it is handed back to
+   *      whatever had it, so keyboard users don't lose their place.
+   *  A rejected navigator.clipboard.writeText (permission denied, page
+   *  not focused) falls through to the same fallback rather than failing.
    * ============================ */
   async function copyText(text) {
     if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return;
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch (e) { /* fall through to execCommand */ }
     }
+    const prevFocus = document.activeElement;
     const ta = document.createElement('textarea');
     ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
+    ta.setAttribute('readonly', '');
+    ta.setAttribute('aria-hidden', 'true');
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none;';
     document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
+    let ok = false;
+    try {
+      ta.focus({ preventScroll: true });
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      ok = document.execCommand('copy');
+    } finally {
+      document.body.removeChild(ta);
+      if (prevFocus && typeof prevFocus.focus === 'function') {
+        try { prevFocus.focus({ preventScroll: true }); } catch (e) { /* detached */ }
+      }
+    }
+    if (!ok) throw new Error('copy command was refused by the browser');
   }
 
   function makeCopyButton(className, label, getText) {
@@ -46,15 +74,20 @@
       e.preventDefault();
       const value = getText();
       if (!value) return;
-      copyText(value).then(() => {
-        btn.classList.add('copied');
-        icon.className = 'fa-solid fa-check';
+      const flash = (cls, iconCls) => {
+        btn.classList.remove('copied', 'copy-failed');
+        btn.classList.add(cls);
+        icon.className = `fa-solid ${iconCls}`;
         clearTimeout(btn._copiedTimeout);
         btn._copiedTimeout = setTimeout(() => {
-          btn.classList.remove('copied');
+          btn.classList.remove('copied', 'copy-failed');
           icon.className = 'fa-solid fa-copy';
         }, 1200);
-      }).catch(err => console.error('[CopyButtons] copy failed', err));
+      };
+      copyText(value).then(() => flash('copied', 'fa-check')).catch(err => {
+        console.error('[CopyButtons] copy failed', err);
+        flash('copy-failed', 'fa-xmark');
+      });
     });
 
     return btn;

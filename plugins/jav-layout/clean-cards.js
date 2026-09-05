@@ -1,6 +1,6 @@
 // ==StashScript==
 // name Clean Cards – Dracula + Popover Reorder
-// version 5.5
+// version 5.6
 // description Pink code, cyan performers, dynamic title scaling, 3-line clamp, batched GraphQL, popover reorder, watched badge, performer hover popup
 // match *://*/scenes*
 // run-at document-idle
@@ -8,7 +8,7 @@
 ;(() => {
   'use strict';
 
-  console.log('[CleanCards] v5.5 loaded — performer hover popup active');
+  console.log('[CleanCards] v5.6 loaded — performer hover popup active');
 
   /* ============================
    *  CSS
@@ -771,6 +771,59 @@
   // window.JLPerformerPopup: one definition of watched-ness, one fetch.
   window.JLSceneData = { isWatched: isSceneWatched, fetch: fetchSceneWatchData, checkIcon: makeWatchedCheckIcon };
 
+  /* ============================
+   *  CLIPBOARD
+   *  navigator.clipboard exists only in a secure context — https, or
+   *  localhost/127.0.0.1. Stash is routinely reached over plain http via a
+   *  LAN IP, where it is simply undefined (reported live 2026-09-04: "only
+   *  works with https hosts"; this card button previously called
+   *  navigator.clipboard.writeText unguarded and threw on http). The fallback is the classic hidden-textarea
+   *  + document.execCommand('copy') — deprecated, still shipped by every
+   *  current browser, and the only thing that works in an insecure
+   *  context. Three details make it actually work everywhere:
+   *    - iOS Safari ignores textarea.select(); it needs an explicit
+   *      setSelectionRange over the whole value, and the element must be
+   *      readonly so the keyboard doesn't pop.
+   *    - execCommand returns false instead of throwing when the copy is
+   *      refused (no user activation, unfocused document), so the return
+   *      value is checked and turned into a rejection — the button then
+   *      shows a failure instead of a false green check.
+   *    - Focus moves to the textarea for the copy; it is handed back to
+   *      whatever had it, so keyboard users don't lose their place.
+   *  A rejected navigator.clipboard.writeText (permission denied, page
+   *  not focused) falls through to the same fallback rather than failing.
+   *  Deliberately a copy of copy-buttons.js's helper, not shared: the two
+   *  plugins are independent and copy-buttons may not be installed.
+   * ============================ */
+  async function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch (e) { /* fall through to execCommand */ }
+    }
+    const prevFocus = document.activeElement;
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.setAttribute('aria-hidden', 'true');
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(ta);
+    let ok = false;
+    try {
+      ta.focus({ preventScroll: true });
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      ok = document.execCommand('copy');
+    } finally {
+      document.body.removeChild(ta);
+      if (prevFocus && typeof prevFocus.focus === 'function') {
+        try { prevFocus.focus({ preventScroll: true }); } catch (e) { /* detached */ }
+      }
+    }
+    if (!ok) throw new Error('copy command was refused by the browser');
+  }
+
   function enhanceCard(card) {
     if (card.dataset.stashClean) return;
 
@@ -811,14 +864,20 @@
       e.preventDefault();
       const value = codeSpan.textContent.trim();
       if (!value || value === "—" || value === "…") return;
-      navigator.clipboard.writeText(value).then(() => {
-        copyBtn.classList.add("copied");
-        copyIcon.className = "fa-solid fa-check";
-        setTimeout(() => {
-          copyBtn.classList.remove("copied");
+      const flash = (cls, iconCls) => {
+        copyBtn.classList.remove("copied", "copy-failed");
+        copyBtn.classList.add(cls);
+        copyIcon.className = `fa-solid ${iconCls}`;
+        clearTimeout(copyBtn._copiedTimeout);
+        copyBtn._copiedTimeout = setTimeout(() => {
+          copyBtn.classList.remove("copied", "copy-failed");
           copyIcon.className = "fa-solid fa-copy";
         }, 1200);
-      }).catch(err => console.error('CleanCards: copy failed', err));
+      };
+      copyText(value).then(() => flash("copied", "fa-check")).catch(err => {
+        console.error('CleanCards: copy failed', err);
+        flash("copy-failed", "fa-xmark");
+      });
     });
 
     codeGroup.appendChild(copyBtn);

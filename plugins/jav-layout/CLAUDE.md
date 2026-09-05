@@ -1692,6 +1692,31 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
 
 ## Settled decisions — do not silently redo
 
+- **Copy buttons work over plain http (2026-09-04).** `navigator.clipboard`
+  exists only in a secure context (https, or localhost/127.0.0.1); reached
+  over a LAN IP on http it is undefined, and the scene-card studio-code
+  copy button in clean-cards.js called `writeText` unguarded, so the click
+  threw and did nothing ("only works with https hosts"). Now `copyText()`
+  in clean-cards.js tries the async API in a secure context and otherwise
+  falls back to a readonly hidden textarea + `document.execCommand('copy')`
+  — with `setSelectionRange` (iOS Safari ignores `select()`), the
+  `execCommand` return value checked (it returns false rather than
+  throwing when refused, so the button shows a red `.copy-failed` state
+  instead of a false green check), and focus handed back afterwards. The
+  copy-buttons plugin (performer name/disambiguation, sidebar studio code)
+  already had an execCommand fallback and got the same hardening in
+  v1.0.1; the helper is deliberately duplicated, not shared, because the
+  two plugins are independent and copy-buttons may not be installed.
+  Verified under CDP with `navigator.clipboard` deleted and
+  `isSecureContext` forced false: a real mouse click on each of the three
+  buttons ran `execCommand('copy')` with exactly the right text selected
+  ("ABP-914", "Rio Hamasaki"), returned true, flashed `.copied`, removed
+  the textarea and did not navigate the card link. Incidental finding, NOT
+  fixed: the installed fontawesome-js plugin replaces every `<i>` with an
+  `<svg>`, so the icon swap to `fa-check` on copy (both plugins set
+  `className` on the now-detached `<i>`) has no visible effect — only the
+  color change shows. Fix, if wanted: key the icon on the button's class
+  in CSS, or set the class on `btn.firstElementChild` at click time.
 - **The watched indicator is a "✔ Watched" text badge on the scene
   sidebar's collection-pill line, right-justified; the check icon over
   the card thumbnail is gone (2026-09-04).** The icon was

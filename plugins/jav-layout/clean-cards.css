@@ -169,6 +169,12 @@
   color: var(--jl-ok) !important;
   opacity: 1 !important;
 }
+/* Red twin of .copied: the http fallback's execCommand('copy') was refused
+   (clean-cards.js copyText), so a failed copy never flashes a green check. */
+.stash-code-copy.copy-failed {
+  color: var(--jl-danger) !important;
+  opacity: 1 !important;
+}
 
 .stash-performers {
   font-weight: 500 !important;

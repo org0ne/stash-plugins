@@ -21,6 +21,11 @@ renders them.
 
   Either way this plugin only ever looks for those elements — it works
   the same with or without any other plugin installed.
+- **Works over plain http as well as https.** Browsers only expose
+  `navigator.clipboard` on https or localhost; on a LAN address over http
+  the plugin falls back to the classic `execCommand('copy')` path (iOS
+  Safari included). If the browser refuses the copy, the button flashes
+  red instead of green.
 
 ## Install
 

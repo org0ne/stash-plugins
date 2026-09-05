@@ -1,3 +1,7 @@
+/* .copy-failed is the red twin of .copied — shown when the http fallback's
+   execCommand('copy') is refused (copy-buttons.js copyText), so a failed
+   copy never flashes a green check. Restated at each specificity below for
+   the same reason .copied is. */
 /* ============================
  *  SHARED BASE
  *  Common to all three copy buttons this plugin adds — transparent,
@@ -28,6 +32,10 @@
 }
 .stash-copy-btn.copied {
   color: #50fa7b !important;
+  opacity: 1 !important;
+}
+.stash-copy-btn.copy-failed {
+  color: #ff5555 !important;
   opacity: 1 !important;
 }
 
@@ -95,6 +103,10 @@
   color: #50fa7b !important;
   opacity: 1 !important;
 }
+.studio-code .studio-code-copy.copy-failed {
+  color: #ff5555 !important;
+  opacity: 1 !important;
+}
 .studio-code .studio-code-copy:focus-visible {
   outline-color: rgba(255, 128, 191, 0.6) !important;
 }
@@ -114,4 +126,7 @@
 }
 .scene-details h6 .studio-code-copy.copied {
   color: #50fa7b !important;
+}
+.scene-details h6 .studio-code-copy.copy-failed {
+  color: #ff5555 !important;
 }
