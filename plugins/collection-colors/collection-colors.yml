@@ -1,9 +1,6 @@
 name: Collection Colors
 description: >
-  Colors scene cards by which configured Library path they live under —
-  auto-discovered from Settings > Library, no hardcoded paths. Per-folder
-  colors are editable via a picker injected into this plugin's own
-  Settings > Plugins section.
+  Adds a "pill" to the scene-cards that corresponds to their configured Library path.
 version: 1.0.2
 settings:
   collectionColors:
@@ -16,22 +13,16 @@ settings:
   popoverPriority:
     displayName: Scene card popover button priority
     description: >
-      Comma-separated priority order for the native icons on the right
-      side of the scene-card popover row (rating/tag/performer counts,
-      organized flag, etc) Known keys: performer-count, count-button,
+      Comma-separated priority order for the scene-card popovers row 
+      Known keys: performer-count, count-button,
       marker-count, tag-count, group-count, organized, other-copies.
-      Unknown keys are ignored; omitted known keys still appear, just
-      last, after every key you listed. Default:
-      performer-count,count-button,marker-count,tag-count,group-count,organized,other-copies
     type: STRING
   pillStyle:
     displayName: Collection pill style
     description: >
-      "Default" leaves the pill transparent with just a colored border 
-      and text, so it can never be mistaken for a themed action button.
-      "Solid" fills the pill with the collection's color and picks black or
-      white text automatically for contrast, matching stash's own
-      native tag chips. Any other value falls back to outline.
+      "Default" is transparent with just a colored border 
+      and text. "Solid" fills the pill with the collection's color and picks black or
+      white text automatically for contrast. Any other value falls back to outline.
     type: STRING
 ui:
   javascript:
