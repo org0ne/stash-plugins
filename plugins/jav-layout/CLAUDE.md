@@ -2001,6 +2001,17 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
   copyText, because they must each work alone. Lesson: any `fa-*` class
   in a plugin is a hidden dependency — grep for it before assuming an
   icon is native.
+- **Empty Details and Tags groups hide their heads (2026-09-06).** Stash
+  renders no "Details:" heading and no `p.pre` for a scene without a
+  description, and no chips for one without tags, but the injected group
+  heads were appended regardless, so such a scene wore a "Details" card
+  head over nothing. tagPanes() now flags each head with `data-jl-empty`
+  (guarded setData, re-evaluated every run so SPA navigation flips it
+  both ways) and scene-dashboard.css hides a flagged head. Emptiness is
+  judged from what stash rendered in the column — `:scope > p.pre` with
+  text, `:scope > .tag-item` — not from the API. Groups/Galleries already
+  had the equivalent on their whole pane. Verified on scenes 187 (no
+  details), 33379 (no tags) and 11110 (both present).
 - **clean-cards.js's copy of the popover reordering is gone; collection-
   colors owns it outright (2026-09-04 performance review).** Both files
   had the same boot observer, per-bar live observer and per-bar

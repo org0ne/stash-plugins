@@ -1107,6 +1107,15 @@ a.jl-scene-director-value:hover {
 .scene-tabs[data-jl-mode="browse"] .tab-content > .tab-pane[data-jl-browse][data-jl-empty="true"] {
   display: none !important;
 }
+/* Same for the two scattered groups that can be empty — Details (no
+   description) and Tags (no chips). Their heads are injected by
+   scene-dashboard.js whether or not stash rendered any member, so the head
+   is what has to go; the script flags it (see the empty-groups note in
+   tagPanes). The Tags backdrop already hides itself when there are no
+   chips. 2026-09-06. */
+.scene-tabs[data-jl-mode] .jl-head.jl-head-group[data-jl-empty="true"] {
+  display: none !important;
+}
 
 /* ------------------------------------------------------------
  *  Density inside the cards

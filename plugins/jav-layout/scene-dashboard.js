@@ -938,6 +938,24 @@
 
         ensureGroupHead(root, contentCol, 'description', CARD_TITLES.description);
         ensureGroupHead(root, contentCol, 'tags', CARD_TITLES.tags);
+        // Empty scattered groups (reported 2026-09-06): stash renders no
+        // "Details:" heading and no p.pre when a scene has no details, and
+        // no chips when it has no tags — but the heads above are appended
+        // regardless, so a scene without details wore a "Details" card head
+        // over nothing (and "Tags" over an already-hidden backdrop). Flag
+        // the head; scene-dashboard.css hides it. Re-evaluated every run
+        // through the guarded setData, so scene→scene navigation (same
+        // elements, new content) flips it both ways without a write when
+        // nothing changed. Details is the only text group; Metadata always
+        // has rows (Created/Updated) and Performers has its own native
+        // heading, so those two are not checked.
+        const descEl = contentCol.querySelector(':scope > p.pre');
+        const hasDescription = !!descEl && descEl.textContent.trim().length > 0;
+        const hasTags = !!contentCol.querySelector(':scope > .tag-item');
+        const descHead = contentCol.querySelector(':scope > .jl-head[data-jl-card="description"]');
+        const tagsHead = contentCol.querySelector(':scope > .jl-head[data-jl-card="tags"]');
+        if (descHead) setData(descHead, 'jlEmpty', hasDescription ? null : 'true');
+        if (tagsHead) setData(tagsHead, 'jlEmpty', hasTags ? null : 'true');
         sizeTagsBackdrop(contentCol);
 
         const scenePerformers = contentCol.querySelector(':scope > .scene-performers');
