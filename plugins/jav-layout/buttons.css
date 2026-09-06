@@ -772,8 +772,31 @@
   margin-right: auto !important;
   margin-top: 0;
   margin-bottom: 8px;                      /* the pagination pill follows directly; measured 0px between the two outlines before this */
-  padding: 3px 10px;                        /* 3px + 28px controls + 1px borders = the pill's 36px */
+  /* 3px + 28px controls + 1px borders = the pill's 36px. Horizontal inset
+     was 10px; now 4px (2026-09-06, "superfluous padding on the left of
+     the search box"): the search field is the one BOXED item in this
+     pill, so its own border sat 11px in from the pill's edge while the
+     pill's vertical inset around the same box is 3px and every item is
+     6px from the next — the box read as floating. 4px nests it like the
+     vertical inset does; the icon-only items at the right end keep
+     enough air because their own button padding supplies it. Verified
+     one-row at 1400, and wrapped to two/three rows at 700/520/390 — the
+     wrapped rows share the same inset, nothing clips (the pill's own
+     overflow is visible) and the sidebar-toggle cap below still holds.
+     The zoom slider is the exception (rule below): it is a bare track
+     with no button padding of its own, so it gets its 6px back. */
+  padding: 3px 4px;
   gap: 6px;
+}
+/* The zoom slider at the pill's right end is a bare 60px track — unlike
+   every other item it has no button padding to give it air, so the
+   4px pill inset left it 5px from the edge. Restored to the pre-tighten
+   11px on request (2026-09-06, "restore padding on the zoom-slider"):
+   the margin lives on the slider, not the pill, so the search box's
+   side keeps its tight nest. Also right at wrapped widths where the
+   slider ends a row, and moot below 576px where stash hides it. */
+.filtered-list-toolbar .zoom-slider-container {
+  margin-right: 6px;
 }
 /* The filter-sidebar toggle (the sliders icon) is `.sidebar-toggle-button`,
    sticky inside an absolutely positioned container that occupies the

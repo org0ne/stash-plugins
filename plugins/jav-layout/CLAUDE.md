@@ -379,7 +379,15 @@ the accent — the base theme's purple no longer appears in the row.
 Sizing is scoped to `.filtered-list-toolbar` only — the v1 blanket
 `.btn` padding is what broke the pager, and nothing here is blanket.
 The `.has-selection` state (Select All / Play / bulk actions) inherits
-the same look.
+the same look. **Horizontal inset is 4px, not 10px (2026-09-06):**
+reported as superfluous padding left of the search box — the one boxed
+item in the pill sat 11px in while the vertical inset around it is 3px
+and items are 6px apart. The zoom slider, a bare track with no button
+padding of its own, keeps its old 11px via its own `margin-right: 6px`
+("restore padding on the zoom-slider", same day). Verified at 1400
+(one row) and 700/520/390 (two/three rows, stash hides the slider below
+576px): wrapped rows share the inset, nothing clips, the sidebar-toggle
+cap still holds. The centred wrapped rows are stash's own alignment.
 
 **Three follow-ups reported live from the scenes list, 2026-09-03**
 (buttons.css §4c/§4d): (1) the sort control's label button sits inside
