@@ -1,6 +1,7 @@
 name: Collection Colors
 description: >
   Adds a "pill" to the scene-cards that corresponds to their configured Library path.
+  Style and color are user-defined
 version: 1.0.2
 settings:
   collectionColors:
