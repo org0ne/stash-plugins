@@ -312,6 +312,15 @@ here moves a React node), so it can be checked page by page:
   the marker form and the Edit form, mid-scroll and at the end. The
   "fixture + check.js" harness under Testing is stale; this script is
   the working replacement pattern if the chat history is gone.
+  **The entity pages' fixed bar was missed in that pass and reported
+  the next day (2026-09-05):** `.details-edit.col-xl-9` is `position:
+  fixed; bottom: 0`, wraps to two rows on a phone (90px measured on
+  performer 8), and the navbar covered the lower row — Cancel / Scrape
+  / Set image worked, Clear Image / Save did not. Same portrait-phone
+  block: `bottom: 48.75px`, and `.detail-header.edit`'s padding-bottom
+  becomes `calc(116px + 48.75px)` so the last field still scrolls clear
+  of bar + navbar. Verified at 390×844 and 390×560: all five buttons
+  hit-test to themselves, last field above the bar at end of scroll.
 
   **Reported live twice as "the sticky bar is transparent" — it never
   was, and both real causes are worth remembering.** (1) On the scene

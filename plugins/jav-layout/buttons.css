@@ -738,13 +738,25 @@
    its own centre in all four states; before, it was the navbar in all
    but one. `.image-tabs` has the same unscrolled cap below 1200px but
    no plugin bar to pin, and `.gallery-tabs` scrolls at every width, so
-   neither is touched here. */
+   neither is touched here.
+
+   The entity pages' bar (`.details-edit.col-xl-9`, position: fixed at
+   bottom: 0) has the identical problem and was missed in the first
+   pass — reported from an iPhone the next day (2026-09-05): the bar
+   wraps to two rows there (90px measured on the performer page), and
+   the navbar covered the lower one, so Cancel/Scrape/Set image on the
+   top row worked while Clear Image and Save did not. Same offset, and
+   the edit-mode header's bottom padding (116px below md, above) grows
+   by the same 48.75px so the last field still scrolls clear of bar +
+   navbar together. */
 @media (max-width: 1199px) {
   .scene-tabs { max-height: none; }
 }
 @media (max-width: 575.98px) and (orientation: portrait) {
   .tab-pane form > .buttons-container,
-  .edit-buttons-container { bottom: 48.75px; }
+  .edit-buttons-container,
+  .details-edit.col-xl-9 { bottom: 48.75px; }
+  .detail-header.edit { padding-bottom: calc(116px + 48.75px); }
 }
 
 /* ---- 4c. The list toolbar: same pill, same items, same height ---- */
