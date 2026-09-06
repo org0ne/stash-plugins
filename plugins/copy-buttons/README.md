@@ -50,3 +50,11 @@ renaming a file needs another Reload Plugins.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+The button icons are the path data of three Font Awesome Free 6.7.2 solid
+icons (`copy`, `check`, `xmark`), embedded in `copy-buttons.js` so the
+plugin needs no Font Awesome stylesheet or plugin on the page. Font
+Awesome Free by @fontawesome — https://fontawesome.com — Copyright 2024
+Fonticons, Inc. Icons are licensed CC BY 4.0
+(https://creativecommons.org/licenses/by/4.0/); full license:
+https://fontawesome.com/license/free.

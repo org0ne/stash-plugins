@@ -5,8 +5,9 @@
 /* ============================
  *  SHARED BASE
  *  Common to all three copy buttons this plugin adds — transparent,
- *  inline with the text it copies, faded until hovered/focused, flips to
- *  a green check briefly on click. Per-button classes below only ever
+ *  inline with the text it copies, faded until hovered/focused, turns
+ *  green briefly on a successful copy (the glyph itself, no icon swap —
+ *  2026-09-05) and red with a cross when the copy is refused. Per-button classes below only ever
  *  override color/size, never re-declare these.
  * ============================ */
 .stash-copy-btn {
@@ -17,7 +18,8 @@
   align-items: center !important;
   justify-content: center !important;
   padding: 0 !important;
-  margin: 0 !important;
+  /* 6px off the text it copies (was 0 — "too close", 2026-09-05). */
+  margin: 0 0 0 6px !important;
   font-size: 0.75em !important;
   line-height: 1 !important;
   opacity: 0.65 !important;
@@ -25,12 +27,19 @@
   flex-shrink: 0 !important;
   transition: opacity 0.15s ease, color 0.15s ease !important;
 }
-/* The icon is an inline SVG sized 1em (copy-buttons.js makeIcon) — not a
-   Font Awesome <i>, see the ICONS note there — so every font-size rule in
-   this file still sets its size and `currentColor` still carries the
-   .copied/.copy-failed colors. Block display drops the inline-baseline
-   gap that would otherwise offset it a pixel low inside the flex button. */
-.stash-copy-btn > .stash-copy-icon { display: block !important; }
+/* The icon is an inline SVG (copy-buttons.js makeIcon) — not a Font
+   Awesome <i>, see the ICONS note there — so every font-size rule in this
+   file still sets its size and `currentColor` still carries the
+   .copied/.copy-failed colors. 1em + 2px: the "2px taller" asked for on
+   2026-09-05, applied as an exact 2px in every context rather than a
+   percentage, since the contexts range from 11px to ~17px. Block display
+   drops the inline-baseline gap that would otherwise offset it a pixel
+   low inside the flex button. */
+.stash-copy-btn > .stash-copy-icon {
+  display: block !important;
+  width: calc(1em + 2px) !important;
+  height: calc(1em + 2px) !important;
+}
 .stash-copy-btn:hover { opacity: 1 !important; }
 .stash-copy-btn:focus-visible {
   outline: 1px solid rgba(115, 193, 230, 0.6) !important;
@@ -128,7 +137,7 @@
    already worked here without needing a scoped override. */
 .scene-details h6 .studio-code-copy {
   color: inherit !important;
-  margin-left: 4px !important;
+  margin-left: 6px !important;
 }
 .scene-details h6 .studio-code-copy.copied {
   color: #50fa7b !important;

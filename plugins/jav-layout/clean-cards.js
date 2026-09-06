@@ -692,38 +692,42 @@
    *  `<i>` tags this used to emit were being rendered by a separate
    *  fontawesome-js plugin nobody knew was load-bearing; disabling it
    *  (2026-09-05) left every copy button in the DOM, working, and
-   *  invisible (0×0 icon, no ::before). Same stroked marks as
-   *  collection-colors' settings-panel copy button, sized 1em so the
+   *  invisible (0×0 icon, no ::before). The glyphs are Font Awesome's own
+   *  (see ICONS below, with attribution); sized from 1em so the
    *  existing font-size rules in clean-cards.css keep governing size and
    *  `currentColor` keeps the .copied/.copy-failed color states working
    *  unchanged. Deliberately a copy of copy-buttons.js's helper, not shared: the
    *  two plugins are independent and copy-buttons may not be installed.
    * ============================ */
+  /* Font Awesome Free 6.7.2 solid glyphs — `copy`, `check`, `xmark` —
+   * path data verbatim from FortAwesome/Font-Awesome (svgs/solid/*.svg).
+   * Icons are CC BY 4.0; attribution lives in THIRD-PARTY-NOTICES.md
+   * (jav-layout) and README.md (copy-buttons). These are the exact marks
+   * the buttons showed while the fontawesome-js plugin was rendering the
+   * `fa-solid` classes — a hand-drawn two-sheet replacement was tried
+   * first (2026-09-05) and rejected for the original look. Each glyph
+   * keeps its own viewBox and the svg is sized by CSS, so the narrower
+   * xmark (384 wide) centres in the same box as the 448-wide others,
+   * exactly as Font Awesome's own fixed-width rendering does. */
   const ICONS = {
-    copy:  [['rect', { x: 9, y: 9, width: 13, height: 13, rx: 2, ry: 2 }],
-            ['path', { d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }]],
-    check: [['polyline', { points: '20 6 9 17 4 12' }]],
-    xmark: [['line', { x1: 18, y1: 6, x2: 6, y2: 18 }], ['line', { x1: 6, y1: 6, x2: 18, y2: 18 }]],
+    copy:  ['0 0 448 512', 'M208 0L332.1 0c12.7 0 24.9 5.1 33.9 14.1l67.9 67.9c9 9 14.1 21.2 14.1 33.9L448 336c0 26.5-21.5 48-48 48l-192 0c-26.5 0-48-21.5-48-48l0-288c0-26.5 21.5-48 48-48zM48 128l80 0 0 64-64 0 0 256 192 0 0-32 64 0 0 48c0 26.5-21.5 48-48 48L48 512c-26.5 0-48-21.5-48-48L0 176c0-26.5 21.5-48 48-48z'],
+    check: ['0 0 448 512', 'M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z'],
+    xmark: ['0 0 384 512', 'M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3 297.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256 342.6 150.6z'],
   };
   function setIcon(svg, kind) {
+    const [viewBox, d] = ICONS[kind];
+    svg.setAttribute('viewBox', viewBox);
     svg.replaceChildren();
-    for (const [tag, attrs] of ICONS[kind]) {
-      const el = document.createElementNS(SVG_NS, tag);
-      for (const k in attrs) el.setAttribute(k, attrs[k]);
-      svg.appendChild(el);
-    }
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
     svg.dataset.icon = kind;
   }
   function makeIcon(kind) {
     const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('width', '1em');
     svg.setAttribute('height', '1em');
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('stroke', 'currentColor');
-    svg.setAttribute('stroke-width', '2.25');
-    svg.setAttribute('stroke-linecap', 'round');
-    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('fill', 'currentColor');
     svg.setAttribute('aria-hidden', 'true');
     svg.setAttribute('focusable', 'false');
     svg.classList.add('stash-copy-icon');
@@ -770,17 +774,20 @@
       e.preventDefault();
       const value = codeSpan.textContent.trim();
       if (!value || value === "—" || value === "…") return;
+      // Success keeps the copy glyph and only turns it green (.copied in
+      // clean-cards.css) — the check-mark swap was dropped 2026-09-05.
+      // Failure still swaps to the red cross.
       const flash = (cls, iconCls) => {
         copyBtn.classList.remove("copied", "copy-failed");
         copyBtn.classList.add(cls);
-        setIcon(copyIcon, iconCls);
+        if (iconCls) setIcon(copyIcon, iconCls);
         clearTimeout(copyBtn._copiedTimeout);
         copyBtn._copiedTimeout = setTimeout(() => {
           copyBtn.classList.remove("copied", "copy-failed");
-          setIcon(copyIcon, 'copy');
+          if (copyIcon.dataset.icon !== 'copy') setIcon(copyIcon, 'copy');
         }, 1200);
       };
-      copyText(value).then(() => flash("copied", 'check')).catch(err => {
+      copyText(value).then(() => flash("copied", null)).catch(err => {
         console.error('CleanCards: copy failed', err);
         flash("copy-failed", 'xmark');
       });

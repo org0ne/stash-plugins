@@ -30,6 +30,16 @@ projects below — no files from them ship with this plugin.
 | Sonokai | https://github.com/sainnhe/sonokai | Copyright (c) 2020 sainnhe |
 | Monokai | https://github.com/microsoft/vscode (extensions/theme-monokai) | Copyright (c) 2015 - present Microsoft Corporation; palette by Wimer Hazenberg (2006) |
 
+## Icons (CC BY 4.0)
+
+`clean-cards.js` embeds the path data of three Font Awesome Free 6.7.2
+solid icons — `copy`, `check` and `xmark` — for the scene card's
+studio-code copy button (the ICONS block). Font Awesome Free by
+@fontawesome — https://fontawesome.com — Copyright 2024 Fonticons, Inc.
+Icons are licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/);
+full license: https://fontawesome.com/license/free. No Font Awesome fonts
+or code ship with this plugin.
+
 ## Fonts (SIL Open Font License 1.1)
 
 `fonts.css` embeds these faces as base64 WOFF2, subset to latin and

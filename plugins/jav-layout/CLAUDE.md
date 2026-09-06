@@ -1878,14 +1878,24 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
   emitted were being rendered by a separate `fontawesome-js` plugin
   nobody knew was load-bearing. Disabling it left every button present,
   working, and invisible — 0×0 icon, no `::before`, no error. Both files
-  now build the same stroked copy / check / cross marks with
-  createElementNS (the marks collection-colors' settings panel already
-  used), sized `1em` with `currentColor` so the existing font-size and
-  .copied/.copy-failed rules apply unchanged; one `display: block` rule
-  per stylesheet removes the inline-baseline gap. Helper deliberately
-  duplicated between the two plugins, like copyText, because they must
-  each work alone. Lesson: any `fa-*` class in a plugin is a hidden
-  dependency — grep for it before assuming an icon is native.
+  now embed the path data of Font Awesome Free 6.7.2's solid `copy` /
+  `check` / `xmark` glyphs verbatim (CC BY 4.0 — attribution in
+  THIRD-PARTY-NOTICES.md and copy-buttons' README) and build them with
+  createElementNS, `fill: currentColor`, each with its own viewBox,
+  so the existing font-size and .copied/.copy-failed rules apply
+  unchanged; the svg is `1em + 2px` square ("2px taller", same day) with
+  a 6px margin off its text. A successful copy keeps the copy glyph and
+  only turns it green (`.copied`); the swap to a check mark was dropped
+  the same day as more motion than the moment needs, while a refused
+  copy still swaps to the red cross because that is the case that has
+  to look different. A hand-drawn two-sheet mark (first Feather's
+  squares, then a traced two-rectangle version with a solid rear sheet)
+  was tried first and rejected the same day: the original Font Awesome
+  look was the one wanted, so the fix is to own that glyph, not redraw
+  it. Helper deliberately duplicated between the two plugins, like
+  copyText, because they must each work alone. Lesson: any `fa-*` class
+  in a plugin is a hidden dependency — grep for it before assuming an
+  icon is native.
 - **clean-cards.js's copy of the popover reordering is gone; collection-
   colors owns it outright (2026-09-04 performance review).** Both files
   had the same boot observer, per-bar live observer and per-bar
