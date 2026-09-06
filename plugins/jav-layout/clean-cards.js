@@ -489,7 +489,12 @@
     const dateSpan = card._stashDateSpan;
     const perf     = card._stashPerf;
 
-    if (codeSpan) codeSpan.textContent = (scene.code || "—").trim();
+    if (codeSpan) {
+      codeSpan.textContent = (scene.code || "—").trim();
+      // The bar is single-line and a long code ellipsises (clean-cards.css);
+      // the tooltip carries the whole thing.
+      if (scene.code) codeSpan.title = scene.code.trim(); else codeSpan.removeAttribute('title');
+    }
     if (dateSpan) dateSpan.textContent = scene.date ? scene.date.slice(0, 10) : "—";
 
     if (perf) {

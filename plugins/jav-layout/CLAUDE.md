@@ -2001,6 +2001,17 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
   copyText, because they must each work alone. Lesson: any `fa-*` class
   in a plugin is a hidden dependency — grep for it before assuming an
   icon is native.
+- **The card's code/date bar is single-line; long codes ellipsise
+  (2026-09-06).** Codes like `pacopacomama-012712_571` wrapped to a
+  second line and took the copy button with them. `.code-group` and
+  `.code` are now shrinkable (`flex: 0 1 auto; min-width: 0` on both —
+  a flex item will not shrink below its text without the min-width),
+  the code gets `nowrap` + `text-overflow: ellipsis`, and the copy button
+  and watched check are `flex-shrink: 0`. Copy still copies the whole
+  code (textContent), and clean-cards.js sets the full code as the span's
+  `title`. Verified on the pacopacomama cards: bar 21px tall at every
+  width, ellipsis at desktop card widths, whole code on a phone's
+  full-width card, copy button 6px after the text either way.
 - **Empty Details and Tags groups hide their heads (2026-09-06).** Stash
   renders no "Details:" heading and no `p.pre` for a scene without a
   description, and no chips for one without tags, but the injected group

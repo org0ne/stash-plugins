@@ -92,6 +92,12 @@
   box-sizing: border-box !important;
   width: calc(100% + 10px) !important;
   margin-left: -5px !important;
+  /* Minimum air between the code half and the date half. With a long code
+     the code group shrinks to exactly what fits, and space-between then
+     has nothing left to distribute — the copy button sat flush against
+     the date (measured 0px, 2026-09-06). The gap is honoured before the
+     code's own width, so the code ellipsises a little sooner instead. */
+  column-gap: 10px !important;
 }
 .stash-code-date,
 .stash-code-date .code,
@@ -117,7 +123,28 @@
   align-items: baseline !important;
   gap: 0px !important;
   min-width: 0 !important;
+  /* Shrinkable, never growing: a long code gives way, a short one keeps
+     its copy button right beside it instead of pushed to the bar's middle. */
+  flex: 0 1 auto !important;
 }
+/* Long codes — "pacopacomama-012712_571", "s-cute-253_momoka_03" — wrapped
+   onto a second line and dragged the copy button down with them, so the
+   bar grew to two lines and the date sat beside half a code (reported
+   2026-09-06). The bar is one line, always: the code shrinks and
+   ellipsises, the copy button and the date keep their places, and the
+   full code is still copied (textContent, not what is painted) and shown
+   in the tooltip (clean-cards.js sets `title`). `min-width: 0` on both
+   the group above and the span here is what lets a flex item shrink
+   below its text's own width. */
+.stash-code-date .code {
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.stash-code-date .stash-code-copy,
+.stash-code-date .stash-watched-check { flex-shrink: 0 !important; }
 /* Right half of the bar: the date, with the watched check in front of it
    when the scene qualifies (clean-cards.js, applySceneDataToCard). */
 .stash-code-date .date-group {
