@@ -389,6 +389,103 @@ padding of its own, keeps its old 11px via its own `margin-right: 6px`
 576px): wrapped rows share the inset, nothing clips, the sidebar-toggle
 cap still holds. The centred wrapped rows are stash's own alignment.
 
+**Phones get their own toolbar layout (2026-09-06, buttons.css §4c-m and
+the end of entity-dashboard.css).** Chosen from a rendered mockup page
+("Toolbars at 390": every direction was the live page with candidate CSS
+injected, screenshotted at 375/390/430) — direction D with B's rows for
+the toolbar and pager, "justified wrap" for the entity mode bar. The
+diagnosis: the desktop `:has()` cap reserves 80px for the filter-sidebar
+toggle but the toggle band is 26px, so at 390 points the pill had 280 of
+360 and wrapped to three centred, ragged rows, with the toggle sharing
+its top-left corner and the pager a second pill of another width. Below
+576px the toolbar now starts 44px lower (under the toggle's 41px button)
+and spans the full width; its items are reordered into two rows, FIND
+(search, saved filters + filter, …) and ARRANGE (sort, page size, view);
+the pager drops « » and the count line drops to 12px muted. Three things
+that were not obvious and are worth keeping: (1) the row break is pinned
+by giving the search field a flex-basis of exactly the row minus the
+other row-1 items — with a plain min-width the sort control slipped up
+into row 1 at 430 points, because wrapping uses basis sizes, not shrunk
+sizes; (2) the sort control is itself a wrapping flex box, so with a
+small basis its label and arrow stacked into two lines and threw the
+row's vertical alignment off — `flex-wrap: nowrap` on it; (3) the label
+ellipsises ("Last Played At" is whole at 430, "Last Pla…" at 390,
+"Last P…" at 375; short names always fit) — accepted, the full name is
+one tap away in the sort menu. View buttons are 34px on phones so the
+arrange row holds at 375. The entity mode bars' tabs grow to fill
+whichever row they land in (tag page: 4 + 3, both rows flush with the
+pill's 4px inset; badge stays on one line); the scene page's bar fits
+one row on a phone and is untouched. Verified live on the scenes list at
+all three widths, the performer page (its own list toolbar gets the same
+treatment — it has the toggle too) and the tag page.
+
+**Second pass the same day, from an iPhone screenshot of the performer
+page.** Three fixes: (1) the "44px band with nothing beside the toggle
+but air" is gone — `.sidebar-pane-content` is plain block layout
+natively, so below 576px it becomes a flex column and
+`.pagination-index-container` (pager + count line, one container, the
+toolbar's next sibling) takes `order: -1` and moves up beside the toggle,
+centred on the full width, ignoring the toggle (asked for explicitly —
+it clears the toggle's button by ~57px on its own); the toolbar follows
+with no top margin.
+Nothing is lost below the list: stash already keeps a sticky
+`.pagination-footer-container` pager at the bottom of the screen on
+phones (confirmed live after scrolling). **That footer pager clamps to
+the pane's top edge while the pane is still below its sticky line** —
+sticky cannot leave its containing block — which on an entity page is
+the stretch of scroll in which the list first rises into view, and the
+top pager now sits on that same edge: the two drew over each other for
+~100px of scroll (a headless capture caught it; it was also the "upper
+pager" an earlier note in this file misread as stash's own). Entity
+pages only — a list page's pane starts at the top of the page. Fixed
+in entity-dashboard.js `watchPagers()`: an IntersectionObserver on
+`.pagination-index-container` hides the footer pager (`visibility`)
+while the top one is on screen, when it is redundant anyway; a
+childList observer on the tabs root re-arms it after a tab switch swaps
+the pane. (2) The viewing pill (Edit /
+Auto tag… / Merge… / Submit to Stash-Box / Delete) gets the same
+justified wrap as the mode bar — full width, every item grows; its empty
+wrapper div (a slot stash renders nothing into) is hidden so it takes no
+share, and stash's `.5rem` trailing margin on the bare buttons is
+zeroed (it left each row 7px short of the pill's right inset, measured).
+(3) **Rows are balanced by script, not by flexbox's greedy breaking**
+(entity-dashboard.js `balanceWrap`): five tabs at 390 went 4 + 1 with
+the last one alone across a whole row, and the pill did the same at 430.
+The script strips its `.jl-break` items, reads the natural row count from
+the items' tops, and re-inserts full-width 2px breaks so the rows split
+evenly (5 → 3+2, 7 → 4+3); the container drops its row-gap while broken
+so the break IS the 2px. Runs after a build, on resize, and — for the
+pill, which is React's own container — from a small observer on
+`.detail-header`, because entering edit mode re-renders the pill into the
+fixed `.col-xl-9` bar and back; every pass first strips breaks from any
+`.details-edit` so none are stranded in the bar (verified: 0 in edit
+mode, pill re-balanced after Cancel). One trap: the pill's phone rule
+`> * { flex: 1 1 auto }` out-specified `.jl-break` and silently turned
+the break into a 0-width item, so the pill stayed 4 + 1 at 430 until the
+rule became `> :not(.jl-break)` — and the pill's `> :empty { display:
+none }` (there to hide stash's empty wrapper slot) hid the empty break
+span too, same symptom, until it became `:empty:not(.jl-break)`. Any
+future child rule on `.details-edit` must exempt `.jl-break`. Verified
+at 375/390/430 on performer, tag and scenes pages; at 1200 no breaks
+exist and resizing back to 390 re-balances.
+
+**Selection mode on phones is one row, tools only (S1 of the same
+mockup page; S3, the banner, was picked first and reversed the same
+day, 2026-09-06; buttons.css §4c-m).** Ticking a card swaps the
+toolbar's contents, and none of the two-row logic applied to them:
+toggles on a half-empty second row, the counter in stash's own 1px box
+inside the pill's outline, delete the only outlined icon, the count in
+body white. Now: the counter group sits left as three hairline segments
+(clear · count in the accent · select-all), the actions sit right, and
+the view toggles are hidden while a selection exists — a view switch
+means clearing the selection first, accepted. Two things measured on the
+way: stash's own `.has-selection` rule outranks the plain full-width
+rule, so the selection pill needs `width: 100% !important`; and a
+box-shadow hairline on the counter's `.minimal` buttons follows their
+rounded corners and reads as a bracket, so the segments get
+`border-radius: 0`. Verified with one card ticked at 375/390/430 on the
+scenes list and on the performer page's own list.
+
 **Three follow-ups reported live from the scenes list, 2026-09-03**
 (buttons.css §4c/§4d): (1) the sort control's label button sits inside
 `.input-group-prepend`, which Bootstrap's inner-corner squaring never

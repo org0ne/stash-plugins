@@ -895,6 +895,164 @@
   border-bottom-right-radius: 0;
 }
 
+/* ---- 4c-m. Phones: the toolbar under the filter toggle, in two rows ----
+   Chosen 2026-09-06 from the rendered directions in the "Toolbars at 390"
+   mockup page (direction D with B's rows). What was wrong at 390 points:
+   the desktop cap above reserves 80px for the filter-sidebar toggle but
+   the toggle band is 26px, so the pill had 280 of 360 points and wrapped
+   to THREE centred, ragged rows; the toggle shared the pill's top-left
+   corner; the pager was a second pill of another width.
+
+   Now, below 576px:
+   - The toolbar spans the full width and sits BELOW the pager. The pane
+     (`.sidebar-pane-content`, plain block layout natively) becomes a
+     flex column so `.pagination-index-container` — pager + count line,
+     one container, the toolbar's next sibling — can take `order: -1`
+     and move up into the band beside the filter toggle, centred on the
+     full width (it clears the toggle by ~57px on its own). The first
+     cut (same day) left
+     the toolbar 44px down with nothing beside the toggle but air;
+     reported from a real iPhone as an empty band on the performer page.
+     Stash already keeps a second, sticky pager at the bottom of the
+     screen on phones (`.pagination-footer-container`, confirmed live
+     after scrolling), so nothing is lost below the list. Scoped to the
+     `:has()` toggle case so a list without the toggle (none today, but
+     stash could add one) keeps its native order.
+   - Two rows with a job each, reordered with `order`: FIND (search,
+     saved filters + filter, the … menu) and ARRANGE (sort, page size,
+     the four view buttons). The search field's flex-basis is exactly the
+     row minus the 77px filter group, the 39px … button and two 6px gaps,
+     so row 1 is full by construction and row 2 must start with sort — at
+     430 points a plain min-width let sort slip up into row 1 (measured).
+   - Sort takes whatever width row 2 leaves (basis 80px, no internal
+     wrap: the control is itself a wrapping flex box, and with a small
+     basis its label and arrow stacked — measured, fixed by nowrap). Its
+     label ellipsises: "Last Played At" reads whole at 430, "Last Pla…"
+     at 390, "Last P…" at 375; short names always fit. View buttons are
+     34px instead of 38 so the arrange row holds at 375.
+   - The pager drops « and » on phones (the 1-of-N dropdown jumps
+     anywhere) and stays centred under the full-width pill.
+   Verified live at 375/390/430 portrait on the scenes list; landscape is
+   wider than 576px and keeps the desktop rules. */
+@media (max-width: 575.98px) {
+  .sidebar-pane-content:has(> .sidebar-toggle-button-container) {
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-pane-content:has(> .sidebar-toggle-button-container) > .pagination-index-container {
+    order: -1;
+    margin-bottom: 8px;
+    /* No left padding: the pager centres on the full width and ignores the
+       toggle (requested 2026-09-06). At 185–193px wide it starts ~98px in,
+       clear of the toggle's 41px button, and the count line under it is
+       centred text with the same clearance. */
+  }
+  .sidebar-pane-content:has(> .sidebar-toggle-button-container) .filtered-list-toolbar {
+    max-width: none;
+  }
+  /* The entity pages' viewing pill (Edit / Auto tag… / Merge… / Submit to
+     Stash-Box / Delete) wraps to two rows at 390 and centred them —
+     ragged, like the toolbar was. Same answer as the mode bar below it:
+     full width, and every item grows to fill its row. Two of the items
+     are buttons inside bare wrapper divs (the dropdown-backed ones), so
+     the wrapper grows and the button fills it; one wrapper is EMPTY (a
+     slot stash renders nothing into, 0px wide) and would take a share
+     of the row, so it is hidden. */
+  .details-edit:not(.col-xl-9) { width: 100%; }
+  .details-edit:not(.col-xl-9) > :not(.jl-break) { flex: 1 1 auto !important; margin-right: 0 !important; }   /* !important: the Submit to Stash-Box wrapper kept flex: 0 1 auto from a stash rule (measured) */   /* stash's .5rem trailing margin left every row 7px short of the pill's right inset (measured) — the pill's own 2px gap spaces the items. `.jl-break` is entity-dashboard.js's row-balancing break and must keep its own flex-basis: 100%; a first cut matched it here and silently turned it into a 0-width item, so the pill stayed 4 + 1 at 430. */
+  .details-edit:not(.col-xl-9) > :empty:not(.jl-break) { display: none; }   /* the break is empty too — hiding it silently undid the balancing (measured: display none on the break) */
+  .details-edit:not(.col-xl-9) > div > .btn { width: 100%; }
+  .filtered-list-toolbar,
+  .scene-list-toolbar.filtered-list-toolbar.btn-toolbar {
+    width: 100%;
+    justify-content: flex-start;
+    row-gap: 6px;
+  }
+  .filtered-list-toolbar .search-term-input input { width: 100%; }
+  /* row 1: find */
+  .filtered-list-toolbar .search-term-input { order: 1; flex: 1 1 calc(100% - 128px); }
+  .filtered-list-toolbar > .btn-group:nth-child(2) { order: 2; }   /* saved filters + filter */
+  .filtered-list-toolbar .list-operations { order: 3; }             /* … */
+  /* row 2: arrange */
+  .filtered-list-toolbar .sort-by-select { order: 4; flex: 1 1 80px; min-width: 0; flex-wrap: nowrap; }
+  .filtered-list-toolbar .sort-by-select > .input-group-prepend { flex: 1 1 40px; min-width: 0; }
+  .filtered-list-toolbar .sort-by-select > .input-group-prepend > .btn {
+    width: 100%;
+    min-width: 0;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .filtered-list-toolbar .sort-by-select > .btn { flex: 0 0 auto; }
+  .filtered-list-toolbar .page-size-selector { order: 5; }
+  .filtered-list-toolbar > .btn-group:nth-last-child(2) { order: 6; }
+  .filtered-list-toolbar > .btn-group:nth-last-child(2) .btn:not(.clearable-text-field-clear) {
+    width: 34px;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .filtered-list-toolbar .zoom-slider-container { order: 7; }   /* hidden by stash below 576px; keeps order explicit */
+  /* Selection mode — one row, tools only (S1 in the Toolbars at 390
+     mockups; S3, the banner, was chosen first and reversed the same day,
+     2026-09-06). Ticking a card swaps the toolbar's contents and none of
+     the two-row logic above applied to them: the view toggles fell to a
+     half-empty second row, the counter kept stash's own 1px box (an
+     outline inside the pill's outline), delete was the only outlined
+     icon in the row and the count read in body white. Now it is ONE row:
+     the counter group on the left as three hairline segments like the
+     rest of the pill (clear · count · select-all, count in the accent),
+     the actions on the right, and the view toggles rest while a
+     selection exists — selecting is acting on items, not browsing; a
+     view switch means clearing the selection first. Measured on the way:
+     stash's own .has-selection rule outranks the plain full-width rule
+     above and let the pill hug, hence the !important; and a hairline
+     drawn with box-shadow on the counter's `.minimal` buttons follows
+     their rounded corners and reads as a bracket, hence border-radius 0
+     on the segments. */
+  .filtered-list-toolbar.has-selection { width: 100% !important; }
+  .filtered-list-toolbar.has-selection .selected-items-info {
+    flex: 0 0 auto;
+    margin-right: auto;           /* counter left, actions right */
+    display: flex;
+    align-items: center;
+    height: 28px;
+    padding: 0;
+    border: 0 !important;
+    background: transparent;
+  }
+  .filtered-list-toolbar.has-selection .selected-items-info > * {
+    flex: 0 0 auto;
+    border-radius: 0 !important;
+  }
+  .filtered-list-toolbar.has-selection .selected-items-info > * + * {
+    margin-left: 1px;
+    box-shadow: -1px 0 0 var(--jl-line);
+  }
+  .filtered-list-toolbar.has-selection .selected-count {
+    color: var(--jl-accent);
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 28px;
+    min-width: 28px;
+    text-align: center;
+  }
+  .filtered-list-toolbar.has-selection .delete-button { border-color: transparent !important; }   /* the red glyph says danger; the box was the only outline in the row */
+  .filtered-list-toolbar.has-selection > .btn-group:nth-last-child(2) { display: none; }         /* view toggles rest while selecting */
+  /* pager */
+  .pagination > .btn:first-child,
+  .pagination > .btn:last-child { display: none; }
+  /* The "1-25 of 21,411 (…)" line under the pager was set at 14px, as
+     heavy as the controls above it; 12px in the plugin's muted colour so
+     it reads as the caption it is. (`.paginationIndex` — found by text,
+     it is a span in .pagination-index-container.) */
+  .paginationIndex {
+    font-size: 12px;
+    color: var(--jl-muted) !important;   /* stash's own .text-muted is a utility class with !important */
+    letter-spacing: 0.2px;
+  }
+}
+
 /* ---- 4d. Pagination: the same pill, the same segments ----
    The « ‹ 1 of N › » group under every list is a `.pagination.btn-group`
    whose outline came from each button's own borders — and stash's

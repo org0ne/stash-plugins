@@ -125,6 +125,118 @@
     }
   }
 
+  /* Balanced rows when the bar wraps (phones — entity-dashboard.css makes
+     the tabs grow to fill their row below 576px). Flexbox breaks lines
+     greedily, so five tabs at 390 points went 4 + 1, the lone fifth tab
+     stretched across a whole row; reported from an iPhone 2026-09-06.
+     Measured, not assumed: the break items are removed, the natural row
+     count is read from the tabs' tops (one forced layout), and if it is
+     more than one, zero-height full-width `.jl-break` items are inserted
+     so the tabs split as evenly as the natural row count allows — 5 → 3+2,
+     6 → 3+3, 7 → 4+3, 7 in three rows → 3+2+2. A row that still cannot
+     hold its share (very long labels) simply wraps once more. Desktop
+     bars fit one row, so nothing is inserted there. Runs after a build
+     and on resize; never from the per-nav observer's class flips alone,
+     where buildModeBar() is signature-guarded and returns quickly. */
+  function balanceWrap(box) {
+    if (!box) return;
+    box.querySelectorAll(':scope > .jl-break').forEach(b => b.remove());
+    const items = [...box.children].filter(el => el.getBoundingClientRect().width > 0);
+    if (items.length < 3) return;
+    const rows = new Set(items.map(t => Math.round(t.getBoundingClientRect().top))).size;
+    if (rows < 2) return;
+    const base = Math.floor(items.length / rows);
+    const extra = items.length % rows;
+    let idx = 0;
+    for (let r = 0; r < rows - 1; r++) {
+      idx += base + (r < extra ? 1 : 0);
+      const brk = document.createElement('span');
+      brk.className = 'jl-break';
+      brk.setAttribute('aria-hidden', 'true');
+      box.insertBefore(brk, items[idx]);
+    }
+  }
+  function balanceRows(nav) {
+    balanceWrap(nav.parentElement.querySelector(':scope > .jl-modes-row > .jl-modes'));
+    balanceViewingPill();
+  }
+
+  /* The entity pages' viewing pill (Edit / Auto tag… / Merge… / Submit /
+     Delete) is React's own flex container and gets the same balancing:
+     at 430 points it broke 4 + 1 with Delete alone across the second
+     row. Break items are foreign nodes React leaves alone, but React can
+     re-render the pill (entering edit mode turns it into the fixed
+     .col-xl-9 bar and back), which would strand breaks inside the bar's
+     flex layout — so every pass first strips breaks from ANY .details-edit
+     and only re-balances the viewing form. watchPill() re-runs it on the
+     header's own childList changes, which is where those re-renders
+     land; the body observer above is nav-filtered and never sees them. */
+  function balanceViewingPill() {
+    document.querySelectorAll('.details-edit > .jl-break').forEach(b => b.remove());
+    balanceWrap(document.querySelector('.details-edit:not(.col-xl-9)'));
+  }
+  /* stash's phone footer pager (`.pagination-footer-container`, position:
+     sticky; bottom: 48.75px) clamps to the TOP of its pane for as long as
+     the pane's top edge is below the sticky line — the ~100px of scroll
+     in which an entity page's list first rises into view from below. The
+     top pager now sits on that same edge (buttons.css §4c-m moved it up
+     beside the filter toggle), so for that stretch the two drew on top of
+     each other — seen in a headless capture; the reporting iPhone
+     screenshot was taken past it. While the top pager is on screen the
+     footer copy is redundant anyway, so it is hidden for exactly that
+     span. List pages proper never hit this (their pane starts at the top
+     of the page), so this is wired up here, for entity pages only. */
+  const watchedPagers = new WeakSet();
+  function setFooterHidden(indexContainer, hidden) {
+    const pane = indexContainer.closest('.sidebar-pane-content');
+    const footer = pane && pane.querySelector(':scope > .pagination-footer-container');
+    if (footer) footer.classList.toggle('jl-footer-pager-hidden', hidden);
+  }
+  const pagerIO = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver(entries => {
+    for (const e of entries) setFooterHidden(e.target, e.isIntersecting);
+  });
+  function watchPagers() {
+    if (!pagerIO) return;
+    document.querySelectorAll('.sidebar-pane-content > .pagination-index-container').forEach(el => {
+      if (!watchedPagers.has(el)) { watchedPagers.add(el); pagerIO.observe(el); }
+      // Re-apply the current state every scan: a tab switch can keep this
+      // element (React reuses it) while replacing the footer beside it, and
+      // an observer only speaks when the intersection CHANGES — measured
+      // live, the fresh footer stayed visible under an on-screen top pager.
+      const r = el.getBoundingClientRect();
+      setFooterHidden(el, r.bottom > 0 && r.top < window.innerHeight);
+    });
+  }
+  /* Switching tabs swaps the pane (new pager containers) after the nav's
+     class flip, once data arrives — so the tabs root is watched for
+     childList changes and re-runs the cheap watchPagers() per frame. */
+  const watchedRoots = new WeakSet();
+  let paneQueued = false;
+  function watchPane(root) {
+    if (!root || watchedRoots.has(root)) return;
+    watchedRoots.add(root);
+    new MutationObserver(() => {
+      if (paneQueued) return;
+      paneQueued = true;
+      requestAnimationFrame(() => { paneQueued = false; try { watchPagers(); } catch (e) { console.error('[EntityDashboard]', e); } });
+    }).observe(root, { childList: true, subtree: true });
+  }
+
+  const watchedHeaders = new WeakSet();
+  let pillQueued = false;
+  function watchPill() {
+    const header = document.querySelector('.detail-header');
+    if (!header || watchedHeaders.has(header)) return;
+    watchedHeaders.add(header);
+    new MutationObserver(muts => {
+      if (pillQueued) return;
+      // Our own break insertions are childList mutations too; ignore batches that are only those.
+      if (!muts.some(m => [...m.addedNodes, ...m.removedNodes].some(n => !(n.classList && n.classList.contains('jl-break'))))) return;
+      pillQueued = true;
+      requestAnimationFrame(() => { pillQueued = false; try { balanceViewingPill(); } catch (e) { console.error('[EntityDashboard]', e); } });
+    }).observe(header, { childList: true, subtree: true });
+  }
+
   /* Switching tabs only toggles the `active` class - an attribute
    * mutation, which the childList observer below never sees. A WeakSet
    * (not a single module-level "current" observer, as the old per-page
@@ -151,7 +263,7 @@
        only outside the nav (the row is the nav's sibling), so it cannot
        re-trigger itself. */
     new MutationObserver(() => {
-      if (buildModeBar(nav)) syncModeBar(nav);
+      if (buildModeBar(nav)) { syncModeBar(nav); balanceRows(nav); }
     }).observe(nav, {
       subtree: true,
       attributes: true,
@@ -177,7 +289,11 @@
       // confused, even though only one is ever set on a given page.
       if (nav.dataset[entity.gateAttr] !== 'true') nav.dataset[entity.gateAttr] = 'true';
       watchNav(nav);
+      watchPill();
+      watchPane(nav.closest(entity.tabsRoot));
+      watchPagers();
       syncModeBar(nav);
+      balanceRows(nav);
       return; // only one entity can ever match a given page
     }
   }
@@ -224,5 +340,18 @@
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+
+  // Row balance depends on width alone, which no DOM mutation announces.
+  let resizeQueued = false;
+  window.addEventListener('resize', () => {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(() => {
+      resizeQueued = false;
+      const nav = document.querySelector(NAV_SELECTOR);
+      if (nav) { try { balanceRows(nav); } catch (e) { console.error('[EntityDashboard]', e); } }
+    });
+  });
+
   run();
 })();

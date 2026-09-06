@@ -439,3 +439,48 @@ body:has(.detail-header.edit) .jl-modes-row { display: none !important; }
 .alias-head {
   color: var(--jl-muted) !important;
 }
+
+/* Phones: the mode bar's wrapped rows are justified (2026-09-06, "justified
+   wrap" from the Toolbars at 390 mockups). The tag page's seven tabs wrap
+   to four + three at 390 points; centred, the second row was indented on
+   both sides and the count badge on Scenes decided where the break fell.
+   Tabs now grow to fill whichever row they land in, so both rows have
+   straight edges and the badge stays on one line. Entity pages only — the
+   scene page's own bar fits one row on a phone and keeps its hug. */
+@media (max-width: 575.98px) {
+  .performer-tabs .jl-modes,
+  .studio-tabs .jl-modes,
+  .group-tabs .jl-modes,
+  .tag-tabs .jl-modes {
+    display: flex;
+    width: 100%;
+  }
+  .performer-tabs .jl-mode,
+  .studio-tabs .jl-mode,
+  .group-tabs .jl-mode,
+  .tag-tabs .jl-mode {
+    flex: 1 1 auto;
+    white-space: nowrap;
+  }
+}
+/* Row balancing (entity-dashboard.js balanceWrap): when the mode bar or
+   the viewing pill wraps, the script inserts full-width break items so
+   the rows split evenly — five tabs as 3 + 2, not 4 + 1 with the last
+   tab alone across a whole row (reported from an iPhone the day the
+   justified wrap shipped). A break is its own flex line, so with the
+   container's 2px row-gap on both sides of it the rows sat 4px apart
+   (measured); instead the container drops its row-gap while broken and
+   the break itself is the 2px. The last row has no break after it, so
+   the bottom inset is unchanged. */
+.jl-modes:has(> .jl-break),
+.details-edit:has(> .jl-break) { row-gap: 0; }
+.jl-break {
+  flex: 0 0 100%;
+  height: 2px;
+  margin: 0;
+  pointer-events: none;
+}
+/* entity-dashboard.js watchPagers(): stash's sticky footer pager is hidden
+   while the top pager is on screen (they coincide at the pane's top edge
+   for a stretch of scroll on entity pages — see the note there). */
+.pagination-footer-container.jl-footer-pager-hidden { visibility: hidden; }
