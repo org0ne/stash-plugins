@@ -684,6 +684,53 @@
     if (!ok) throw new Error('copy command was refused by the browser');
   }
 
+  /* ============================
+   *  ICONS
+   *  Inline SVG, built with createElementNS — NOT `<i class="fa-solid
+   *  fa-copy">`. Stash bundles Font Awesome only as inline SVGs through
+   *  its own React components and never ships the CSS classes, so the
+   *  `<i>` tags this used to emit were being rendered by a separate
+   *  fontawesome-js plugin nobody knew was load-bearing; disabling it
+   *  (2026-09-05) left every copy button in the DOM, working, and
+   *  invisible (0×0 icon, no ::before). Same stroked marks as
+   *  collection-colors' settings-panel copy button, sized 1em so the
+   *  existing font-size rules in clean-cards.css keep governing size and
+   *  `currentColor` keeps the .copied/.copy-failed color states working
+   *  unchanged. Deliberately a copy of copy-buttons.js's helper, not shared: the
+   *  two plugins are independent and copy-buttons may not be installed.
+   * ============================ */
+  const ICONS = {
+    copy:  [['rect', { x: 9, y: 9, width: 13, height: 13, rx: 2, ry: 2 }],
+            ['path', { d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }]],
+    check: [['polyline', { points: '20 6 9 17 4 12' }]],
+    xmark: [['line', { x1: 18, y1: 6, x2: 6, y2: 18 }], ['line', { x1: 6, y1: 6, x2: 18, y2: 18 }]],
+  };
+  function setIcon(svg, kind) {
+    svg.replaceChildren();
+    for (const [tag, attrs] of ICONS[kind]) {
+      const el = document.createElementNS(SVG_NS, tag);
+      for (const k in attrs) el.setAttribute(k, attrs[k]);
+      svg.appendChild(el);
+    }
+    svg.dataset.icon = kind;
+  }
+  function makeIcon(kind) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '1em');
+    svg.setAttribute('height', '1em');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2.25');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.classList.add('stash-copy-icon');
+    setIcon(svg, kind);
+    return svg;
+  }
+
   function enhanceCard(card) {
     if (card.dataset.stashClean) return;
 
@@ -715,8 +762,7 @@
     copyBtn.className = "stash-code-copy";
     copyBtn.title = "Copy studio code";
     copyBtn.setAttribute("aria-label", "Copy studio code");
-    const copyIcon = document.createElement("i");
-    copyIcon.className = "fa-solid fa-copy";
+    const copyIcon = makeIcon('copy');
     copyBtn.appendChild(copyIcon);
 
     copyBtn.addEventListener("click", e => {
@@ -727,16 +773,16 @@
       const flash = (cls, iconCls) => {
         copyBtn.classList.remove("copied", "copy-failed");
         copyBtn.classList.add(cls);
-        copyIcon.className = `fa-solid ${iconCls}`;
+        setIcon(copyIcon, iconCls);
         clearTimeout(copyBtn._copiedTimeout);
         copyBtn._copiedTimeout = setTimeout(() => {
           copyBtn.classList.remove("copied", "copy-failed");
-          copyIcon.className = "fa-solid fa-copy";
+          setIcon(copyIcon, 'copy');
         }, 1200);
       };
-      copyText(value).then(() => flash("copied", "fa-check")).catch(err => {
+      copyText(value).then(() => flash("copied", 'check')).catch(err => {
         console.error('CleanCards: copy failed', err);
-        flash("copy-failed", "fa-xmark");
+        flash("copy-failed", 'xmark');
       });
     });
 

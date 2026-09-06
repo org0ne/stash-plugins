@@ -25,6 +25,12 @@
   flex-shrink: 0 !important;
   transition: opacity 0.15s ease, color 0.15s ease !important;
 }
+/* The icon is an inline SVG sized 1em (copy-buttons.js makeIcon) — not a
+   Font Awesome <i>, see the ICONS note there — so every font-size rule in
+   this file still sets its size and `currentColor` still carries the
+   .copied/.copy-failed colors. Block display drops the inline-baseline
+   gap that would otherwise offset it a pixel low inside the flex button. */
+.stash-copy-btn > .stash-copy-icon { display: block !important; }
 .stash-copy-btn:hover { opacity: 1 !important; }
 .stash-copy-btn:focus-visible {
   outline: 1px solid rgba(115, 193, 230, 0.6) !important;

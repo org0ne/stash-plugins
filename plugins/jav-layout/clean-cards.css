@@ -164,6 +164,10 @@
   align-self: center !important;
   transition: opacity 0.15s ease, color 0.15s ease !important;
 }
+/* Inline SVG icon sized 1em (clean-cards.js makeIcon), not a Font Awesome
+   <i> — see the ICONS note there. Block display drops the inline-baseline
+   gap inside the flex button. */
+.stash-code-copy > .stash-copy-icon { display: block !important; }
 .stash-code-copy:hover { opacity: 1 !important; }
 .stash-code-copy.copied {
   color: var(--jl-ok) !important;

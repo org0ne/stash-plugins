@@ -1871,6 +1871,21 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
   look at. Verified on studios, performers, tags and galleries (native
   rows intact, no inline styles, no observers) and scenes (still
   reordered, anchored, pill present).
+- **Copy-button icons are inline SVG, never `<i class="fa-solid …">`
+  (2026-09-05).** Stash bundles Font Awesome only as inline SVGs through
+  its own React components and ships no FA CSS classes, so the `<i>`
+  tags clean-cards.js (card studio-code copy) and the copy-buttons plugin
+  emitted were being rendered by a separate `fontawesome-js` plugin
+  nobody knew was load-bearing. Disabling it left every button present,
+  working, and invisible — 0×0 icon, no `::before`, no error. Both files
+  now build the same stroked copy / check / cross marks with
+  createElementNS (the marks collection-colors' settings panel already
+  used), sized `1em` with `currentColor` so the existing font-size and
+  .copied/.copy-failed rules apply unchanged; one `display: block` rule
+  per stylesheet removes the inline-baseline gap. Helper deliberately
+  duplicated between the two plugins, like copyText, because they must
+  each work alone. Lesson: any `fa-*` class in a plugin is a hidden
+  dependency — grep for it before assuming an icon is native.
 - **clean-cards.js's copy of the popover reordering is gone; collection-
   colors owns it outright (2026-09-04 performance review).** Both files
   had the same boot observer, per-bar live observer and per-bar
