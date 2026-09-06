@@ -1084,7 +1084,21 @@
    *     kicks in and every chip moves) or changing (Browse-only content
    *     hides/shows), which is a plain attribute write by syncModeBar;
    *   - a font finishing loading (chip widths change → rows re-wrap);
-   *   - a viewport resize (the sidebar is full-width on mobile).
+   *   - a viewport resize (the sidebar is full-width on mobile);
+   *   - the sidebar becoming laid out at all (2026-09-06): stash keeps
+   *     the scene page's layout row at display:none until the scene has
+   *     loaded, and the sidebar's whole subtree — chips included —
+   *     mounts inside it while it is still hidden. Every chip measures
+   *     0×0 then, so sizeTagsBackdrop() bails, and the row un-hides
+   *     with no mutation inside .scene-tabs for the body observer to
+   *     see. Reported as the Tags block rendering collapsed (its bare
+   *     10px CSS default) and only growing "a second or two later" —
+   *     that later growth was whatever unrelated sidebar mutation came
+   *     next (the collection pill's fetch landing, typically); with the
+   *     pill cached (SPA navigation) it never grew at all. watchSize()
+   *     below puts a ResizeObserver on .scene-tabs, which fires exactly
+   *     when its box goes from 0 to laid out (and on any later size
+   *     change), and routes into the same re-measure.
    * Before the observer was filtered to sidebar-relevant mutations (see
    * touchesSidebar below), the constant stream of unrelated re-runs
    * masked all three: some later run always happened to re-measure in
@@ -1139,6 +1153,19 @@
     });
   }
 
+  /* Layout-arrival trigger — see measure()'s fourth bullet. One observer
+   * per root element (WeakSet, same pattern as entity-dashboard's
+   * watchNav): scene→scene SPA navigation that reuses the element keeps
+   * the one observer; a fresh element gets its own and the old one is
+   * collected with its node. ResizeObserver callbacks run after layout,
+   * so the measurement they trigger is taken in the state the user sees. */
+  const sizedRoots = new WeakSet();
+  function watchSize(root) {
+    if (sizedRoots.has(root) || typeof ResizeObserver === 'undefined') return;
+    sizedRoots.add(root);
+    new ResizeObserver(queueRemeasure).observe(root);
+  }
+
   /* ============================
    *  MAIN
    * ============================ */
@@ -1150,6 +1177,7 @@
     tagPanes(root);
     if (!buildModeBar(root)) return;
     watchNav(root);
+    watchSize(root);
     syncModeBar(root);
   }
 

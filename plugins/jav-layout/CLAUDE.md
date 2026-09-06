@@ -2072,7 +2072,26 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
      **If a layout-affecting state change is ever added that produces no
      childList mutation inside `.scene-tabs`, it needs its own
      `measure()` call — the observer will not catch it any more, by
-     design.**
+     design.** The fourth such case turned up 2026-09-06 (reported as
+     the Tags block rendering collapsed and growing "a second or two
+     later"): stash keeps the scene page's layout `.row` at
+     `display:none` until the scene has loaded, and the whole sidebar —
+     chips included — mounts inside it while hidden, so the first
+     measurement sees every chip at 0×0 and bails; the row then un-hides
+     with no mutation inside `.scene-tabs`. The later growth was
+     whatever unrelated sidebar mutation came next (the collection
+     pill's fetch landing); with that pill cached, as on SPA navigation
+     from the grid, the block stayed at its 10px CSS default for good
+     (measured: never corrected in 6s). `watchSize()` now puts one
+     ResizeObserver per `.scene-tabs` element on it, routed into
+     `queueRemeasure()`; it fires in the frame the box goes from 0 to
+     laid out, and on any later size change. Verified with an
+     instrumented load (ResizeObserver and rAF wrapped): the backdrop is
+     set to its full height in the same rendering frame the row appears,
+     on direct load and on SPA navigation. A heavier polling sampler had
+     suggested a ~350ms lag; that was the sampler's timer running between
+     long tasks while rendering frames were starved — nothing paints in
+     that gap either, so nothing is visible.
   Verified live after: fresh load, collapse→expand, load-collapsed→
   expand, Browse→Edit→Browse, and SPA scene→scene all measure exactly
   (backdrop height == last-chip-bottom − backdrop-top + 10; first-row/
