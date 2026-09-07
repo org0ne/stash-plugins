@@ -2001,6 +2001,29 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
   copyText, because they must each work alone. Lesson: any `fa-*` class
   in a plugin is a hidden dependency — grep for it before assuming an
   icon is native.
+- **Second performance pass, measured (2026-09-07).** A CDP probe that
+  wrapped MutationObserver/ResizeObserver and getBoundingClientRect/
+  getComputedStyle, attributing every call to the plugin function that
+  made it, over 3-second windows on the live instance: idle is zero
+  callbacks and zero reads on the grid, the scene page and a performer
+  page; video playback invokes all seven body-wide observers ~23×/s each
+  but they all exit early (0 reads); the one real cost was
+  collection-colors' per-bar overflow pass, 324 forced-layout reads per
+  3 s of grid scrolling (every ResizeObserver tick un-hid the icons and
+  re-read padding, bar rect and each icon's rect). That pass is
+  rewritten in collection-colors.js: one shared ResizeObserver, geometry
+  measured once per bar in a batched write→read→write frame and cached,
+  every later tick pure arithmetic against the entry's contentRect, cache
+  kept when the bar's children are unchanged (the first cut invalidated
+  on every reorder and measured MORE than before — 580 reads — until that
+  guard), dropped on child changes and fonts.ready. After: reads occur
+  only when pills are inserted as cards come into view. Also here:
+  clean-cards' visibility IntersectionObserver unobserves a card once its
+  data has arrived and no longer writes `data-visible` (nothing read it).
+  Correction to the first review: Quicksand is NOT dead weight —
+  `--jl-font-display` in fonts.css leads with it and nine rules use that
+  token. The probe script lives only in the session scratchpad; the
+  recipe is in project memory.
 - **The card's code/date bar is single-line; long codes ellipsise
   (2026-09-06).** Codes like `pacopacomama-012712_571` wrapped to a
   second line and took the copy button with them. `.code-group` and

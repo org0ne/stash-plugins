@@ -308,20 +308,20 @@
    *  VISIBILITY PRIORITY
    * ============================ */
 
+  /* Its only job is to promote a card that scrolls into view to the
+   * high-priority batch. Once the card's data has arrived there is nothing
+   * left to promote, so enhanceCard()'s callback unobserves it — before
+   * 2026-09-07 every card stayed observed for the life of the page and
+   * took a `data-visible` attribute write on every scroll crossing, which
+   * nothing read. */
   const visibilityObserver = new IntersectionObserver(entries => {
     for (const entry of entries) {
-      const card = entry.target;
-      const sceneId = card.dataset.sceneId;
-      if (!sceneId) continue;
-      if (entry.isIntersecting) {
-        card.dataset.visible = "true";
-        if (lowPriorityQueue.has(sceneId)) {
-          lowPriorityQueue.delete(sceneId);
-          highPriorityQueue.add(sceneId);
-          if (!batchTimeout) batchTimeout = setTimeout(runBatchQuery, 20);
-        }
-      } else {
-        card.dataset.visible = "false";
+      if (!entry.isIntersecting) continue;
+      const sceneId = entry.target.dataset.sceneId;
+      if (sceneId && lowPriorityQueue.has(sceneId)) {
+        lowPriorityQueue.delete(sceneId);
+        highPriorityQueue.add(sceneId);
+        if (!batchTimeout) batchTimeout = setTimeout(runBatchQuery, 20);
       }
     }
   }, { threshold: 0.1 });
@@ -838,7 +838,10 @@
     card._stashPerf     = perf;
 
     visibilityObserver.observe(card);
-    requestSceneData(sceneId, scene => applySceneDataToCard(card, scene), false);
+    requestSceneData(sceneId, scene => {
+      visibilityObserver.unobserve(card);      // data is here; nothing left to prioritise
+      applySceneDataToCard(card, scene);
+    }, false);
 
     card.dataset.stashClean = "true";
   }

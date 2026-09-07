@@ -381,11 +381,12 @@
   }
 
   /* Remove any anchor/overflow state a bar may have picked up and stop
-   * watching it. Used for .performer-card bars, which must never get the
+   * watching it. Used for bars outside .scene-card, which must never get the
    * scene-card-only anchoring/clipping treatment below — see clearAnchorState
    * call sites in reorderPopoverBar. */
   function clearAnchorState(bar) {
-    if (bar._stashRO) { bar._stashRO.disconnect(); bar._stashRO = null; }
+    if (bar._stashObserved) { barRO.unobserve(bar); bar._stashObserved = false; }
+    bar._stashNatives = null; bar._stashExt = null;
     Array.from(bar.children).forEach(el => {
       el.style.removeProperty('margin-left');
       el.style.removeProperty('visibility');
@@ -394,34 +395,105 @@
   }
 
   /* Push native buttons right as their own group, then hide any that
-   * overflow the bar. The pill (if present) is excluded entirely — it's
-   * a fixed left anchor, always visible, never touched here beyond a
-   * one-time reset of any margin/visibility/display a prior version of
-   * this logic might have left on it. Single persistent ResizeObserver per
-   * bar so getBoundingClientRect() is always post-layout, and keeps
-   * tracking the bar across future resizes instead of measuring once and
-   * going stale.
+   * overflow the bar. The pill (if present) is excluded entirely — it's a
+   * fixed left anchor, always visible.
    *
    * Overflow is hidden with `display: none`, not `visibility: hidden` —
-   * found live (192.168.11.109) that visibility alone left the icon group
-   * floating well short of the bar's right edge on any card with the full
-   * native icon set present. Root cause: `visibility: hidden` still
-   * reserves its element's box in layout — the flex line's total content
-   * width never actually shrinks just because some of it turned invisible.
-   * natives[0]'s `margin-left: auto` only has a positive value to resolve
-   * to when there's real free space in that line; if the *un-hidden*
-   * content already overflowed the bar (true for any card with every
-   * priority key present), the free space is zero and stays zero no
-   * matter how many of those still-space-occupying items get hidden
-   * afterward — the margin permanently resolves to 0, and the visible
-   * icons sit wherever they landed before hiding, nowhere near the right
-   * edge. `display: none` actually removes a hidden item from the line's
-   * width contribution, so once enough are removed for the rest to fit,
-   * the auto margin has real free space again and correctly pushes the
-   * remaining icons flush right.
+   * found live that visibility alone left the icon group floating well
+   * short of the bar's right edge: a hidden-but-present item still holds
+   * its box, so natives[0]'s `margin-left: auto` never regained free space.
+   * `display: none` removes it from the line, and the auto margin pushes
+   * the survivors flush right.
    *
-   * SCENE-CARD ONLY — see reorderPopoverBar()'s own performer-card
-   * bail-out; callers must route those bars to clearAnchorState() instead. */
+   * 2026-09-07 rewrite, after a live profile (see CLAUDE.md): the old
+   * per-bar ResizeObserver un-hid every icon and then read the bar's
+   * computed padding, its rect and one rect per icon on EVERY tick — about
+   * a hundred forced layouts a second while a card grid scrolled, because
+   * cards resize as their covers load. Now the geometry is measured once
+   * per bar, in one batched frame for however many bars need it (writes,
+   * then reads, then writes — one layout for the batch), and cached:
+   * `_stashExt[i]` is each icon's right edge relative to the group's left
+   * edge, `_stashStart` is where the group begins once it no longer fits
+   * (just past the pill). Every later tick is arithmetic against the
+   * ResizeObserver entry's own content width — zero layout reads — with
+   * writes only where an icon's state actually changes. The cache is
+   * dropped whenever the bar's children change (reorderPopoverBar calls
+   * anchorButtonsRight again) and when fonts finish loading. One shared
+   * observer for all bars, not one per bar, so a scroll's worth of resizes
+   * arrives as one callback.
+   *
+   * SCENE-CARD ONLY — see reorderPopoverBar()'s own bail-out; callers must
+   * route other bars to clearAnchorState() instead. */
+  const measureQueue = new Set();
+  let measureScheduled = false;
+  function scheduleMeasure(bar) {
+    measureQueue.add(bar);
+    if (measureScheduled) return;
+    measureScheduled = true;
+    requestAnimationFrame(() => {
+      measureScheduled = false;
+      const bars = [...measureQueue].filter(b => document.contains(b) && b._stashNatives);
+      measureQueue.clear();
+      // 1. writes: reveal everything so natural extents can be read
+      for (const bar of bars) for (const el of bar._stashNatives) el.style.removeProperty('display');
+      // 2. reads: one layout for the whole batch
+      for (const bar of bars) measureBar(bar);
+      // 3. writes: apply the overflow state
+      for (const bar of bars) applyOverflow(bar, bar._stashContentW);
+    });
+  }
+  function measureBar(bar) {
+    const natives = bar._stashNatives;
+    const cs = getComputedStyle(bar);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    const barRect = bar.getBoundingClientRect();
+    const contentLeft = barRect.left + padL;
+    let start = 0;
+    if (bar._stashPill) {
+      const pr = bar._stashPill.getBoundingClientRect();
+      // Pill's right edge, its own margin, AND the bar's column-gap before
+      // the first icon — the gap is invisible while the group has slack
+      // (the auto margin absorbs it) and bites exactly when the group has
+      // less than a gap's worth of room: one bar in forty sat 2.2px over
+      // the edge until this term was added (measured 2026-09-07).
+      start = pr.right + (parseFloat(getComputedStyle(bar._stashPill).marginRight) || 0) + (parseFloat(cs.columnGap) || 0) - contentLeft;
+    }
+    const groupLeft = natives[0].getBoundingClientRect().left;
+    bar._stashExt = natives.map(el => el.getBoundingClientRect().right - groupLeft);
+    bar._stashStart = start;
+    bar._stashContentW = bar.clientWidth - padL - padR;
+  }
+  function applyOverflow(bar, contentW) {
+    const natives = bar._stashNatives, ext = bar._stashExt;
+    if (!natives || !ext || contentW == null) return;
+    let clipping = false;
+    natives.forEach((el, i) => {
+      // Same threshold as before: an icon whose right edge would pass the
+      // content box's right edge (1px tolerance) is hidden, and so is
+      // everything after it — lowest priority last, hidden first.
+      if (!clipping && bar._stashStart + ext[i] > contentW + 1) clipping = true;
+      if (clipping) { if (el.style.display !== 'none') el.style.setProperty('display', 'none', 'important'); }
+      else if (el.style.display) el.style.removeProperty('display');
+    });
+  }
+  const barRO = new ResizeObserver(entries => {
+    for (const e of entries) {
+      const bar = e.target;
+      bar._stashContentW = e.contentRect.width;
+      if (bar._stashExt) applyOverflow(bar, bar._stashContentW);
+      else scheduleMeasure(bar);
+    }
+  });
+  // Icon widths follow the font; re-measure once the real one is in.
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      document.querySelectorAll('.scene-card .card-popovers.btn-group').forEach(bar => {
+        if (bar._stashObserved) { bar._stashExt = null; scheduleMeasure(bar); }
+      });
+    });
+  }
+
   function anchorButtonsRight(bar) {
     const pill = bar.querySelector(':scope > .stash-collection-pill');
     if (pill) {
@@ -430,56 +502,32 @@
       pill.style.removeProperty('display');
     }
     const natives = Array.from(bar.children).filter(el => el !== pill);
-
-    // Reset all state from any prior call
     natives.forEach(el => {
       el.style.removeProperty('margin-left');
-      el.style.removeProperty('visibility');
-      el.style.removeProperty('display');
+      el.style.removeProperty('visibility');   // legacy state from the old visibility-based version
     });
+    // Same pill and the same icons in the same order as last time → the
+    // cached geometry is still right; re-apply it and read nothing. The
+    // live observer calls this on every bar mutation (a rating click, a
+    // class flip during scroll), and a first cut invalidated the cache
+    // each time, which re-measured 60+ bars per scrolling second — more
+    // reads than the code it replaced (profiled 2026-09-07).
+    const same = bar._stashPill === pill && bar._stashNatives && bar._stashNatives.length === natives.length && natives.every((el, i) => el === bar._stashNatives[i]);
+    if (same && bar._stashExt && bar._stashObserved) {
+      if (natives[0]) natives[0].style.setProperty('margin-left', 'auto', 'important');
+      applyOverflow(bar, bar._stashContentW);
+      return;
+    }
+    bar._stashPill = pill;
+    bar._stashNatives = natives;
+    bar._stashExt = null;                       // children changed — measure again
     if (!natives[0]) return;
     natives[0].style.setProperty('margin-left', 'auto', 'important');
-
-    const recompute = () => {
-      // Reset every pass, not just the first — display:none actually
-      // removes an item from the line's content width (that's the whole
-      // point, see above), so a later pass triggered by a real resize
-      // needs a clean slate to correctly re-discover that a previously-
-      // hidden item now fits again. The loop below only ever *sets* the
-      // hidden state; without this it would never unset one.
-      natives.forEach(el => el.style.removeProperty('display'));
-      // The threshold is the bar's *content*-box right edge (border-box
-      // minus its own right padding), not the bare border-box edge.
-      // Found live: comparing against the raw border-box edge only
-      // guarantees content won't get clipped by this bar's own
-      // `overflow: hidden` — it lets kept icons poke up to a full
-      // padding-width into the 14px inset before the hide-cascade
-      // triggers, which defeats the point of that padding (see the
-      // symmetric-inset rule in collection-colors.css). Subtracting the
-      // bar's own computed padding-right makes the threshold the actual
-      // visual boundary icons are meant to respect.
-      const barRect = bar.getBoundingClientRect();
-      const barPadRight = parseFloat(getComputedStyle(bar).paddingRight) || 0;
-      const barRight = barRect.right - barPadRight;
-      let clipping = false;
-      for (const el of natives) {
-        if (clipping) {
-          el.style.setProperty('display', 'none', 'important');
-        } else {
-          const elRight = el.getBoundingClientRect().right;
-          if (elRight > barRight - 1) {
-            clipping = true;
-            el.style.setProperty('display', 'none', 'important');
-          }
-        }
-      }
-    };
-
-    if (!bar._stashRO) {
-      bar._stashRO = new ResizeObserver(() => recompute());
-      bar._stashRO.observe(bar);
+    if (!bar._stashObserved) {
+      bar._stashObserved = true;
+      barRO.observe(bar);                       // the observer's first callback schedules the measure
     } else {
-      recompute();
+      scheduleMeasure(bar);
     }
   }
 
@@ -560,10 +608,18 @@
   const popoverObserver = new MutationObserver(muts => {
     const bars = new Set();
     for (const m of muts) {
-      const t = m.target;
-      if (!(t instanceof Element)) continue;
+      // characterData records target the Text node itself; map it to its element.
+      const t = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+      if (!t) continue;
       const bar = t.matches('.card-popovers.btn-group') ? t : t.closest?.('.card-popovers.btn-group');
-      if (bar) bars.add(bar);
+      if (!bar) continue;
+      bars.add(bar);
+      // A count's text changing ("1" → "11") changes an icon's width without
+      // changing the bar's children, which is the one case the cached
+      // geometry in anchorButtonsRight() cannot see — drop it so the next
+      // pass measures again. Class flips are deliberately NOT treated this
+      // way (they happen on every hover and scroll and rarely change width).
+      if (m.type === 'characterData') bar._stashExt = null;
     }
     if (!bars.size) return;
     requestAnimationFrame(() => bars.forEach(reorderPopoverBar));
@@ -587,11 +643,11 @@
         // Scene-card bars only, same scope as reorderPopoverBar(): other
         // card types are never registered with the live observer.
         if (node.matches?.('.scene-card .card-popovers.btn-group')) {
-          popoverObserver.observe(node, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+          popoverObserver.observe(node, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'], characterData: true });
           reorderPopoverBar(node);
         } else {
           node.querySelectorAll?.('.scene-card .card-popovers.btn-group').forEach(bar => {
-            popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+            popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'], characterData: true });
             reorderPopoverBar(bar);
           });
         }
@@ -602,7 +658,7 @@
   function initPopoverReordering() {
     popoverBootObserver.observe(document.body, { childList: true, subtree: true });
     document.querySelectorAll('.scene-card .card-popovers.btn-group').forEach(bar => {
-      popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+      popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'], characterData: true });
       reorderPopoverBar(bar);
     });
   }
