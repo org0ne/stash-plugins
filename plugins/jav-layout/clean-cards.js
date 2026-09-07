@@ -850,17 +850,37 @@
    *  MUTATION OBSERVER
    * ============================ */
 
+  /* Cards are enhanced as they come within 400px of the viewport, not on
+   * mount (2026-09-07, Safari landing-page investigation). Stash's front
+   * page renders 465 scene cards at once across its carousels; enhancing
+   * every one at load meant 465 rounds of DOM building and the style and
+   * layout work that follows, for cards that are mostly off-screen — and
+   * on the phone's Safari that was the visible difference between the
+   * plugin on and off. The batched query already prioritised visible
+   * cards; now the DOM work is deferred the same way. The 400px margin
+   * (both axes — carousels scroll sideways) keeps the enhancement just
+   * ahead of the eye, so the code/date bar is in place before a card
+   * arrives. Each card is observed once and released when enhanced. */
+  const enhanceIO = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      enhanceIO.unobserve(e.target);
+      enhanceCard(e.target);
+    }
+  }, { rootMargin: '400px 400px' });
+  const queueCard = (card) => { if (!card.dataset.stashClean) enhanceIO.observe(card); };
+
   const observer = new MutationObserver(mutations => {
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (node.nodeType !== 1) continue;
-        if (node.matches?.(".scene-card")) enhanceCard(node);
-        else node.querySelectorAll?.(".scene-card").forEach(enhanceCard);
+        if (node.matches?.(".scene-card")) queueCard(node);
+        else node.querySelectorAll?.(".scene-card").forEach(queueCard);
       }
     }
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
-  document.querySelectorAll(".scene-card").forEach(enhanceCard);
+  document.querySelectorAll(".scene-card").forEach(queueCard);
 
 })();

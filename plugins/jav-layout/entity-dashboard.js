@@ -222,12 +222,25 @@
     }).observe(root, { childList: true, subtree: true });
   }
 
+  /* `html[data-jl-entity-editing]` replaces entity-dashboard.css's old
+     `body:has(.detail-header.edit)` (2026-09-07 — see the note there). Set
+     from the header's class: on every run(), so SPA navigation clears a
+     stale flag, and from an attribute observer on the header for the
+     edit/cancel flips, which are class changes the body observer ignores. */
+  function syncEditing() {
+    const editing = !!document.querySelector('.detail-header.edit');
+    const html = document.documentElement;
+    if (editing) { if (html.dataset.jlEntityEditing !== 'true') html.dataset.jlEntityEditing = 'true'; }
+    else if ('jlEntityEditing' in html.dataset) delete html.dataset.jlEntityEditing;
+  }
   const watchedHeaders = new WeakSet();
   let pillQueued = false;
   function watchPill() {
     const header = document.querySelector('.detail-header');
     if (!header || watchedHeaders.has(header)) return;
     watchedHeaders.add(header);
+    new MutationObserver(syncEditing).observe(header, { attributes: true, attributeFilter: ['class'] });
+    syncEditing();
     new MutationObserver(muts => {
       if (pillQueued) return;
       // Our own break insertions are childList mutations too; ignore batches that are only those.
@@ -277,6 +290,7 @@
    *  MAIN
    * ============================ */
   function run() {
+    syncEditing();
     for (const entity of ENTITIES) {
       const nav = document.querySelector(`${entity.tabsRoot} .nav-tabs`);
       if (!nav) continue;
@@ -330,6 +344,12 @@
   }
   let queued = false;
   const observer = new MutationObserver(muts => {
+    // Leaving an entity page mid-edit by SPA navigation removes the header
+    // without any class flip for watchPill's observer to see, and run()
+    // does not fire off entity routes — so the editing flag stayed set and
+    // would have hidden the SCENE page's mode bar (caught in verification,
+    // 2026-09-07). One cheap check per batch, only while the flag is up.
+    if (document.documentElement.dataset.jlEntityEditing && !document.querySelector('.detail-header.edit')) delete document.documentElement.dataset.jlEntityEditing;
     if (queued) return;
     if (!isRelevant(muts)) return;
     queued = true;

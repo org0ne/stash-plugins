@@ -604,7 +604,9 @@
   margin-bottom: 2px !important;
 }
 
-.row:has(> .scene-details) {
+/* Was `.row:has(> .scene-details)` — evaluated against every .row on every
+   page; the row is tagged by scene-dashboard.js instead (2026-09-07). */
+.row[data-jl-scene-details-row] {
   align-items: flex-start !important;
   margin-bottom: 0 !important;
 }

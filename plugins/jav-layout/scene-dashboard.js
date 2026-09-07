@@ -814,6 +814,12 @@
     if (details) {
       const metaCol = details.querySelector('.scene-details');
       if (metaCol) {
+        // clean-cards.css used to reach this row with `.row:has(> .scene-details)`
+        // — a `:has()` on a bare `.row`, which every browser evaluates against
+        // every `.row` on every page (stash's front page has hundreds), and
+        // WebKit pays more for than Blink does. The row is known here, so it
+        // is tagged instead (2026-09-07).
+        if (metaCol.parentElement) setData(metaCol.parentElement, 'jlSceneDetailsRow', 'true');
         const scenedetails = [];
         for (const h6 of metaCol.querySelectorAll(':scope > h6')) {
           if (h6.classList.contains('stash-original-title')) {

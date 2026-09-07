@@ -351,7 +351,7 @@
           // pass re-applies the newly-loaded priority — reorderPopoverBar()
           // below otherwise trusts a signature computed under the default
           // order and silently no-ops.
-          const bars = document.querySelectorAll('.scene-card .card-popovers.btn-group');
+          const bars = [...document.querySelectorAll('.scene-card .card-popovers.btn-group')].filter(bar => bar._stashRegistered);
           bars.forEach(bar => { delete bar.dataset._stashPopoverSig; });
           bars.forEach(reorderPopoverBar);
         }
@@ -596,15 +596,18 @@
     anchorButtonsRight(bar);
   }
 
-  // Two-tier observer, matching dracula-layout's original design: a
-  // lightweight "boot" observer watches the whole body just for NEW
-  // `.card-popovers.btn-group` bars appearing (new cards mounting) and
-  // registers each with the shared live observer below, plus reorders it
-  // immediately; the live observer then only watches the (comparatively
-  // few) bars actually registered with it for later changes — a rating
-  // click, an async duplicate-finder icon appearing, this plugin's own
-  // pill insertion, etc — rather than one giant subtree observer
-  // reacting to every DOM mutation on the whole page.
+  // The live observer watches only bars that have been REGISTERED — and
+  // a bar is registered when its card first comes into view, from the
+  // same IntersectionObserver that decides which cards get a pill
+  // (decorateCard below). Until 2026-09-07 a second, body-wide "boot"
+  // observer registered every scene-card bar the moment it mounted:
+  // stash's front page mounts 465 cards at once, so that was 465
+  // observer registrations plus 465 first measurements at load, nearly
+  // all for cards off-screen inside carousels — part of what made the
+  // page visibly slower with the plugins on in Safari. Bars that never
+  // scroll into view are never touched, and stash's native row is what
+  // they show if they ever are before this runs, which is the failsafe
+  // this plugin wants anyway.
   const popoverObserver = new MutationObserver(muts => {
     const bars = new Set();
     for (const m of muts) {
@@ -625,42 +628,11 @@
     requestAnimationFrame(() => bars.forEach(reorderPopoverBar));
   });
 
-  let popoverBootPending = [];
-  let popoverBootScheduled = false;
-  const popoverBootObserver = new MutationObserver(muts => {
-    for (const m of muts) {
-      for (const node of m.addedNodes) {
-        if (node instanceof Element) popoverBootPending.push(node);
-      }
-    }
-    if (popoverBootScheduled) return;
-    popoverBootScheduled = true;
-    queueMicrotask(() => {
-      const nodes = popoverBootPending;
-      popoverBootPending = [];
-      popoverBootScheduled = false;
-      nodes.forEach(node => {
-        // Scene-card bars only, same scope as reorderPopoverBar(): other
-        // card types are never registered with the live observer.
-        if (node.matches?.('.scene-card .card-popovers.btn-group')) {
-          popoverObserver.observe(node, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'], characterData: true });
-          reorderPopoverBar(node);
-        } else {
-          node.querySelectorAll?.('.scene-card .card-popovers.btn-group').forEach(bar => {
-            popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'], characterData: true });
-            reorderPopoverBar(bar);
-          });
-        }
-      });
-    });
-  });
-
-  function initPopoverReordering() {
-    popoverBootObserver.observe(document.body, { childList: true, subtree: true });
-    document.querySelectorAll('.scene-card .card-popovers.btn-group').forEach(bar => {
-      popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'], characterData: true });
-      reorderPopoverBar(bar);
-    });
+  function registerBar(bar) {
+    if (!bar || bar._stashRegistered) return;
+    bar._stashRegistered = true;
+    popoverObserver.observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'], characterData: true });
+    reorderPopoverBar(bar);
   }
 
   /* ============================
@@ -681,6 +653,7 @@
     if (card.dataset.collectionColors) return;
     const link = card.querySelector('a[href^="/scenes/"]');
     const bar = card.querySelector('.card-popovers.btn-group');
+    if (bar) registerBar(bar);                 // the card is on screen: this bar is now managed
     if (!link || !bar) return;
     const sceneId = link.href.match(/\/scenes\/(\d+)/)?.[1];
     if (!sceneId) return;
@@ -1097,5 +1070,4 @@
   trySetupSettingsPanel();
   // trySetupMetadataPill(); // disabled — see note above its definition
   trySetupHeaderPill();
-  initPopoverReordering();
 })();

@@ -76,7 +76,12 @@
    is noise anyway, so it goes for the duration of the edit. Nothing
    else below the header exists in edit mode (no toolbar, no cards, no
    pager — confirmed), so this is the only overlap the footer can have. */
-body:has(.detail-header.edit) .jl-modes-row { display: none !important; }
+html[data-jl-entity-editing] .jl-modes-row { display: none !important; }
+/* ^ was `body:has(.detail-header.edit)`: a `:has()` with `body` as its subject
+   is re-evaluated on class changes anywhere in the document — the video
+   player alone flips classes dozens of times a second — and WebKit's
+   `:has()` invalidation is broader than Blink's. entity-dashboard.js sets
+   the attribute from the header's own class (2026-09-07). */
 
 /* The header's height is set by whichever is taller — the image
    (`.detail-header-image`, floated beside the text) or the text column —

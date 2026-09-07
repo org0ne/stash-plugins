@@ -2001,6 +2001,47 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
   copyText, because they must each work alone. Lesson: any `fa-*` class
   in a plugin is a hidden dependency — grep for it before assuming an
   icon is native.
+- **Safari: the landing page renders visibly slower with jav-layout on
+  (2026-09-07, still open).** Reported for Safari 26; stash's front page
+  mounts **465 scene cards** at once across its carousels (112k DOM
+  nodes). Chrome, measured with CDP Performance metrics and the plugin
+  injected from a scratch origin (it was disabled in stash for the A/B —
+  note `/plugin/jav-layout/css` answers "plugin disabled" then, so an
+  A/B that reads the served bundle silently measures OFF twice; and a
+  cross-origin injection is blocked by stash's CSP `style-src 'self'`,
+  so the harness serves the files under the page origin via
+  Fetch.fulfillRequest), pays ~100–140 ms of task time for the plugin on
+  a ~1.5 s load, almost all of it in the JS path: 465 card enhancements
+  and 465 bar registrations at mount, ~8,400 extra DOM nodes. CSS
+  variants (no fonts.css, no comments, no `:has()`, no base-theme) were
+  indistinguishable in Chrome. Safari cannot be run from this host, so
+  the "safer changes first" were the ones that cut startup work in any
+  engine: (1) clean-cards enhances a card only when it comes within
+  400px of the viewport (IntersectionObserver, both axes for carousels)
+  — 15 cards at load instead of 465, ~540 extra nodes instead of 8,400;
+  (2) collection-colors registers a bar's observers only when its card
+  comes into view (decorateCard's own IntersectionObserver); the
+  body-wide boot observer is gone; (3) `.row:has(> .scene-details)` in
+  clean-cards.css became `.row[data-jl-scene-details-row]`, set by
+  scene-dashboard.js — a `:has()` on a bare `.row` is evaluated against
+  every `.row` on every page; (4) `body:has(.detail-header.edit)` in
+  entity-dashboard.css became `html[data-jl-entity-editing]`, set by
+  entity-dashboard.js from the header's class and cleared by the body
+  observer whenever no editing header exists (leaving a performer page
+  mid-edit via a nav link otherwise left it set, which would have hidden
+  the scene page's mode bar). Theme is the default, so there is no
+  theme-switch transition storm to gate. Next candidates if Safari is
+  still slow, in order: move the base64 fonts out of the render-blocking
+  stylesheet into files (stash's binary has a `/assets/*` plugin route;
+  200 KB of the 535 KB CSS is font data that gzip cannot shrink);
+  pre-resolve the ~100 `color-mix()` tokens to literals per theme
+  (WebKit resolves them per element per recalc); and stash's own
+  blurred header image on entity pages. Separately diagnosed the same
+  day: the "Fetch API cannot load …/graphql due to access control
+  checks" stall is Cloudflare Access redirecting an unauthenticated
+  GraphQL POST to its login origin — Safari via iCloud Private Relay
+  takes the public path while Chrome takes the split-DNS LAN path — not
+  a plugin issue.
 - **Second performance pass, measured (2026-09-07).** A CDP probe that
   wrapped MutationObserver/ResizeObserver and getBoundingClientRect/
   getComputedStyle, attributing every call to the plugin function that
