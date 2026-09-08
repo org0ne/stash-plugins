@@ -1,4 +1,4 @@
-# Jasna Switch for Stash (proof of concept)
+# Jasna Switch
 
 A Stash UI plugin that adds a **JASNA ON/OFF** toggle to the scene player.
 When ON, the player swaps to a live HLS stream produced by
@@ -36,20 +36,29 @@ roadmap are kept outside this repo.
 
 ## Install
 
-```sh
-cd <stash config dir>/plugins
-git clone https://github.com/org0ne/stash-jasna-plugin jasnaSwitch
+Easiest: add this depot as a plugin source in Stash
+(Settings > Plugins > Sources):
+
+```
+https://org0ne.github.io/stash-plugins/stable/index.yml
 ```
 
-Then in Stash: Settings > Plugins > Reload plugins (or
-`mutation { reloadPlugins }` via GraphQL).
+then install **Jasna Switch** from the list. For development, symlink this
+folder into Stash's `plugins/` directory instead:
+
+```sh
+ln -s /path/to/stash-plugins/plugins/jasna-switch <stash config dir>/plugins/jasna-switch
+```
+
+and Settings > Plugins > Reload plugins (or `mutation { reloadPlugins }`
+via GraphQL).
 
 Configure the Jasna endpoint in Settings > Plugins > Jasna Switch >
 **Jasna URL**, e.g. `http://192.168.11.113:8765`. If left empty the
-default in `jasnaSwitch.js` is used.
+default in `jasna-switch.js` is used.
 
 The Jasna origin must also be allowed by Stash's Content Security Policy.
-`jasnaSwitch.yml` ships with the two origins used during development under
+`jasna-switch.yml` ships with the two origins used during development under
 `ui.csp.connect-src`; add yours there if it differs, then reload plugins.
 
 Open any scene: the toggle appears directly below the player (under the

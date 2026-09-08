@@ -41,9 +41,9 @@
   // as mixed content (see tools/https-proxy/ for the PoC workaround).
   // Plain-HTTP Stash can point straight at Jasna's own port. Whatever the
   // origin is, it must also be listed under ui.csp.connect-src in
-  // jasnaSwitch.yml.
+  // jasna-switch.yml.
   const DEFAULT_JASNA_URL = "https://192.168.11.113:8766";
-  const PLUGIN_ID = "jasnaSwitch"; // derived by Stash from the .yml filename
+  const PLUGIN_ID = "jasna-switch"; // derived by Stash from the .yml filename
   const JASNA_READY_TIMEOUT_MS = 5000;
   const JASNA_POLL_INTERVAL_MS = 250;
   let JASNA_URL = DEFAULT_JASNA_URL;

@@ -20,6 +20,7 @@ Stash will list every plugin in this repo, ready to install with one click.
 | --- | --- |
 | [collection-colors](plugins/collection-colors) | Adds an identifying "Pill" to the scene cards and scene details. Uses the parent Library folder, which is auto-discovered — no hardcoded paths. Useful if you have Censored, Uncensored, Decensored, etc parent folders in your JAV Library |
 | [copy-buttons](plugins/copy-buttons) | Click-to-copy buttons for performer names, performer disambiguations, and studio codes. |
+| [jasna-switch](plugins/jasna-switch) | Adds a JASNA ON/OFF toggle to the scene player that swaps playback to a live [Jasna](https://github.com/Kruk2/jasna) restored HLS stream and back, preserving position. Stash stays stock; Jasna can run on another host. |
 | [jav-layout](plugins/jav-layout) | Full Stash layout modification based on Dracula color scheme.  Cards, buttons, layouts, etc are all touched and massaged into a more coherent layout.  Additional nicities for JAV collectors include promoting performer names, studio codes and original titles to a more visible and prominent location whenever possible. |
 | [title-scrubber](plugins/title-scrubber) | Strips performer name and bracketed identifiers from scene titles.  This is a very me-specific need, but it is provided as a plugin if you happen to structure your titles as {Performer name} - {[Uncensored,Censored,Decensored,etc]} Title {[Studio Code]} |
 

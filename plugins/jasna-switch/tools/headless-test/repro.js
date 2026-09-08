@@ -14,7 +14,7 @@
 // Env: STASH_URL (default http://localhost:9999), JASNA_URL (host/origin
 // of the Jasna server, used only to filter network log lines).
 // Prereqs: Jasna running (`jasna --stream`), the plugin installed in Stash
-// with its Jasna URL setting configured. POST <jasna>/stop first for a
+// with its Jasna URL setting configured (plugin id jasna-switch). POST <jasna>/stop first for a
 // cold-start measurement.
 // Instruments player.error()/src()/load() with stack traces and logs raw
 // <video> events so a Stash-side source swap is visible if it happens.

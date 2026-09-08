@@ -1,8 +1,7 @@
-# Stash UI plugin manifest for the Jasna switchable-playback PoC.
-# Install by cloning this repo into Stash's `plugins` folder as `jasnaSwitch`,
-# then Settings > Plugins > Reload Plugins. See README.md.
+# Stash UI plugin manifest for Jasna switchable playback.
+# Filename (minus .yml) is the plugin id: jasna-switch. See README.md.
 
-name: Jasna Switch (PoC)
+name: Jasna Switch
 description: >
   Adds a JASNA ON/OFF toggle to the Stash scene player, allowing
   Jasna-restored playback to be swapped in as an alternate rendition
@@ -17,7 +16,7 @@ ui:
     # hls.js is attached directly to the raw <video> element instead,
     # the same approach Jasna's own reference UI uses.
     - https://cdn.jsdelivr.net/npm/hls.js@1
-    - jasnaSwitch.js
+    - jasna-switch.js
 
   # Jasna typically runs on a different host/port than Stash, so its
   # origin must be allow-listed for fetch()/XHR to succeed. Add the origin
@@ -38,5 +37,5 @@ settings:
       Base URL of the Jasna --stream server, e.g. http://192.168.11.113:8765
       (or the HTTPS proxy in front of it when Stash itself is HTTPS). Must
       also be listed in this plugin's CSP connect-src. Leave empty to use the
-      default compiled into jasnaSwitch.js.
+      default compiled into jasna-switch.js.
     type: STRING

@@ -1,3 +1,9 @@
 _site/
 __pycache__/
 *.pyc
+
+# jasna-switch: throwaway self-signed TLS material for its https-proxy tool
+plugins/jasna-switch/tools/https-proxy/*.key
+plugins/jasna-switch/tools/https-proxy/*.crt
+# jasna-switch: headless test harness scratch
+plugins/jasna-switch/tools/headless-test/chrome-profile*/
