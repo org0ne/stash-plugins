@@ -1,0 +1,14 @@
+# Throwaway self-signed TLS material for tools/https-proxy - regenerate
+# locally (see README), never commit a private key.
+tools/https-proxy/*.key
+tools/https-proxy/*.crt
+
+# Headless test harness scratch
+tools/headless-test/chrome-profile*/
+*.png
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
