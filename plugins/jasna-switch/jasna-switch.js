@@ -416,15 +416,38 @@
     }
   }
 
+  // On iOS Safari the switch uses native HLS (no MSE): assigning a new
+  // video.src to a live element fires a real 'error', so video.js shows its
+  // overlay for a frame before we can clear it. Clearing after the fact is
+  // too late to stop the flash, so we also HIDE the overlay outright for the
+  // bounded hand-off window. The desktop hls.js path fires no such error, so
+  // there the class is a harmless no-op.
+  let errorHideStyleInjected = false;
+  function ensureErrorHideStyle() {
+    if (errorHideStyleInjected) return;
+    const st = document.createElement("style");
+    st.textContent = ".jasna-suppress-error .vjs-error-display{display:none!important}";
+    (document.head || document.documentElement).appendChild(st);
+    errorHideStyleInjected = true;
+  }
+
   function suppressSwitchError(player, video) {
+    ensureErrorHideStyle();
+    const root = player.el();
+    root.classList.add("jasna-suppress-error");
     let active = true;
     const onErr = () => {
       if (active) setTimeout(() => { if (active) clearPlayerError(player); }, 0);
     };
+    const onPlaying = () => clearPlayerError(player); // frames flowing: reset state
     video.addEventListener("error", onErr, true);
+    video.addEventListener("playing", onPlaying);
     return () => {
       active = false;
       video.removeEventListener("error", onErr, true);
+      video.removeEventListener("playing", onPlaying);
+      clearPlayerError(player);
+      root.classList.remove("jasna-suppress-error");
     };
   }
 
