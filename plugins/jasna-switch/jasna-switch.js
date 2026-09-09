@@ -82,6 +82,36 @@
     console.log("[Jasna] Endpoint: " + (BRIDGE_URL ? "bridge " + BRIDGE_URL : "direct " + JASNA_URL));
   }
 
+  const PRESET_STORAGE_KEY = "jasna-switch:preset";
+
+  function readSavedPreset() {
+    try { return localStorage.getItem(PRESET_STORAGE_KEY); } catch (e) { return null; }
+  }
+  function savePreset(name) {
+    try { localStorage.setItem(PRESET_STORAGE_KEY, name); } catch (e) { /* private mode */ }
+  }
+
+  // Populate the preset picker and warmth hint from the bridge. Only bridge
+  // mode has presets; direct mode leaves state.presets empty (no picker).
+  async function loadBridgePresets() {
+    if (!bridgeMode()) return;
+    try {
+      const resp = await fetch(`${BRIDGE_URL}/presets`, { credentials: "include", headers: bridgeHeaders(false) });
+      if (!resp.ok) { log(`presets HTTP ${resp.status}`); return; }
+      const data = await resp.json();
+      state.presets = Array.isArray(data.presets) ? data.presets : [];
+      state.warm = !!data.warm;
+      const names = state.presets.map((p) => p.name);
+      const saved = readSavedPreset();
+      state.preset = saved && names.includes(saved) ? saved : (data.default || null);
+      log(`Presets: ${names.join(", ") || "(none)"}; default ${data.default}; warm ${state.warm}`);
+    } catch (err) {
+      log("could not load presets: " + err.message);
+    }
+    ensureButtonMounted();
+    renderPresetSelect();
+  }
+
   function bridgeMode() {
     return !!BRIDGE_URL;
   }
@@ -103,6 +133,10 @@
     // bridge mode
     sessionToken: null,
     heartbeatTimer: null,
+    preset: null,        // chosen preset name (bridge mode); null = bridge default
+    presets: [],         // [{name, description}] from GET /presets
+    warm: false,         // bridge reports Jasna warm (cold-start hint)
+    canTakeover: false,  // last busy response said the idle owner can be taken over
   };
 
   function log(msg) {
@@ -119,6 +153,7 @@
 
   function setButtonLabel(text) {
     if (uiButtonEl) uiButtonEl.textContent = text;
+    renderPresetSelect();
   }
 
   function setButtonDisabled(disabled) {
@@ -228,12 +263,16 @@
     }
   }
 
-  async function bridgeCreateSession(sceneId, time) {
+  async function bridgeCreateSession(sceneId, time, opts) {
+    opts = opts || {};
+    const payload = { scene_id: sceneId, time };
+    if (state.preset) payload.preset = state.preset;
+    if (opts.force) payload.force = true;
     const resp = await fetch(`${BRIDGE_URL}/session`, {
       method: "POST",
       headers: bridgeHeaders(true),
       credentials: "include",
-      body: JSON.stringify({ scene_id: sceneId, time }),
+      body: JSON.stringify(payload),
     });
     let body = null;
     try {
@@ -471,7 +510,8 @@
   }
 
   // Phase 4: normal -> Jasna
-  async function enableJasna(player) {
+  async function enableJasna(player, opts) {
+    opts = opts || {};
     if (state.source !== "stash") return;
     if (!state.path) {
       log("Scene file unavailable; cannot enable Jasna");
@@ -488,15 +528,19 @@
     state.playbackRate = player.playbackRate();
     state.source = "switching";
     state.cancelSwitch = false;
+    state.canTakeover = false;
 
-    log(`Toggle ON at ${time.toFixed(3)}` + (bridgeMode() ? " (bridge)" : ""));
+    log(`Toggle ON at ${time.toFixed(3)}` + (bridgeMode() ? " (bridge)" : "") + (opts.force ? " (takeover)" : ""));
     player.pause();
 
+    // Cold-start hint: while Jasna is not warm the first frame can take
+    // several seconds (pipeline spin-up), so say so instead of a bare wait.
+    const cold = bridgeMode() && !state.warm;
     const reqStart = performance.now();
-    setButtonLabel("JASNA: PREPARING...");
+    setButtonLabel(cold ? "JASNA: STARTING..." : "JASNA: PREPARING...");
     const preparingTimer = setInterval(() => {
       const secs = Math.floor((performance.now() - reqStart) / 1000);
-      if (secs >= 2) setButtonLabel(`JASNA: PREPARING... ${secs}s`);
+      if (secs >= 2) setButtonLabel(`JASNA: ${cold ? "STARTING" : "PREPARING"}... ${secs}s`);
     }, 500);
 
     const cancelled = async () => {
@@ -511,8 +555,9 @@
     try {
       let manifestUrl;
       if (bridgeMode()) {
-        const session = await bridgeCreateSession(state.sceneId, time);
+        const session = await bridgeCreateSession(state.sceneId, time, { force: opts.force });
         state.sessionToken = session.token;
+        state.warm = true; // a live stream is warm for the next toggle
         manifestUrl = `${BRIDGE_URL}${session.playlist_path}`;
         log(`Bridge session ready in ${session.ready_seconds}s` +
             (session.reused ? " (stream reused)" : session.cold ? " (cold start)" : session.switched ? " (file switch)" : " (warm)"));
@@ -536,12 +581,30 @@
     } catch (err) {
       if (err instanceof BridgeBusyError) {
         const who = err.info.scene_id ? ` (scene ${err.info.scene_id}, idle ${Math.round(err.info.idle_seconds || 0)}s)` : "";
-        log(`Jasna is busy${who}`);
-        setButtonLabel("JASNA: BUSY");
-      } else {
-        log(`ERROR: ${err.message}`);
-        setButtonLabel("JASNA: ERROR");
+        if (state.sessionToken) endBridgeSession("error");
+        restoreStashSource(player, state.currentTime, state.playing);
+        state.source = "stash";
+        if (err.info.takeover_available) {
+          // The owner is idle; let the next click pre-empt it. Bound the
+          // offer so a stale "TAKE OVER?" label can't sit there forever.
+          log(`Jasna is busy${who}; owner is idle, take-over available`);
+          state.canTakeover = true;
+          setButtonLabel("JASNA: TAKE OVER?");
+          setTimeout(() => {
+            if (state.source === "stash" && state.canTakeover) {
+              state.canTakeover = false;
+              setButtonLabel("JASNA: OFF");
+            }
+          }, 8000);
+        } else {
+          log(`Jasna is busy${who}`);
+          setButtonLabel("JASNA: BUSY");
+          setTimeout(() => setButtonLabel("JASNA: OFF"), 3000);
+        }
+        return;
       }
+      log(`ERROR: ${err.message}`);
+      setButtonLabel("JASNA: ERROR");
       if (state.sessionToken) endBridgeSession("error");
       restoreStashSource(player, state.currentTime, state.playing);
       state.source = "stash";
@@ -582,7 +645,9 @@
       return;
     }
     if (state.source === "stash") {
-      enableJasna(player);
+      const force = state.canTakeover;
+      state.canTakeover = false;
+      enableJasna(player, { force });
     } else if (state.source === "jasna") {
       disableJasna(player);
     } else if (state.source === "switching") {
@@ -609,25 +674,66 @@
   // ABOVE the player, hidden under Stash's fixed top navbar (seen
   // 2026-09-08). The observer re-checks ordering so a React re-render
   // that replaces .VideoPlayer can't leave the button stranded.
+  // Populate / update the preset <select>. Shown only in bridge mode with
+  // more than one preset; hidden otherwise (direct mode, or a single preset).
+  function renderPresetSelect() {
+    const sel = document.getElementById("jasna-preset-select");
+    if (!sel) return;
+    const show = bridgeMode() && state.presets.length > 1;
+    sel.hidden = !show;
+    if (!show) return;
+    const want = state.presets.map((p) => p.name).join("|");
+    if (sel.dataset.built !== want) {
+      sel.innerHTML = "";
+      for (const p of state.presets) {
+        const opt = document.createElement("option");
+        opt.value = p.name;
+        opt.textContent = p.description ? `${p.name} — ${p.description}` : p.name;
+        sel.appendChild(opt);
+      }
+      sel.dataset.built = want;
+    }
+    if (state.preset) sel.value = state.preset;
+    // Cannot change preset mid-stream: a switch restarts Jasna.
+    sel.disabled = state.source !== "stash";
+  }
+
   function ensureButtonMounted() {
     const videoPlayer = document.querySelector(".scene-player-container .VideoPlayer");
     if (!videoPlayer) return;
 
-    let button = document.getElementById("jasna-toggle-button");
-    if (!button) {
-      button = document.createElement("button");
+    let controls = document.getElementById("jasna-controls");
+    if (!controls) {
+      controls = document.createElement("div");
+      controls.id = "jasna-controls";
+      controls.style.cssText = "display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap";
+
+      const button = document.createElement("button");
       button.id = "jasna-toggle-button";
       button.textContent = "JASNA: OFF";
       button.disabled = !state.path;
-      button.style.display = "block";
-      button.style.marginTop = "8px";
       button.addEventListener("click", () => onToggleClick(getVideoJsPlayer()));
       uiButtonEl = button;
+
+      const select = document.createElement("select");
+      select.id = "jasna-preset-select";
+      select.hidden = true;
+      select.title = "Jasna preset (applied on the next toggle ON)";
+      select.style.cssText = "padding:2px 4px";
+      select.addEventListener("change", () => {
+        state.preset = select.value;
+        savePreset(select.value);
+        log(`Preset -> ${select.value}`);
+      });
+
+      controls.appendChild(button);
+      controls.appendChild(select);
     }
 
-    if (button.previousElementSibling !== videoPlayer) {
-      videoPlayer.insertAdjacentElement("afterend", button);
+    if (controls.previousElementSibling !== videoPlayer) {
+      videoPlayer.insertAdjacentElement("afterend", controls);
     }
+    renderPresetSelect(); // repopulate once presets arrive (fetch resolves after first mount)
     ensureSeekListener(getVideoJsPlayer());
   }
 
@@ -640,5 +746,6 @@
   loadPluginSettings().then(() => {
     handleLocationChange(window.location.pathname);
     ensureButtonMounted();
+    loadBridgePresets();
   });
 })();
