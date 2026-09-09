@@ -41,13 +41,12 @@
   // (Settings > Plugins > Jasna Switch), read via GraphQL at load time.
   // DEFAULT_JASNA_URL is the fallback when the setting is empty.
   //
-  // If Stash is served over HTTPS, this must be an HTTPS origin too:
-  // browsers block fetch()/HLS requests from an HTTPS page to plain HTTP
-  // as mixed content (see tools/https-proxy/ for the PoC workaround).
-  // Plain-HTTP Stash can point straight at Jasna's own port. Whatever the
-  // origin is, it must also be listed under ui.csp.connect-src in
+  // Direct mode only works from a plain-HTTP Stash (an HTTPS page cannot
+  // fetch Jasna's plain-HTTP stream: mixed content). HTTPS setups use
+  // bridge mode with the bridge under the Stash domain instead. Whatever
+  // the origin is, it must also be listed under ui.csp.connect-src in
   // jasna-switch.yml.
-  const DEFAULT_JASNA_URL = "https://192.168.11.113:8766";
+  const DEFAULT_JASNA_URL = "http://192.168.11.113:8765";
   const PLUGIN_ID = "jasna-switch"; // derived by Stash from the .yml filename
   const JASNA_READY_TIMEOUT_MS = 5000;
   const JASNA_POLL_INTERVAL_MS = 250;
@@ -133,6 +132,9 @@
 
   // --- Phase 3: scene/file discovery via GraphQL ---
 
+  // performers is not used here; it is requested because another plugin's
+  // fetch hook (CleanCards' processScene) assumes every findScene response
+  // has it and throws otherwise (seen 2026-09-08).
   async function fetchScene(sceneId) {
     const query = `
       query FindSceneJasna($id: ID!) {
@@ -141,6 +143,9 @@
           files {
             path
             duration
+          }
+          performers {
+            id
           }
         }
       }

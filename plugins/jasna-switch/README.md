@@ -55,9 +55,10 @@ Without a Bridge URL the plugin runs in the original direct mode below.
   there is no runtime settings API).
 - Jasna and Stash must see the media at the **same absolute path**.
 - Browser: Chrome/Chromium verified. Firefox and Safari untested.
-- If Stash is served over **HTTPS**, Jasna must also be reachable over
-  HTTPS (mixed-content rule). See "HTTPS Stash" below. Plain-HTTP Stash
-  can talk to Jasna's plain-HTTP port directly.
+- If Stash is served over **HTTPS**, use bridge mode with the bridge
+  reverse-proxied under the Stash domain (mixed-content rule). See "HTTPS
+  Stash" below. Plain-HTTP Stash can talk to Jasna's plain-HTTP port
+  directly.
 
 ## Install
 
@@ -82,9 +83,10 @@ Configure the Jasna endpoint in Settings > Plugins > Jasna Switch >
 **Jasna URL**, e.g. `http://192.168.11.113:8765`. If left empty the
 default in `jasna-switch.js` is used.
 
-The Jasna origin must also be allowed by Stash's Content Security Policy.
-`jasna-switch.yml` ships with the two origins used during development under
-`ui.csp.connect-src`; add yours there if it differs, then reload plugins.
+An absolute Bridge URL or Jasna URL must also be allowed by Stash's
+Content Security Policy. `jasna-switch.yml` ships with the two origins used
+during development under `ui.csp.connect-src`; add yours there if it
+differs, then reload plugins. A relative Bridge URL needs nothing.
 
 Open any scene: the toggle appears directly below the player (under the
 scrubber strip).
@@ -92,24 +94,11 @@ scrubber strip).
 ## HTTPS Stash
 
 Browsers block an HTTPS page from fetching `http://` resources, and Jasna's
-stream server is plain HTTP. Two options:
-
-- Preferred: put Jasna behind the same reverse proxy/domain as Stash
-  (e.g. `https://stash.example/jasna/` -> `127.0.0.1:8765`).
-- Quick hack used for the PoC: `tools/https-proxy/proxy.py`, a tiny
-  TLS-terminating TCP proxy. Generate a cert first (not committed):
-
-  ```sh
-  cd tools/https-proxy
-  openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-    -keyout jasna-proxy.key -out jasna-proxy.crt \
-    -subj "/CN=jasna-proxy" \
-    -addext "subjectAltName=IP:192.168.11.113,IP:127.0.0.1,DNS:localhost"
-  python3 proxy.py   # listens :8766, forwards to 127.0.0.1:8765
-  ```
-
-  Visit `https://<host>:8766/` once in the browser and accept the warning,
-  then use that URL as the Jasna URL.
+stream server is plain HTTP. Use bridge mode and serve the bridge under
+the same domain as Stash through your reverse proxy (see the bridge's
+`deploy/nginx-proxy-manager.md`); then Bridge URL is just `/jasna` and no
+TLS, CORS or CSP setup is needed. Plain-HTTP Stash can point at an
+absolute bridge or Jasna URL directly.
 
 ## Headless end-to-end test
 

@@ -6,7 +6,7 @@ description: >
   Adds a JASNA ON/OFF toggle to the Stash scene player, allowing
   Jasna-restored playback to be swapped in as an alternate rendition
   of the current scene without modifying Stash itself.
-version: 0.1.0
+version: 0.2.0
 
 ui:
   javascript:
@@ -14,8 +14,10 @@ ui:
     # 2026-09-08: player.src() with an .m3u8 URL stalls forever in
     # Chrome, then errors MEDIA_ERR_SRC_NOT_SUPPORTED on player.load()).
     # hls.js is attached directly to the raw <video> element instead,
-    # the same approach Jasna's own reference UI uses.
-    - https://cdn.jsdelivr.net/npm/hls.js@1
+    # the same approach Jasna's own reference UI uses. Bundled copy of
+    # hls.js 1.7.2 (dist/hls.min.js, Apache-2.0) so no CDN or script-src
+    # CSP exception is needed.
+    - hls.min.js
     - jasna-switch.js
 
   # Jasna typically runs on a different host/port than Stash, so its
@@ -23,14 +25,12 @@ ui:
   # you configure as "Jasna URL" below. If Stash is served over HTTPS the
   # Jasna origin must be HTTPS too (browsers block mixed content); a
   # plain-HTTP Stash can use Jasna's own http port directly.
+  # Not needed when the bridge is served under the Stash domain (Bridge URL
+  # "/jasna"): 'self' covers it. Only absolute Bridge/Jasna URLs need an entry.
   csp:
-    script-src:
-      - https://cdn.jsdelivr.net
     connect-src:
-      - https://192.168.11.113:8766
-      - http://192.168.11.113:8765
       - http://192.168.11.113:8770
-      - http://localhost:8770
+      - http://192.168.11.113:8765
 
 settings:
   bridgeUrl:

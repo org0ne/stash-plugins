@@ -16,8 +16,9 @@
 // Prereqs: Jasna running (`jasna --stream`), the plugin installed in Stash
 // with its Jasna URL or Bridge URL setting configured (plugin id
 // jasna-switch). POST <jasna>/stop first for a cold-start measurement.
-// Note: Chrome is SIGKILLed at the end, so no pagehide fires; in bridge
-// mode the session stays active until the bridge's idle timeout (90s).
+// The harness clicks the toggle OFF before exiting (Chrome is SIGKILLed, so
+// no pagehide fires); a run that dies mid-way can still leave a bridge
+// session busy for 90s.
 // Instruments player.error()/src()/load() with stack traces and logs raw
 // <video> events so a Stash-side source swap is visible if it happens.
 const { spawn } = require("child_process");
@@ -85,6 +86,10 @@ async function main() {
   };
 
   for (const d of ["Runtime", "Log", "Network", "Page"]) await send(d + ".enable");
+  releaseSession = async () => {
+    const label = await evaluate(`(function(){var b=document.getElementById('jasna-toggle-button');return b?b.textContent:''})()`);
+    if (label === "JASNA: ON") { await evaluate(`document.getElementById('jasna-toggle-button').click()`); await sleep(800); console.log(`${ts()} released session before exit`); }
+  };
   console.log(`${ts()} navigating to scene ${sceneId}`);
   await send("Page.navigate", { url: `${STASH_URL}/scenes/${sceneId}` });
 
@@ -156,5 +161,8 @@ async function main() {
   }
   await shutdown();
 }
-async function shutdown() { chrome.kill("SIGKILL"); await sleep(300); require("fs").rmSync(profile, { recursive: true, force: true }); process.exit(0); }
+// Release the Jasna/bridge session before killing Chrome: SIGKILL fires no
+// pagehide, so the bridge would otherwise hold the session busy for 90s.
+let releaseSession = async () => {};
+async function shutdown() { try { await releaseSession(); } catch {} chrome.kill("SIGKILL"); await sleep(300); require("fs").rmSync(profile, { recursive: true, force: true }); process.exit(0); }
 main().catch(async (e) => { console.error("FATAL", e); await shutdown(); });
