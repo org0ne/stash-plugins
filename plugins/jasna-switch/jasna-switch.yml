@@ -29,8 +29,26 @@ ui:
     connect-src:
       - https://192.168.11.113:8766
       - http://192.168.11.113:8765
+      - http://192.168.11.113:8770
+      - http://localhost:8770
 
 settings:
+  bridgeUrl:
+    displayName: Bridge URL
+    description: >
+      URL of stash-jasna-bridge. Relative ("/jasna") when it is served under
+      the Stash domain by the reverse proxy, or absolute
+      (http://192.168.11.113:8770) for a plain-HTTP Stash. When set, the
+      plugin uses the bridge (session ownership, idle timeout, HLS proxy)
+      and ignores Jasna URL. An absolute URL must also be in this plugin's
+      CSP connect-src.
+    type: STRING
+  bridgeToken:
+    displayName: Bridge token
+    description: >
+      Shared secret for bridge auth.mode = token (sent as Authorization:
+      Bearer). Leave empty for none / stash_cookie modes.
+    type: STRING
   jasnaUrl:
     displayName: Jasna URL
     description: >

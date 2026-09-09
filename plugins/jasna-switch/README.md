@@ -22,6 +22,31 @@ roadmap are kept outside this repo.
 4. Toggle OFF: destroys hls.js, restores the original Stash source on the
    raw element, seeks back, and POSTs `/stop`.
 
+## Bridge mode (recommended)
+
+With [stash-jasna-bridge](https://github.com/org0ne/stash-jasna-bridge)
+running beside Jasna, set Settings > Plugins > Jasna Switch > **Bridge
+URL** and leave Jasna URL empty. The plugin then:
+
+- POSTs `{scene_id, time}` to the bridge, which resolves the file through
+  Stash GraphQL (the browser never sends paths) and returns a session
+  token plus the HLS playlist path;
+- sends a heartbeat every 30s while ON, and shows `JASNA: LOST` and drops
+  back to the Stash source if the bridge has released the session;
+- shows `JASNA: BUSY` when another viewer owns Jasna;
+- ends the session on toggle OFF, scene change, and tab close/navigation
+  (`navigator.sendBeacon`), so streams are never orphaned;
+- counts seconds in the `PREPARING...` label.
+
+Bridge URL is relative (`/jasna`) when the reverse proxy serves the bridge
+under the Stash domain (see the bridge's `deploy/nginx-proxy-manager.md`),
+or absolute (`http://192.168.11.113:8770/jasna`) for a plain-HTTP Stash,
+in which case the origin must be in this plugin's CSP `connect-src` and
+in the bridge's `cors_origins`. **Bridge token** is only for the bridge's
+`auth.mode = token`.
+
+Without a Bridge URL the plugin runs in the original direct mode below.
+
 ## Requirements
 
 - Stash v0.31.x (tested on a v0.31.1 release and a develop build).

@@ -24,9 +24,14 @@
 // anchored to `.scene-player-container`, watched with a MutationObserver,
 // instead of going through PluginApi.patch.
 //
-// This is PoC code: hard-coded endpoint, single-file-per-scene
-// assumption, no settings UI, no auth. See "Explicit Non-Goals" in
-// stash-jasna-poc.md.
+// Two ways to reach Jasna, chosen by the plugin settings:
+//   bridge mode (Bridge URL set): talk to stash-jasna-bridge, which owns
+//     the Jasna process, hands out a session token, times idle sessions
+//     out and proxies the HLS stream. Heartbeats every 30s while ON; the
+//     session is ended on OFF, scene change and pagehide (sendBeacon).
+//   direct mode (Bridge URL empty): the original PoC path straight to
+//     Jasna's own /open, /stop and /stream.m3u8. Kept until the bridge is
+//     deployed everywhere; see bridge-plan.md in the notes.
 
 (function () {
   const PluginApi = window.PluginApi;
@@ -46,7 +51,12 @@
   const PLUGIN_ID = "jasna-switch"; // derived by Stash from the .yml filename
   const JASNA_READY_TIMEOUT_MS = 5000;
   const JASNA_POLL_INTERVAL_MS = 250;
+  const HEARTBEAT_MS = 30000;
   let JASNA_URL = DEFAULT_JASNA_URL;
+  // Bridge mode: "Bridge URL" setting, absolute (http://host:8770) or relative
+  // to the Stash origin ("/jasna" when reverse-proxied under the same domain).
+  let BRIDGE_URL = "";
+  let BRIDGE_TOKEN = "";
 
   async function loadPluginSettings() {
     try {
@@ -58,14 +68,23 @@
       });
       const json = await resp.json();
       const cfg = json.data && json.data.configuration && json.data.configuration.plugins;
-      const url = cfg && cfg[PLUGIN_ID] && cfg[PLUGIN_ID].jasnaUrl;
-      if (typeof url === "string" && url.trim()) {
-        JASNA_URL = url.trim().replace(/\/+$/, "");
+      const mine = (cfg && cfg[PLUGIN_ID]) || {};
+      if (typeof mine.jasnaUrl === "string" && mine.jasnaUrl.trim()) {
+        JASNA_URL = mine.jasnaUrl.trim().replace(/\/+$/, "");
       }
+      if (typeof mine.bridgeUrl === "string" && mine.bridgeUrl.trim()) {
+        BRIDGE_URL = mine.bridgeUrl.trim().replace(/\/+$/, "");
+        if (BRIDGE_URL.startsWith("/")) BRIDGE_URL = window.location.origin + BRIDGE_URL;
+      }
+      if (typeof mine.bridgeToken === "string") BRIDGE_TOKEN = mine.bridgeToken.trim();
     } catch (err) {
       console.log("[Jasna] WARNING: could not read plugin settings, using default URL: " + err.message);
     }
-    console.log("[Jasna] Endpoint: " + JASNA_URL);
+    console.log("[Jasna] Endpoint: " + (BRIDGE_URL ? "bridge " + BRIDGE_URL : "direct " + JASNA_URL));
+  }
+
+  function bridgeMode() {
+    return !!BRIDGE_URL;
   }
 
   // --- Controller state (Phase 2) ---
@@ -82,6 +101,9 @@
     stashSrc: null,
     stashType: null,
     cancelSwitch: false,
+    // bridge mode
+    sessionToken: null,
+    heartbeatTimer: null,
   };
 
   function log(msg) {
@@ -158,6 +180,7 @@
 
     // Leaving a scene while Jasna is active: free the GPU stream.
     if (state.source === "jasna") requestJasnaStop();
+    if (state.sessionToken) endBridgeSession("scene change");
 
     // New scene: reset everything, including any captured Stash source.
     state.sceneId = sceneId;
@@ -183,6 +206,108 @@
       setButtonDisabled(true);
     }
   }
+
+  // --- Bridge client (bridge mode) ---
+
+  function bridgeHeaders(json) {
+    const h = {};
+    if (json) h["Content-Type"] = "application/json";
+    if (BRIDGE_TOKEN) h["Authorization"] = "Bearer " + BRIDGE_TOKEN;
+    return h;
+  }
+
+  class BridgeBusyError extends Error {
+    constructor(info) {
+      super("Jasna is busy");
+      this.info = info;
+    }
+  }
+
+  async function bridgeCreateSession(sceneId, time) {
+    const resp = await fetch(`${BRIDGE_URL}/session`, {
+      method: "POST",
+      headers: bridgeHeaders(true),
+      credentials: "include",
+      body: JSON.stringify({ scene_id: sceneId, time }),
+    });
+    let body = null;
+    try {
+      body = await resp.json();
+    } catch (err) {
+      // non-JSON error page from a proxy; fall through to the status check
+    }
+    if (resp.status === 409) throw new BridgeBusyError(body || {});
+    if (!resp.ok) {
+      throw new Error(`bridge /session failed: HTTP ${resp.status}` + (body && body.error ? ` (${body.error})` : ""));
+    }
+    return body;
+  }
+
+  // sendBeacon is POST-only and header-less, so the bridge accepts
+  // POST /session/<token>/end as an alias for DELETE. The token in the
+  // path is the credential, so no auth header is needed on these routes.
+  function endBridgeSession(why) {
+    const token = state.sessionToken;
+    if (!token) return;
+    state.sessionToken = null;
+    stopHeartbeat();
+    const url = `${BRIDGE_URL}/session/${token}/end`;
+    log(`Ending bridge session (${why})`);
+    let sent = false;
+    if (why === "pagehide" && navigator.sendBeacon) {
+      sent = navigator.sendBeacon(url);
+    }
+    if (!sent) {
+      fetch(url, { method: "POST", keepalive: true, credentials: "include" }).catch((err) => {
+        log(`WARNING: ending session failed: ${err.message}`);
+      });
+    }
+  }
+
+  function stopHeartbeat() {
+    if (state.heartbeatTimer) {
+      clearInterval(state.heartbeatTimer);
+      state.heartbeatTimer = null;
+    }
+  }
+
+  function startHeartbeat(player) {
+    stopHeartbeat();
+    state.heartbeatTimer = setInterval(async () => {
+      const token = state.sessionToken;
+      if (!token || state.source !== "jasna") return;
+      try {
+        const resp = await fetch(`${BRIDGE_URL}/session/${token}/heartbeat`, {
+          method: "POST",
+          headers: bridgeHeaders(true),
+          credentials: "include",
+          body: JSON.stringify({ time: player.currentTime(), paused: player.paused() }),
+        });
+        if (resp.status === 410 || resp.status === 404) {
+          // The bridge released us (idle, pre-empted or restarted).
+          log("Bridge session lost; restoring Stash playback");
+          state.sessionToken = null;
+          stopHeartbeat();
+          const time = player.currentTime();
+          const wasPlaying = !player.paused();
+          player.pause();
+          restoreStashSource(player, time, wasPlaying);
+          state.source = "stash";
+          setButtonLabel("JASNA: LOST");
+          setTimeout(() => setButtonLabel("JASNA: OFF"), 3000);
+        } else if (!resp.ok) {
+          log(`WARNING: heartbeat HTTP ${resp.status}`);
+        }
+      } catch (err) {
+        log(`WARNING: heartbeat failed: ${err.message}`);
+      }
+    }, HEARTBEAT_MS);
+  }
+
+  window.addEventListener("pagehide", () => {
+    if (state.sessionToken) endBridgeSession("pagehide");
+    else if (state.source === "jasna") requestJasnaStop();
+  });
 
   // --- Jasna control (Phases 4-6) ---
 
@@ -310,9 +435,8 @@
   // Jasna always serves the manifest starting at segment 0, so the
   // player must seek to the target time itself; Jasna generates
   // whichever segment that seek lands on, on demand.
-  function switchPlayerToJasna(player, time, wasPlaying) {
+  function switchPlayerToJasna(player, time, wasPlaying, manifestUrl) {
     const video = player.el().querySelector("video");
-    const manifestUrl = `${JASNA_URL}/stream.m3u8`;
     destroyHls();
     setSourceSelectorGuard(player, true);
 
@@ -324,7 +448,11 @@
     };
 
     if (window.Hls && window.Hls.isSupported()) {
-      const hls = new window.Hls();
+      // startPosition makes hls.js load the fragment covering the target
+      // time first. Without it the first request is always seg_00000.ts,
+      // which Jasna then renders for nothing (~2.5s measured 2026-09-08)
+      // before the seek pulls the real segment.
+      const hls = new window.Hls({ startPosition: time });
       hls.on(window.Hls.Events.MANIFEST_PARSED, onReady);
       hls.loadSource(manifestUrl);
       hls.attachMedia(video);
@@ -356,39 +484,65 @@
     state.source = "switching";
     state.cancelSwitch = false;
 
-    log(`Toggle ON at ${time.toFixed(3)}`);
-    setButtonLabel("JASNA: PREPARING...");
+    log(`Toggle ON at ${time.toFixed(3)}` + (bridgeMode() ? " (bridge)" : ""));
     player.pause();
 
     const reqStart = performance.now();
+    setButtonLabel("JASNA: PREPARING...");
+    const preparingTimer = setInterval(() => {
+      const secs = Math.floor((performance.now() - reqStart) / 1000);
+      if (secs >= 2) setButtonLabel(`JASNA: PREPARING... ${secs}s`);
+    }, 500);
+
+    const cancelled = async () => {
+      log("Switch cancelled by user; restoring Stash playback");
+      if (bridgeMode()) endBridgeSession("cancelled");
+      else await requestJasnaStop();
+      restoreStashSource(player, state.currentTime, state.playing);
+      state.source = "stash";
+      setButtonLabel("JASNA: OFF");
+    };
+
     try {
-      await requestJasnaOpen(state.path);
-      const ready = await waitForJasnaReady();
-
-      if (state.cancelSwitch) {
-        log("Switch cancelled by user; restoring Stash playback");
-        await requestJasnaStop();
-        restoreStashSource(player, state.currentTime, state.playing);
-        state.source = "stash";
-        setButtonLabel("JASNA: OFF");
-        return;
+      let manifestUrl;
+      if (bridgeMode()) {
+        const session = await bridgeCreateSession(state.sceneId, time);
+        state.sessionToken = session.token;
+        manifestUrl = `${BRIDGE_URL}${session.playlist_path}`;
+        log(`Bridge session ready in ${session.ready_seconds}s` +
+            (session.reused ? " (stream reused)" : session.cold ? " (cold start)" : session.switched ? " (file switch)" : " (warm)"));
+        if (state.cancelSwitch) return await cancelled();
+      } else {
+        await requestJasnaOpen(state.path);
+        const ready = await waitForJasnaReady();
+        if (state.cancelSwitch) return await cancelled();
+        if (!ready) throw new Error("stream did not become ready in time");
+        manifestUrl = `${JASNA_URL}/stream.m3u8`;
       }
-
-      if (!ready) throw new Error("stream did not become ready in time");
 
       const elapsed = ((performance.now() - reqStart) / 1000).toFixed(2);
       log(`Stream ready after ${elapsed} sec`);
 
-      switchPlayerToJasna(player, time, wasPlaying);
+      switchPlayerToJasna(player, time, wasPlaying, manifestUrl);
       state.source = "jasna";
+      if (bridgeMode()) startHeartbeat(player);
       setButtonLabel("JASNA: ON");
       log("Playback started");
     } catch (err) {
-      log(`ERROR: ${err.message}`);
-      setButtonLabel("JASNA: ERROR");
+      if (err instanceof BridgeBusyError) {
+        const who = err.info.scene_id ? ` (scene ${err.info.scene_id}, idle ${Math.round(err.info.idle_seconds || 0)}s)` : "";
+        log(`Jasna is busy${who}`);
+        setButtonLabel("JASNA: BUSY");
+      } else {
+        log(`ERROR: ${err.message}`);
+        setButtonLabel("JASNA: ERROR");
+      }
+      if (state.sessionToken) endBridgeSession("error");
       restoreStashSource(player, state.currentTime, state.playing);
       state.source = "stash";
-      setTimeout(() => setButtonLabel("JASNA: OFF"), 2000);
+      setTimeout(() => setButtonLabel("JASNA: OFF"), 3000);
+    } finally {
+      clearInterval(preparingTimer);
     }
   }
 
@@ -401,7 +555,8 @@
     log(`Toggle OFF at ${time.toFixed(3)}`);
 
     player.pause();
-    requestJasnaStop();
+    if (bridgeMode()) endBridgeSession("toggle off");
+    else requestJasnaStop();
     restoreStashSource(player, time, wasPlaying);
     state.source = "stash";
     setButtonLabel("JASNA: OFF");

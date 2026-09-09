@@ -12,10 +12,12 @@
 //   cycle       after ON succeeds: click OFF, verify position restore, click ON again
 //
 // Env: STASH_URL (default http://localhost:9999), JASNA_URL (host/origin
-// of the Jasna server, used only to filter network log lines).
+// of the Jasna server or bridge, used only to filter network log lines).
 // Prereqs: Jasna running (`jasna --stream`), the plugin installed in Stash
-// with its Jasna URL setting configured (plugin id jasna-switch). POST <jasna>/stop first for a
-// cold-start measurement.
+// with its Jasna URL or Bridge URL setting configured (plugin id
+// jasna-switch). POST <jasna>/stop first for a cold-start measurement.
+// Note: Chrome is SIGKILLed at the end, so no pagehide fires; in bridge
+// mode the session stays active until the bridge's idle timeout (90s).
 // Instruments player.error()/src()/load() with stack traces and logs raw
 // <video> events so a Stash-side source swap is visible if it happens.
 const { spawn } = require("child_process");
