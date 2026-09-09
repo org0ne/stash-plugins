@@ -150,15 +150,71 @@
 
   // --- UI wiring: plain DOM button, not a React component (see UI note
   // above - PluginApi.patch is broken on this Stash build). ---
+  // Overlay badge on the video (option C, chosen 2026-09-09): a pill in the
+  // player's top-right, coloured by state, with a preset pill beside it. It
+  // lives inside .video-js so it stays visible in fullscreen, and fades with
+  // the controls during playback. uiButtonEl is the toggle pill; uiLabelEl is
+  // its text span (the pill also holds a status dot, so we can't overwrite the
+  // whole button's text). See jasna-toggle-placements artifact for the review.
   let uiButtonEl = null;
+  let uiLabelEl = null;
+
+  // Map a label like "JASNA: PREPARING... 7s" to a dot/border state.
+  function stateFromLabel(text) {
+    if (/TAKE OVER/.test(text)) return "takeover";
+    if (/\bON\b/.test(text)) return "on";
+    if (/PREPARING|STARTING/.test(text)) return "preparing";
+    if (/BUSY|LOST|ERROR|NO BRIDGE/.test(text)) return "warn";
+    return "off";
+  }
 
   function setButtonLabel(text) {
-    if (uiButtonEl) uiButtonEl.textContent = text;
+    if (uiLabelEl) uiLabelEl.textContent = text.replace(/^JASNA:\s*/, "JASNA ");
+    if (uiButtonEl) uiButtonEl.dataset.state = stateFromLabel(text);
     renderPresetSelect();
   }
 
   function setButtonDisabled(disabled) {
     if (uiButtonEl) uiButtonEl.disabled = disabled;
+  }
+
+  // jav-layout tokens with standalone fallbacks, so the badge is themed where
+  // that plugin is installed and still legible where it is not.
+  let badgeStyleInjected = false;
+  function ensureBadgeStyle() {
+    if (badgeStyleInjected) return;
+    const css = `
+#jasna-badge{position:absolute;top:12px;right:12px;z-index:3;display:flex;gap:8px;align-items:center;transition:opacity .25s}
+.video-js.vjs-user-inactive.vjs-playing #jasna-badge{opacity:0;pointer-events:none}
+#jasna-badge .jasna-pill{display:flex;align-items:center;gap:7px;background:rgba(20,20,31,.72);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  border:1px solid var(--jl-line-strong,rgba(139,155,199,.5));border-radius:999px;
+  color:var(--jl-fg,#f8f8f2);font:700 11px/1 var(--jl-font-ui,"Nunito Sans","Segoe UI",sans-serif);
+  letter-spacing:.09em;padding:7px 12px;cursor:pointer;white-space:nowrap;
+  appearance:none;-webkit-appearance:none;margin:0}
+#jasna-badge .jasna-pill:disabled{opacity:.5;cursor:default}
+#jasna-badge .jasna-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--jl-dim,#6272a4);flex:none}
+#jasna-badge .jasna-pill[data-state="on"]{border-color:var(--jl-accent,#ff80bf);color:var(--jl-accent,#ff80bf)}
+#jasna-badge .jasna-pill[data-state="on"] .dot{background:var(--jl-accent,#ff80bf)}
+#jasna-badge .jasna-pill[data-state="preparing"]{border-color:var(--jl-accent,#ff80bf);color:var(--jl-accent,#ff80bf)}
+#jasna-badge .jasna-pill[data-state="preparing"] .dot{background:var(--jl-accent,#ff80bf);animation:jasna-pulse 1s infinite}
+#jasna-badge .jasna-pill[data-state="takeover"]{border-color:var(--jl-accent,#ff80bf);color:var(--jl-accent,#ff80bf)}
+#jasna-badge .jasna-pill[data-state="takeover"] .dot{background:var(--jl-accent,#ff80bf);animation:jasna-pulse 1s infinite}
+#jasna-badge .jasna-pill[data-state="warn"]{border-color:#e5a94e;color:#e5a94e}
+#jasna-badge .jasna-pill[data-state="warn"] .dot{background:#e5a94e}
+#jasna-badge .jasna-preset{position:relative;overflow:hidden;font-weight:600;letter-spacing:.04em;
+  color:var(--jl-muted,#8b9bc7);gap:5px}
+#jasna-badge .jasna-preset .caret{opacity:.7;font-size:9px}
+#jasna-badge .jasna-preset select{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;margin:0;cursor:pointer}
+#jasna-badge .jasna-preset.disabled{opacity:.5}
+#jasna-badge .jasna-preset.disabled select{pointer-events:none;cursor:default}
+@keyframes jasna-pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){#jasna-badge .jasna-pill .dot{animation:none!important}}
+@media (max-width:480px){#jasna-badge{top:8px;right:8px;gap:6px}#jasna-badge .jasna-pill{font-size:10px;padding:6px 10px}}`;
+    const st = document.createElement("style");
+    st.textContent = css;
+    (document.head || document.documentElement).appendChild(st);
+    badgeStyleInjected = true;
   }
 
   function getVideoJsPlayer() {
@@ -777,22 +833,23 @@
     seekListenerAttached.add(player);
   }
 
-  // --- Plain-DOM button (Phase 2) ---
-  // Anchored to the player observed on a live scene page:
-  // .scene-player-container > .VideoPlayer > .video-wrapper > video-js > video
-  // The button is placed as the immediate next sibling of .VideoPlayer, not
-  // simply appended to the container: the container exists before React
-  // renders .VideoPlayer into it, and a node appended too early ends up
-  // ABOVE the player, hidden under Stash's fixed top navbar (seen
-  // 2026-09-08). The observer re-checks ordering so a React re-render
-  // that replaces .VideoPlayer can't leave the button stranded.
-  // Populate / update the preset <select>. Shown only in bridge mode with
-  // more than one preset; hidden otherwise (direct mode, or a single preset).
+  // --- Overlay badge (option C) ---
+  // Anchored inside the player's .video-js element so it survives React
+  // re-renders (the observer re-appends it) and stays visible in fullscreen,
+  // which fullscreens .video-js itself. The preset control is a pill with a
+  // transparent native <select> laid over it, so a tap opens the OS picker on
+  // mobile and a normal dropdown on desktop.
+  // IMPORTANT: this runs from the MutationObserver on every DOM change, so it
+  // must be idempotent - only touch the DOM when a value actually changes.
+  // Writing textContent (or any node) unconditionally re-triggers the observer
+  // and loops the page to a freeze (regression seen live in 0.4.0: bridge mode
+  // with presets loaded hung the scene page in both Chrome and Firefox).
   function renderPresetSelect() {
+    const wrap = document.getElementById("jasna-preset");
     const sel = document.getElementById("jasna-preset-select");
-    if (!sel) return;
+    if (!wrap || !sel) return;
     const show = bridgeMode() && state.presets.length > 1;
-    sel.hidden = !show;
+    if (wrap.hidden !== !show) wrap.hidden = !show;
     if (!show) return;
     const want = state.presets.map((p) => p.name).join("|");
     if (sel.dataset.built !== want) {
@@ -800,56 +857,83 @@
       for (const p of state.presets) {
         const opt = document.createElement("option");
         opt.value = p.name;
-        opt.textContent = p.description ? `${p.name} — ${p.description}` : p.name;
+        opt.textContent = p.description ? `${p.name} \u2014 ${p.description}` : p.name;
         sel.appendChild(opt);
       }
       sel.dataset.built = want;
     }
-    if (state.preset) sel.value = state.preset;
+    if (state.preset && sel.value !== state.preset) sel.value = state.preset;
+    const nameEl = document.getElementById("jasna-preset-name");
+    const nm = (state.preset || "").toUpperCase();
+    if (nameEl && nameEl.textContent !== nm) nameEl.textContent = nm;
     // Cannot change preset mid-stream: a switch restarts Jasna.
-    sel.disabled = state.source !== "stash";
+    const locked = state.source !== "stash";
+    if (sel.disabled !== locked) sel.disabled = locked;
+    if (wrap.classList.contains("disabled") !== locked) wrap.classList.toggle("disabled", locked);
   }
 
   function ensureButtonMounted() {
     const videoPlayer = document.querySelector(".scene-player-container .VideoPlayer");
     if (!videoPlayer) return;
+    const vjs = videoPlayer.querySelector(".video-js");
+    if (!vjs) return;
+    ensureBadgeStyle();
 
-    let controls = document.getElementById("jasna-controls");
-    if (!controls) {
-      controls = document.createElement("div");
-      controls.id = "jasna-controls";
-      controls.style.cssText = "display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap";
+    let badge = document.getElementById("jasna-badge");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.id = "jasna-badge";
 
-      const button = document.createElement("button");
-      button.id = "jasna-toggle-button";
-      button.textContent = "JASNA: OFF";
-      button.disabled = !state.path;
-      button.addEventListener("click", () => onToggleClick(getVideoJsPlayer()));
-      uiButtonEl = button;
+      const toggle = document.createElement("button");
+      toggle.id = "jasna-toggle-button";
+      toggle.className = "jasna-pill";
+      toggle.type = "button";
+      toggle.dataset.state = "off";
+      toggle.disabled = !state.path;
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      const label = document.createElement("span");
+      label.className = "jasna-label";
+      label.textContent = "JASNA OFF";
+      toggle.appendChild(dot);
+      toggle.appendChild(label);
+      toggle.addEventListener("click", () => onToggleClick(getVideoJsPlayer()));
+      uiButtonEl = toggle;
+      uiLabelEl = label;
 
+      const preset = document.createElement("label");
+      preset.id = "jasna-preset";
+      preset.className = "jasna-pill jasna-preset";
+      preset.hidden = true;
+      preset.title = "Jasna preset (applied on the next toggle ON)";
+      const pname = document.createElement("span");
+      pname.id = "jasna-preset-name";
+      const caret = document.createElement("span");
+      caret.className = "caret";
+      caret.textContent = "\u25be";
       const select = document.createElement("select");
       select.id = "jasna-preset-select";
-      select.hidden = true;
-      select.title = "Jasna preset (applied on the next toggle ON)";
-      select.style.cssText = "padding:2px 4px";
       select.addEventListener("change", () => {
         state.preset = select.value;
         savePreset(select.value);
+        const nameEl = document.getElementById("jasna-preset-name");
+        if (nameEl) nameEl.textContent = select.value.toUpperCase();
         log(`Preset -> ${select.value}`);
       });
+      preset.appendChild(pname);
+      preset.appendChild(caret);
+      preset.appendChild(select);
 
-      controls.appendChild(button);
-      controls.appendChild(select);
+      badge.appendChild(toggle);
+      badge.appendChild(preset);
     }
 
-    if (controls.previousElementSibling !== videoPlayer) {
-      videoPlayer.insertAdjacentElement("afterend", controls);
-    }
-    renderPresetSelect(); // repopulate once presets arrive (fetch resolves after first mount)
+    if (badge.parentElement !== vjs) vjs.appendChild(badge);
+    renderPresetSelect();
     ensureSeekListener(getVideoJsPlayer());
   }
 
-  new MutationObserver(ensureButtonMounted).observe(document.body, { childList: true, subtree: true });
+    new MutationObserver(ensureButtonMounted).observe(document.body, { childList: true, subtree: true });
 
   PluginApi.Event.addEventListener("stash:location", (e) => {
     handleLocationChange(e.detail.data.location.pathname);

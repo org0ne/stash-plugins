@@ -1,6 +1,9 @@
 # Jasna Switch
 
-A Stash UI plugin that adds a **JASNA ON/OFF** toggle to the scene player.
+A Stash UI plugin that adds a **JASNA ON/OFF** toggle to the scene player,
+as a status pill overlaid on the top-right of the video (with a preset pill
+beside it in bridge mode). It stays visible in fullscreen and fades with the
+player controls.
 When ON, the player swaps to a live HLS stream produced by
 Jasna running in `--stream` mode, at the same
 playback position. When OFF, it swaps back to the normal Stash source,
@@ -35,7 +38,7 @@ URL** and leave Jasna URL empty. The plugin then:
   back to the Stash source if the bridge has released the session;
 - shows `JASNA: BUSY` when another viewer owns Jasna, and offers
   `JASNA: TAKE OVER?` (one click pre-empts) once that owner is idle;
-- offers a **preset picker** next to the toggle (populated from the
+- offers a **preset picker** as a pill beside the toggle (populated from the
   bridge, remembered per browser), applied on the next toggle ON;
 - shows `JASNA: STARTING...` with a seconds counter when Jasna is cold;
 - ends the session on toggle OFF, scene change, and tab close/navigation
