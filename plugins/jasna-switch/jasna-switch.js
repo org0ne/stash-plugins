@@ -223,6 +223,7 @@
     if (state.sessionToken) endBridgeSession("scene change");
 
     // New scene: reset everything, including any captured Stash source.
+    endJasnaSuppression();
     state.sceneId = sceneId;
     state.source = "stash";
     state.stashSrc = null;
@@ -431,24 +432,38 @@
     errorHideStyleInjected = true;
   }
 
+  // Stash's sourceSelector also raises MEDIA_ERR_SRC_NOT_SUPPORTED from its
+  // own loadedmetadata handler when the element reports 0x0 and video.js
+  // still believes the src is the (non-HLS) Stash URL - which is exactly the
+  // state Safari's native HLS leaves us in, and it can fire after the first
+  // frames. So while the plugin owns the element the video.js error state is
+  // meaningless: clear it on the microtask after every event that can set it,
+  // and keep the overlay hidden until the caller ends suppression.
+  const SUPPRESS_EVENTS = ["error", "loadedmetadata", "loadeddata", "canplay", "playing"];
   function suppressSwitchError(player, video) {
     ensureErrorHideStyle();
     const root = player.el();
     root.classList.add("jasna-suppress-error");
     let active = true;
-    const onErr = () => {
+    const onEvt = () => {
       if (active) setTimeout(() => { if (active) clearPlayerError(player); }, 0);
     };
-    const onPlaying = () => clearPlayerError(player); // frames flowing: reset state
-    video.addEventListener("error", onErr, true);
-    video.addEventListener("playing", onPlaying);
+    for (const n of SUPPRESS_EVENTS) video.addEventListener(n, onEvt, true);
     return () => {
       active = false;
-      video.removeEventListener("error", onErr, true);
-      video.removeEventListener("playing", onPlaying);
+      for (const n of SUPPRESS_EVENTS) video.removeEventListener(n, onEvt, true);
       clearPlayerError(player);
       root.classList.remove("jasna-suppress-error");
     };
+  }
+
+  // Suppression that lasts for the whole Jasna session (ended on restore).
+  let jasnaSuppressStop = null;
+  function endJasnaSuppression() {
+    if (jasnaSuppressStop) {
+      try { jasnaSuppressStop(); } catch (e) { /* element already gone */ }
+      jasnaSuppressStop = null;
+    }
   }
 
   function destroyHls() {
@@ -511,6 +526,7 @@
     // stalls at readyState 0. Setting the raw element directly, as already
     // done for the Jasna path, is what actually works reliably.
     const video = player.el().querySelector("video");
+    endJasnaSuppression();
     const stopSuppress = suppressSwitchError(player, video);
     video.addEventListener(
       "loadedmetadata",
@@ -535,7 +551,8 @@
     const video = player.el().querySelector("video");
     destroyHls();
     setSourceSelectorGuard(player, true);
-    const stopSuppress = suppressSwitchError(player, video);
+    endJasnaSuppression();
+    jasnaSuppressStop = suppressSwitchError(player, video); // until restoreStashSource
 
     const onReady = () => {
       clearPlayerError(player);
@@ -543,7 +560,6 @@
       video.volume = state.volume;
       video.playbackRate = state.playbackRate;
       if (wasPlaying) video.play();
-      setTimeout(stopSuppress, 1500);
     };
 
     if (window.Hls && window.Hls.isSupported()) {

@@ -6,7 +6,7 @@ description: >
   Adds a JASNA ON/OFF toggle to the Stash scene player, allowing
   Jasna-restored playback to be swapped in as an alternate rendition
   of the current scene without modifying Stash itself.
-version: 0.3.2
+version: 0.3.3
 
 ui:
   javascript:
