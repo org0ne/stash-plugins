@@ -98,6 +98,7 @@
     try {
       const resp = await fetch(`${BRIDGE_URL}/presets`, { credentials: "include", headers: bridgeHeaders(false) });
       if (!resp.ok) { log(`presets HTTP ${resp.status}`); return; }
+      checkBridgeResponseIsJson(resp, "/presets");
       const data = await resp.json();
       state.presets = Array.isArray(data.presets) ? data.presets : [];
       state.warm = !!data.warm;
@@ -264,6 +265,21 @@
     }
   }
 
+  // The Bridge URL answered, but not with JSON. That is almost always
+  // Stash's own SPA page: a reverse proxy or tunnel in front of Stash with
+  // no /jasna location (seen 2026-09-09 through a Cloudflare Tunnel that
+  // pointed straight at Stash, bypassing the proxy that has the route).
+  class BridgeNotRoutedError extends Error {}
+
+  function checkBridgeResponseIsJson(resp, what) {
+    const ct = (resp.headers.get("content-type") || "").split(";")[0].trim();
+    if (/json/i.test(ct)) return;
+    throw new BridgeNotRoutedError(
+      `bridge ${what} answered HTTP ${resp.status} ${ct || "(no content-type)"} instead of JSON - ` +
+      `${BRIDGE_URL} is not routed to the bridge (proxy/tunnel missing the /jasna location?)`
+    );
+  }
+
   async function bridgeCreateSession(sceneId, time, opts) {
     opts = opts || {};
     const payload = { scene_id: sceneId, time };
@@ -275,6 +291,7 @@
       credentials: "include",
       body: JSON.stringify(payload),
     });
+    if (resp.ok) checkBridgeResponseIsJson(resp, "/session");
     let body = null;
     try {
       body = await resp.json();
@@ -391,10 +408,34 @@
     return false;
   }
 
+  // A Stash build with its own Jasna streamer (the jasna-fork) lists
+  // /scene/{id}/stream.jasna-{preset} routes in the source menu. Restoring
+  // to one of those makes Stash spawn a second Jasna that fights this
+  // plugin's over port 8765 (seen 2026-09-09), so never capture it: fall
+  // back to the first non-Jasna source the player knows about.
+  function isJasnaRouteSrc(src) {
+    return typeof src === "string" && /\/stream\.jasna-/.test(src);
+  }
+
   function captureStashSourceIfNeeded(player) {
     if (state.stashSrc) return;
-    state.stashSrc = player.currentSrc();
-    state.stashType = player.currentType ? player.currentType() : "video/mp4";
+    let src = player.currentSrc();
+    let type = player.currentType ? player.currentType() : "video/mp4";
+    if (isJasnaRouteSrc(src)) {
+      const selector = typeof player.sourceSelector === "function" ? player.sourceSelector() : null;
+      const known = (selector && Array.isArray(selector.sources) ? selector.sources : [])
+        .concat(typeof player.currentSources === "function" ? player.currentSources() : []);
+      const alt = known.find((s) => s && s.src && !isJasnaRouteSrc(s.src));
+      if (alt) {
+        log(`Current source is a Jasna route; will restore to ${alt.src.split("?")[0]} instead`);
+        src = alt.src;
+        type = alt.type || "video/mp4";
+      } else {
+        log("Current source is a Jasna route and no alternative is known; restoring to it anyway");
+      }
+    }
+    state.stashSrc = src;
+    state.stashType = type;
   }
 
   // hls.js instance for Jasna playback - videojs's own source-handler
@@ -675,7 +716,7 @@
         return;
       }
       log(`ERROR: ${err.message}`);
-      setButtonLabel("JASNA: ERROR");
+      setButtonLabel(err instanceof BridgeNotRoutedError ? "JASNA: NO BRIDGE" : "JASNA: ERROR");
       if (state.sessionToken) endBridgeSession("error");
       restoreStashSource(player, state.currentTime, state.playing);
       state.source = "stash";

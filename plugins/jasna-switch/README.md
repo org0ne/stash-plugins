@@ -41,6 +41,12 @@ URL** and leave Jasna URL empty. The plugin then:
 - ends the session on toggle OFF, scene change, and tab close/navigation
   (`navigator.sendBeacon`), so streams are never orphaned;
 - counts seconds in the `PREPARING...` label.
+- shows `JASNA: NO BRIDGE` when the Bridge URL answers with something other
+  than JSON, which means the reverse proxy or tunnel in front of Stash has no
+  `/jasna` route (the request reached Stash's own page instead);
+- never restores to a `stream.jasna-*` source from a Stash build that has its
+  own Jasna streamer, since reloading it would spawn a second Jasna on the
+  same port.
 
 Bridge URL is relative (`/jasna`) when the reverse proxy serves the bridge
 under the Stash domain (see the bridge's `deploy/nginx-proxy-manager.md`),
