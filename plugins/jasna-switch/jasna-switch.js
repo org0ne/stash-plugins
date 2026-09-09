@@ -382,6 +382,50 @@
     }
   }
 
+  // Like endBridgeSession but awaits the release, so a follow-up create()
+  // (a live preset change) cannot race ahead of it and get a 409 busy.
+  async function endBridgeSessionAwait(why) {
+    const token = state.sessionToken;
+    if (!token) return;
+    state.sessionToken = null;
+    stopHeartbeat();
+    log(`Ending bridge session (${why})`);
+    try {
+      await fetch(`${BRIDGE_URL}/session/${token}`, {
+        method: "DELETE", credentials: "include", headers: bridgeHeaders(false),
+      });
+    } catch (err) {
+      log(`WARNING: ending session failed: ${err.message}`);
+    }
+  }
+
+  // Preset changed from the picker. Always remember it (applies on the next
+  // toggle ON). If a stream is live, apply it now: the preset is a Jasna
+  // launch flag, so this restarts Jasna on the new preset in place - the user
+  // does not have to toggle OFF first. Only bridge mode has presets.
+  function onPresetChange(newPreset) {
+    if (!newPreset || newPreset === state.preset) return;
+    state.preset = newPreset;
+    savePreset(newPreset);
+    const nameEl = document.getElementById("jasna-preset-name");
+    if (nameEl) nameEl.textContent = newPreset.toUpperCase();
+    log(`Preset -> ${newPreset}`);
+    if (state.source === "jasna") applyPresetLive(getVideoJsPlayer());
+  }
+
+  async function applyPresetLive(player) {
+    if (!player || state.source !== "jasna" || !bridgeMode()) return;
+    log("Applying preset to the live stream (Jasna will restart)");
+    state.currentTime = player.currentTime();
+    state.playing = !player.paused();
+    // Release the current session and wait, then re-enable on the new preset.
+    // enableJasna needs source "stash" to run; the captured Stash source is
+    // kept, so switchPlayerToJasna swaps hls straight to the new manifest.
+    await endBridgeSessionAwait("preset change");
+    state.source = "stash";
+    await enableJasna(player);
+  }
+
   function stopHeartbeat() {
     if (state.heartbeatTimer) {
       clearInterval(state.heartbeatTimer);
@@ -866,10 +910,10 @@
     const nameEl = document.getElementById("jasna-preset-name");
     const nm = (state.preset || "").toUpperCase();
     if (nameEl && nameEl.textContent !== nm) nameEl.textContent = nm;
-    // Cannot change preset mid-stream: a switch restarts Jasna.
-    const locked = state.source !== "stash";
-    if (sel.disabled !== locked) sel.disabled = locked;
-    if (wrap.classList.contains("disabled") !== locked) wrap.classList.toggle("disabled", locked);
+    // The picker stays active while streaming: changing it restarts Jasna on
+    // the new preset in place (see onPresetChange), no toggle-off needed.
+    if (sel.disabled) sel.disabled = false;
+    if (wrap.classList.contains("disabled")) wrap.classList.remove("disabled");
   }
 
   function ensureButtonMounted() {
@@ -913,13 +957,7 @@
       caret.textContent = "\u25be";
       const select = document.createElement("select");
       select.id = "jasna-preset-select";
-      select.addEventListener("change", () => {
-        state.preset = select.value;
-        savePreset(select.value);
-        const nameEl = document.getElementById("jasna-preset-name");
-        if (nameEl) nameEl.textContent = select.value.toUpperCase();
-        log(`Preset -> ${select.value}`);
-      });
+      select.addEventListener("change", () => onPresetChange(select.value));
       preset.appendChild(pname);
       preset.appendChild(caret);
       preset.appendChild(select);
