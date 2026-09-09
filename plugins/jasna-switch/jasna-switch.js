@@ -402,6 +402,32 @@
   // bypassing videojs's src() entirely while Jasna is active.
   let hlsInstance = null;
 
+  // video.js shows its error overlay (the big "X") if the raw <video> element
+  // fires an 'error' during a source hand-off - even though hls.js (PC/MSE)
+  // or native HLS (iOS Safari) recovers a moment later and frames play. The
+  // sourceSelector guard stops the auto-advance; this stops the visible X and
+  // any wedged error state that could break the next toggle. Clearing on the
+  // microtask after the event ensures it runs AFTER video.js sets the error.
+  function clearPlayerError(player) {
+    try {
+      if (player.error && player.error()) player.error(null);
+    } catch (e) {
+      /* player torn down */
+    }
+  }
+
+  function suppressSwitchError(player, video) {
+    let active = true;
+    const onErr = () => {
+      if (active) setTimeout(() => { if (active) clearPlayerError(player); }, 0);
+    };
+    video.addEventListener("error", onErr, true);
+    return () => {
+      active = false;
+      video.removeEventListener("error", onErr, true);
+    };
+  }
+
   function destroyHls() {
     if (hlsInstance) {
       hlsInstance.destroy();
@@ -462,13 +488,16 @@
     // stalls at readyState 0. Setting the raw element directly, as already
     // done for the Jasna path, is what actually works reliably.
     const video = player.el().querySelector("video");
+    const stopSuppress = suppressSwitchError(player, video);
     video.addEventListener(
       "loadedmetadata",
       () => {
+        clearPlayerError(player);
         seekWhenSeekable(video, time, Date.now() + 5000);
         video.volume = state.volume;
         video.playbackRate = state.playbackRate;
         if (wasPlaying) video.play();
+        setTimeout(stopSuppress, 1500);
       },
       { once: true }
     );
@@ -483,12 +512,15 @@
     const video = player.el().querySelector("video");
     destroyHls();
     setSourceSelectorGuard(player, true);
+    const stopSuppress = suppressSwitchError(player, video);
 
     const onReady = () => {
+      clearPlayerError(player);
       video.currentTime = time;
       video.volume = state.volume;
       video.playbackRate = state.playbackRate;
       if (wasPlaying) video.play();
+      setTimeout(stopSuppress, 1500);
     };
 
     if (window.Hls && window.Hls.isSupported()) {
