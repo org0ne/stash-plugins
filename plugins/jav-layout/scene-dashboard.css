@@ -155,6 +155,38 @@
   display: none !important;
 }
 
+/* When the scene has no description, Stash renders no `p.pre`, but the
+   injected "Details" head (scene-dashboard.js) is still drawn — an empty
+   collapsible with nothing under it. Drop the whole Details section in that
+   case. Scoped to the single [data-jl-pane="details"] element, so this :has
+   costs nothing (unlike a `.row:has()`, which would be tested against every
+   row on the page — see the note by .row[data-jl-scene-details-row] in
+   clean-cards.css). A collapsed-but-present description keeps its `p.pre` in
+   the DOM, so it still matches and stays visible. */
+.scene-tabs[data-jl-mode] [data-jl-pane="details"]:not(:has(p.pre)) .jl-head[data-jl-card="description"] {
+  display: none !important;
+}
+
+/* Same idea for the other sections whose header the layout injects but whose
+   body Stash may leave empty. These are CSS backstops (the JS also flags
+   description/tags/groups/galleries via data-jl-empty) so a section stays
+   hidden even if the observer pass has not run yet for this scene. Each is
+   scoped to a single pane element, so the :has is cheap. Groups/galleries
+   drop out on their own (Stash renders no pane) or via the JS pane flag;
+   metadata and file info always carry rows, so they are never checked. */
+
+/* No tags -> no tag chips: drop the injected "Tags" head. */
+.scene-tabs[data-jl-mode] [data-jl-pane="details"]:not(:has(.tag-item)) .jl-head[data-jl-card="tags"] {
+  display: none !important;
+}
+
+/* Never played -> the play-history shows "No Play Date Recorded" and carries
+   no `.scene-history` entry list. Drop the whole History card (this also
+   removes its "Add play" button; add a play from the player or Edit mode). */
+.scene-tabs[data-jl-mode="browse"] .tab-content > .tab-pane[data-jl-browse][data-jl-pane="history"]:not(:has(.scene-history)) {
+  display: none !important;   /* must out-specify the pane's own display:flex !important show rule */
+}
+
 /* Tags are the one exception: pack inline like a chip cloud instead of one
    per line, same as they did before flattening. Stash's own `.tag-item`
    carries `margin: 5px` (sized for a badge cloud with no other gap control);
