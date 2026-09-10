@@ -144,6 +144,11 @@
     console.log("[Jasna] " + msg);
   }
 
+  // Diagnostics: how often the mount check runs and what it costs. Read via
+  // window.__jasnaSwitchPerf; reset the fields to 0 to start a window.
+  const perf = { mountCalls: 0, mountMs: 0 };
+  window.__jasnaSwitchPerf = perf;
+
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -265,6 +270,7 @@
 
   async function handleLocationChange(pathname) {
     const sceneId = extractSceneId(pathname);
+    setMountObserver(!!sceneId);
 
     if (!sceneId) {
       state.sceneId = null;
@@ -917,6 +923,16 @@
   }
 
   function ensureButtonMounted() {
+    const t0 = performance.now();
+    perf.mountCalls++;
+    try {
+      ensureButtonMountedInner();
+    } finally {
+      perf.mountMs += performance.now() - t0;
+    }
+  }
+
+  function ensureButtonMountedInner() {
     const videoPlayer = document.querySelector(".scene-player-container .VideoPlayer");
     if (!videoPlayer) return;
     const vjs = videoPlayer.querySelector(".video-js");
@@ -949,7 +965,7 @@
       preset.id = "jasna-preset";
       preset.className = "jasna-pill jasna-preset";
       preset.hidden = true;
-      preset.title = "Jasna preset (applied on the next toggle ON)";
+      preset.title = "Jasna preset (changing it restarts Jasna on the new preset)";
       const pname = document.createElement("span");
       pname.id = "jasna-preset-name";
       const caret = document.createElement("span");
@@ -964,6 +980,10 @@
 
       badge.appendChild(toggle);
       badge.appendChild(preset);
+      // A rebuild after a player re-render must not show OFF while a stream
+      // is live: reflect the current state, not the initial one.
+      if (state.source === "jasna") setButtonLabel("JASNA: ON");
+      else if (state.source === "switching") setButtonLabel("JASNA: PREPARING...");
     }
 
     if (badge.parentElement !== vjs) vjs.appendChild(badge);
@@ -971,7 +991,65 @@
     ensureSeekListener(getVideoJsPlayer());
   }
 
-    new MutationObserver(ensureButtonMounted).observe(document.body, { childList: true, subtree: true });
+  // Mounting without a deep observer. On a scene page we wait for the video.js
+  // player to exist (short poll, since React renders it after the location
+  // event), mount into it, and hook its 'dispose' so the badge is rebuilt on
+  // the player that follows. Two SHALLOW observers (childList only, no subtree)
+  // on .scene-player-container and .VideoPlayer are the fallback for a React
+  // re-render that swaps those nodes without disposing the player; they do not
+  // see video.js's own clock/progress updates. Off scene pages nothing watches
+  // the DOM. This replaced a document.body subtree observer, which was the
+  // structure behind the 0.4.0 freeze (a self-retriggering mount loop).
+  const disposeHooked = new WeakSet();
+  let watching = false;
+  let watchTimer = null;
+  let watchTries = 0;
+  const shallowObserver = new MutationObserver(() => { ensureButtonMounted(); armShallowObservers(); });
+  let shallowRoots = [];
+
+  function armShallowObservers() {
+    const container = document.querySelector(".scene-player-container");
+    const videoPlayer = container && container.querySelector(".VideoPlayer");
+    const roots = [container, videoPlayer].filter(Boolean);
+    if (roots.length === shallowRoots.length && roots.every((r, i) => r === shallowRoots[i])) return;
+    shallowObserver.disconnect();
+    for (const r of roots) shallowObserver.observe(r, { childList: true });
+    shallowRoots = roots;
+  }
+
+  function watchPlayer() {
+    clearTimeout(watchTimer); watchTimer = null;
+    if (!watching) return;
+    const player = getVideoJsPlayer();
+    const el = player && typeof player.el === "function" ? player.el() : null;
+    if (el && el.isConnected) {
+      ensureButtonMounted();
+      if (!disposeHooked.has(player)) {
+        disposeHooked.add(player);
+        player.on("dispose", () => {
+          uiButtonEl = null; uiLabelEl = null; // the badge went with the player's element
+          watchTries = 0;
+          watchTimer = setTimeout(watchPlayer, 200);
+        });
+      }
+      armShallowObservers();
+      return;
+    }
+    if (++watchTries < 100) watchTimer = setTimeout(watchPlayer, 150); // up to ~15s for the player to render
+  }
+
+  function setMountObserver(active) {
+    perf.observerActive = active;
+    if (active) {
+      watching = true;
+      watchTries = 0;
+      watchPlayer();
+      return;
+    }
+    watching = false;
+    clearTimeout(watchTimer); watchTimer = null;
+    shallowObserver.disconnect(); shallowRoots = [];
+  }
 
   PluginApi.Event.addEventListener("stash:location", (e) => {
     handleLocationChange(e.detail.data.location.pathname);
