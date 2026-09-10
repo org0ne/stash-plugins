@@ -168,7 +168,7 @@
   function stateFromLabel(text) {
     if (/TAKE OVER/.test(text)) return "takeover";
     if (/\bON\b/.test(text)) return "on";
-    if (/PREPARING|STARTING/.test(text)) return "preparing";
+    if (/PREPARING|STARTING|RECOVERING/.test(text)) return "preparing";
     if (/BUSY|LOST|ERROR|NO BRIDGE/.test(text)) return "warn";
     return "off";
   }
@@ -432,6 +432,23 @@
     await enableJasna(player);
   }
 
+  // The stream is gone for good (the bridge dropped the session, or playback
+  // could not be recovered): drop back to the Stash source and say LOST.
+  // endBridgeSession is idempotent on the bridge, so it is safe when the
+  // session is already gone.
+  function handleSessionLost(player, why) {
+    if (state.source !== "jasna") return;
+    log(`Bridge session lost (${why}); restoring Stash playback`);
+    endBridgeSession("lost: " + why);
+    const time = player.currentTime();
+    const wasPlaying = !player.paused();
+    player.pause();
+    restoreStashSource(player, time, wasPlaying);
+    state.source = "stash";
+    setButtonLabel("JASNA: LOST");
+    setTimeout(() => { if (state.source === "stash") setButtonLabel("JASNA: OFF"); }, 3000);
+  }
+
   function stopHeartbeat() {
     if (state.heartbeatTimer) {
       clearInterval(state.heartbeatTimer);
@@ -453,16 +470,7 @@
         });
         if (resp.status === 410 || resp.status === 404) {
           // The bridge released us (idle, pre-empted or restarted).
-          log("Bridge session lost; restoring Stash playback");
-          state.sessionToken = null;
-          stopHeartbeat();
-          const time = player.currentTime();
-          const wasPlaying = !player.paused();
-          player.pause();
-          restoreStashSource(player, time, wasPlaying);
-          state.source = "stash";
-          setButtonLabel("JASNA: LOST");
-          setTimeout(() => setButtonLabel("JASNA: OFF"), 3000);
+          handleSessionLost(player, `heartbeat HTTP ${resp.status}`);
         } else if (!resp.ok) {
           log(`WARNING: heartbeat HTTP ${resp.status}`);
         }
@@ -620,6 +628,49 @@
     }
   }
 
+  // hls.js's own fragment retries are generous (measured 2026-09-09: it rode
+  // out a 65s bridge stall-recovery unaided), but once they are spent it
+  // raises a FATAL error, stops loading, and nothing restarts it - the viewer
+  // sits on a frozen frame with the badge still ON while the bridge has long
+  // since re-opened the stream on the same token. This is the backstop: keep
+  // calling startLoad() on a bounded budget, recover media errors, and treat
+  // a 410/404 (the bridge dropped our session) as LOST at once rather than
+  // retrying into it.
+  const HLS_RECOVER_MAX = 8;
+  const HLS_RECOVER_DELAY_MS = 5000;
+
+  function attachHlsRecovery(hls, player, video) {
+    const H = window.Hls;
+    let netAttempts = 0;
+    let mediaAttempts = 0;
+    hls.on(H.Events.FRAG_LOADED, () => {
+      if (!netAttempts && !mediaAttempts) return;
+      log(`hls.js recovered after ${netAttempts} network / ${mediaAttempts} media attempt(s)`);
+      netAttempts = mediaAttempts = 0;
+      if (hlsInstance === hls && state.source === "jasna") setButtonLabel("JASNA: ON");
+    });
+    hls.on(H.Events.ERROR, (_evt, data) => {
+      if (!data || !data.fatal || hlsInstance !== hls || state.source !== "jasna") return;
+      const code = data.response && data.response.code;
+      log(`hls.js fatal ${data.type}/${data.details}${code ? " HTTP " + code : ""}`);
+      if (code === 410 || code === 404) return handleSessionLost(player, `bridge answered ${code}`);
+      if (data.type === H.ErrorTypes.NETWORK_ERROR) {
+        if (++netAttempts > HLS_RECOVER_MAX) return handleSessionLost(player, "network errors persisted");
+        setButtonLabel(`JASNA: RECOVERING... ${netAttempts}`);
+        setTimeout(() => {
+          if (hlsInstance === hls && state.source === "jasna") hls.startLoad(video.currentTime);
+        }, HLS_RECOVER_DELAY_MS);
+      } else if (data.type === H.ErrorTypes.MEDIA_ERROR) {
+        if (++mediaAttempts > 3) return handleSessionLost(player, "media errors persisted");
+        setButtonLabel(`JASNA: RECOVERING... ${mediaAttempts}`);
+        if (mediaAttempts === 2) hls.swapAudioCodec();
+        hls.recoverMediaError();
+      } else {
+        handleSessionLost(player, data.details || "fatal hls.js error");
+      }
+    });
+  }
+
   // Right after reload, the browser may only know a provisional (short)
   // duration/seekable range for a non-faststart progressive MP4, so a
   // seek attempted immediately on loadedmetadata can be silently ignored.
@@ -715,6 +766,7 @@
       // which Jasna then renders for nothing (~2.5s measured 2026-09-08)
       // before the seek pulls the real segment.
       const hls = new window.Hls({ startPosition: time });
+      attachHlsRecovery(hls, player, video);
       hls.on(window.Hls.Events.MANIFEST_PARSED, onReady);
       hls.loadSource(manifestUrl);
       hls.attachMedia(video);
