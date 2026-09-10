@@ -24,36 +24,23 @@
 // anchored to `.scene-player-container`, watched with a MutationObserver,
 // instead of going through PluginApi.patch.
 //
-// Two ways to reach Jasna, chosen by the plugin settings:
-//   bridge mode (Bridge URL set): talk to stash-jasna-bridge, which owns
-//     the Jasna process, hands out a session token, times idle sessions
-//     out and proxies the HLS stream. Heartbeats every 30s while ON; the
-//     session is ended on OFF, scene change and pagehide (sendBeacon).
-//   direct mode (Bridge URL empty): the original PoC path straight to
-//     Jasna's own /open, /stop and /stream.m3u8. Kept until the bridge is
-//     deployed everywhere; see bridge-plan.md in the notes.
+// The plugin talks only to stash-jasna-bridge, which owns the Jasna
+// process, hands out a session token, times idle sessions out and proxies
+// the HLS stream. Heartbeats every 30s while ON; the session is ended on
+// OFF, scene change and pagehide (sendBeacon). The bridge URL is either an
+// explicit "Bridge URL" setting or, when that is blank, auto-detected by
+// probing "<stash-origin>/jasna" (the reverse-proxied same-origin setup),
+// so the common install needs no plugin configuration at all.
 
 (function () {
   const PluginApi = window.PluginApi;
 
   // --- Configuration ---
-  // The Jasna endpoint comes from the plugin setting "Jasna URL"
-  // (Settings > Plugins > Jasna Switch), read via GraphQL at load time.
-  // DEFAULT_JASNA_URL is the fallback when the setting is empty.
-  //
-  // Direct mode only works from a plain-HTTP Stash (an HTTPS page cannot
-  // fetch Jasna's plain-HTTP stream: mixed content). HTTPS setups use
-  // bridge mode with the bridge under the Stash domain instead. Whatever
-  // the origin is, it must also be listed under ui.csp.connect-src in
-  // jasna-switch.yml.
-  const DEFAULT_JASNA_URL = "http://192.168.11.113:8765";
   const PLUGIN_ID = "jasna-switch"; // derived by Stash from the .yml filename
-  const JASNA_READY_TIMEOUT_MS = 5000;
-  const JASNA_POLL_INTERVAL_MS = 250;
   const HEARTBEAT_MS = 30000;
-  let JASNA_URL = DEFAULT_JASNA_URL;
-  // Bridge mode: "Bridge URL" setting, absolute (http://host:8770) or relative
-  // to the Stash origin ("/jasna" when reverse-proxied under the same domain).
+  // The bridge base URL: the "Bridge URL" setting (absolute http://host:8770,
+  // or "/jasna" relative to the Stash origin), or auto-detected at load. An
+  // absolute URL must also be listed under ui.csp.connect-src in the manifest.
   let BRIDGE_URL = "";
   let BRIDGE_TOKEN = "";
 
@@ -68,18 +55,33 @@
       const json = await resp.json();
       const cfg = json.data && json.data.configuration && json.data.configuration.plugins;
       const mine = (cfg && cfg[PLUGIN_ID]) || {};
-      if (typeof mine.jasnaUrl === "string" && mine.jasnaUrl.trim()) {
-        JASNA_URL = mine.jasnaUrl.trim().replace(/\/+$/, "");
-      }
       if (typeof mine.bridgeUrl === "string" && mine.bridgeUrl.trim()) {
         BRIDGE_URL = mine.bridgeUrl.trim().replace(/\/+$/, "");
         if (BRIDGE_URL.startsWith("/")) BRIDGE_URL = window.location.origin + BRIDGE_URL;
       }
       if (typeof mine.bridgeToken === "string") BRIDGE_TOKEN = mine.bridgeToken.trim();
     } catch (err) {
-      console.log("[Jasna] WARNING: could not read plugin settings, using default URL: " + err.message);
+      console.log("[Jasna] WARNING: could not read plugin settings: " + err.message);
     }
-    console.log("[Jasna] Endpoint: " + (BRIDGE_URL ? "bridge " + BRIDGE_URL : "direct " + JASNA_URL));
+    if (!BRIDGE_URL) await autodetectBridge();
+    console.log("[Jasna] Endpoint: " + (BRIDGE_URL ? "bridge " + BRIDGE_URL : "none (no bridge configured or detected)"));
+  }
+
+  // No Bridge URL set: probe the reverse-proxied same-origin location once.
+  // Most installs put the bridge at <stash-origin>/jasna, so this makes them
+  // zero-config. A non-JSON or failed answer just leaves the plugin idle.
+  async function autodetectBridge() {
+    const candidate = window.location.origin + "/jasna";
+    try {
+      const resp = await fetch(`${candidate}/health`, { credentials: "include" });
+      const ct = (resp.headers.get("content-type") || "");
+      if (resp.ok && /json/i.test(ct)) {
+        BRIDGE_URL = candidate;
+        log("Auto-detected bridge at " + candidate);
+      }
+    } catch (err) {
+      /* no bridge at the Stash origin; stays unconfigured */
+    }
   }
 
   const PRESET_STORAGE_KEY = "jasna-switch:preset";
@@ -282,7 +284,6 @@
     if (sceneId === state.sceneId) return;
 
     // Leaving a scene while Jasna is active: free the GPU stream.
-    if (state.source === "jasna") requestJasnaStop();
     if (state.sessionToken) endBridgeSession("scene change");
 
     // New scene: reset everything, including any captured Stash source.
@@ -482,45 +483,9 @@
 
   window.addEventListener("pagehide", () => {
     if (state.sessionToken) endBridgeSession("pagehide");
-    else if (state.source === "jasna") requestJasnaStop();
   });
 
-  // --- Jasna control (Phases 4-6) ---
-
-  async function requestJasnaOpen(path) {
-    log(`Requesting stream: ${path}`);
-    const resp = await fetch(`${JASNA_URL}/open`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path }),
-    });
-    if (!resp.ok) {
-      throw new Error(`Jasna /open failed: HTTP ${resp.status}`);
-    }
-  }
-
-  async function requestJasnaStop() {
-    try {
-      await fetch(`${JASNA_URL}/stop`, { method: "POST" });
-    } catch (err) {
-      log(`WARNING: /stop failed: ${err.message}`);
-    }
-  }
-
-  async function waitForJasnaReady() {
-    const deadline = Date.now() + JASNA_READY_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      if (state.cancelSwitch) return false;
-      try {
-        const resp = await fetch(`${JASNA_URL}/stream.m3u8`, { cache: "no-store" });
-        if (resp.ok) return true;
-      } catch (err) {
-        // transient network errors while Jasna is starting up are expected
-      }
-      await sleep(JASNA_POLL_INTERVAL_MS);
-    }
-    return false;
-  }
+  // --- Jasna control ---
 
   // A Stash build with its own Jasna streamer (the jasna-fork) lists
   // /scene/{id}/stream.jasna-{preset} routes in the source menu. Restoring
@@ -783,6 +748,12 @@
   async function enableJasna(player, opts) {
     opts = opts || {};
     if (state.source !== "stash") return;
+    if (!bridgeMode()) {
+      log("No bridge configured or detected; cannot enable Jasna");
+      setButtonLabel("JASNA: NO BRIDGE");
+      setTimeout(() => { if (state.source === "stash") setButtonLabel("JASNA: OFF"); }, 3000);
+      return;
+    }
     if (!state.path) {
       log("Scene file unavailable; cannot enable Jasna");
       return;
@@ -800,12 +771,12 @@
     state.cancelSwitch = false;
     state.canTakeover = false;
 
-    log(`Toggle ON at ${time.toFixed(3)}` + (bridgeMode() ? " (bridge)" : "") + (opts.force ? " (takeover)" : ""));
+    log(`Toggle ON at ${time.toFixed(3)}` + (opts.force ? " (takeover)" : ""));
     player.pause();
 
     // Cold-start hint: while Jasna is not warm the first frame can take
     // several seconds (pipeline spin-up), so say so instead of a bare wait.
-    const cold = bridgeMode() && !state.warm;
+    const cold = !state.warm;
     const reqStart = performance.now();
     setButtonLabel(cold ? "JASNA: STARTING..." : "JASNA: PREPARING...");
     const preparingTimer = setInterval(() => {
@@ -815,37 +786,27 @@
 
     const cancelled = async () => {
       log("Switch cancelled by user; restoring Stash playback");
-      if (bridgeMode()) endBridgeSession("cancelled");
-      else await requestJasnaStop();
+      endBridgeSession("cancelled");
       restoreStashSource(player, state.currentTime, state.playing);
       state.source = "stash";
       setButtonLabel("JASNA: OFF");
     };
 
     try {
-      let manifestUrl;
-      if (bridgeMode()) {
-        const session = await bridgeCreateSession(state.sceneId, time, { force: opts.force });
-        state.sessionToken = session.token;
-        state.warm = true; // a live stream is warm for the next toggle
-        manifestUrl = `${BRIDGE_URL}${session.playlist_path}`;
-        log(`Bridge session ready in ${session.ready_seconds}s` +
-            (session.reused ? " (stream reused)" : session.cold ? " (cold start)" : session.switched ? " (file switch)" : " (warm)"));
-        if (state.cancelSwitch) return await cancelled();
-      } else {
-        await requestJasnaOpen(state.path);
-        const ready = await waitForJasnaReady();
-        if (state.cancelSwitch) return await cancelled();
-        if (!ready) throw new Error("stream did not become ready in time");
-        manifestUrl = `${JASNA_URL}/stream.m3u8`;
-      }
+      const session = await bridgeCreateSession(state.sceneId, time, { force: opts.force });
+      state.sessionToken = session.token;
+      state.warm = true; // a live stream is warm for the next toggle
+      const manifestUrl = `${BRIDGE_URL}${session.playlist_path}`;
+      log(`Bridge session ready in ${session.ready_seconds}s` +
+          (session.reused ? " (stream reused)" : session.cold ? " (cold start)" : session.switched ? " (file switch)" : " (warm)"));
+      if (state.cancelSwitch) return await cancelled();
 
       const elapsed = ((performance.now() - reqStart) / 1000).toFixed(2);
       log(`Stream ready after ${elapsed} sec`);
 
       switchPlayerToJasna(player, time, wasPlaying, manifestUrl);
       state.source = "jasna";
-      if (bridgeMode()) startHeartbeat(player);
+      startHeartbeat(player);
       setButtonLabel("JASNA: ON");
       log("Playback started");
     } catch (err) {
@@ -893,8 +854,7 @@
     log(`Toggle OFF at ${time.toFixed(3)}`);
 
     player.pause();
-    if (bridgeMode()) endBridgeSession("toggle off");
-    else requestJasnaStop();
+    endBridgeSession("toggle off");
     restoreStashSource(player, time, wasPlaying);
     state.source = "stash";
     setButtonLabel("JASNA: OFF");

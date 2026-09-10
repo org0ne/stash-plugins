@@ -1,77 +1,58 @@
 # Jasna Switch
 
 A Stash UI plugin that adds a **JASNA ON/OFF** toggle to the scene player,
-as a status pill overlaid on the top-right of the video (with a preset pill
-beside it in bridge mode). It stays visible in fullscreen and fades with the
-player controls.
-When ON, the player swaps to a live HLS stream produced by
-Jasna running in `--stream` mode, at the same
-playback position. When OFF, it swaps back to the normal Stash source,
-again preserving position. Stash itself is unmodified; Jasna can run on a
-different machine as long as it can read the same media paths.
+as a status pill overlaid on the top-right of the video, with a preset pill
+beside it. It stays visible in fullscreen and fades with the player controls.
+When ON, the player swaps to a live HLS stream restored by
+[Jasna](https://github.com/Kruk2/jasna), at the same playback position; OFF
+swaps back to the normal Stash source, again preserving position. Stash
+itself is unmodified.
 
-Status: PoC complete. Design notes, test logs, the original plan, and the
-roadmap are kept outside this repo.
+The plugin talks only to [stash-jasna-bridge](https://github.com/org0ne/stash-jasna-bridge),
+which owns the Jasna process, hands out session tokens, times idle sessions
+out, caches segments and proxies the HLS stream on the Stash origin. Set up
+the bridge first (its README), then install this plugin: with the bridge
+reverse-proxied under the Stash domain the plugin **auto-detects** it at
+`<stash-origin>/jasna`, so no plugin settings are needed.
 
 ## How it works
 
-1. On a scene page the plugin looks up the scene's file path via Stash
-   GraphQL.
-2. Toggle ON: captures time/paused/volume/rate, POSTs the path to Jasna's
-   `/open`, waits for `/stream.m3u8`, attaches hls.js directly to the
-   player's `<video>` element, and seeks to the captured time.
+1. On a scene page the plugin finds the scene id from the URL and the video
+   player, and reads the bridge URL (the setting, or auto-detect).
+2. Toggle ON: captures time/paused/volume/rate, POSTs `{scene_id, time,
+   preset}` to the bridge (the browser never sends filesystem paths), gets a
+   session token and playlist path, attaches hls.js to the player's
+   `<video>`, and seeks to the captured time. A heartbeat runs every 30s.
 3. Seeking while ON needs nothing special: Jasna serves a static VOD
-   playlist and renders segments on demand.
-4. Toggle OFF: destroys hls.js, restores the original Stash source on the
-   raw element, seeks back, and POSTs `/stop`.
+   playlist and the bridge renders/caches segments on demand.
+4. Changing the preset pill mid-stream restarts Jasna on the new preset in
+   place, no toggle-off needed.
+5. Toggle OFF: destroys hls.js, ends the bridge session, and restores the
+   original Stash source, seeking back.
 
-## Bridge mode (recommended)
+## Labels
 
-With [stash-jasna-bridge](https://github.com/org0ne/stash-jasna-bridge)
-running beside Jasna, set Settings > Plugins > Jasna Switch > **Bridge
-URL** and leave Jasna URL empty. The plugin then:
-
-- POSTs `{scene_id, time}` to the bridge, which resolves the file through
-  Stash GraphQL (the browser never sends paths) and returns a session
-  token plus the HLS playlist path;
-- sends a heartbeat every 30s while ON, and shows `JASNA: LOST` and drops
-  back to the Stash source if the bridge has released the session;
-- shows `JASNA: BUSY` when another viewer owns Jasna, and offers
-  `JASNA: TAKE OVER?` (one click pre-empts) once that owner is idle;
-- offers a **preset picker** as a pill beside the toggle (populated from the
-  bridge, remembered per browser), applied on the next toggle ON;
-- shows `JASNA: STARTING...` with a seconds counter when Jasna is cold;
-- ends the session on toggle OFF, scene change, and tab close/navigation
-  (`navigator.sendBeacon`), so streams are never orphaned;
-- counts seconds in the `PREPARING...` label.
-- shows `JASNA: NO BRIDGE` when the Bridge URL answers with something other
-  than JSON, which means the reverse proxy or tunnel in front of Stash has no
-  `/jasna` route (the request reached Stash's own page instead);
-- never restores to a `stream.jasna-*` source from a Stash build that has its
-  own Jasna streamer, since reloading it would spawn a second Jasna on the
-  same port.
-
-Bridge URL is relative (`/jasna`) when the reverse proxy serves the bridge
-under the Stash domain (see the bridge's `deploy/nginx-proxy-manager.md`),
-or absolute (`http://192.168.11.113:8770/jasna`) for a plain-HTTP Stash,
-in which case the origin must be in this plugin's CSP `connect-src` and
-in the bridge's `cors_origins`. **Bridge token** is only for the bridge's
-`auth.mode = token`.
-
-Without a Bridge URL the plugin runs in the original direct mode below.
+- `JASNA: OFF` / `JASNA: ON` - the two resting states.
+- `JASNA: STARTING... / PREPARING... Ns` - Jasna is spinning up (cold) or
+  rendering the first segment.
+- `JASNA: BUSY` / `JASNA: TAKE OVER?` - another viewer owns Jasna; once that
+  owner has stopped watching, one more click pre-empts them.
+- `JASNA: RECOVERING... n` - a stream stall; the plugin is re-loading and the
+  bridge is restarting Jasna behind it. Resolves to ON, or to LOST.
+- `JASNA: LOST` - the bridge released the session (idle, pre-empted, or
+  unrecoverable); playback dropped back to the Stash source.
+- `JASNA: NO BRIDGE` - no bridge configured or detected, or the `/jasna`
+  route answered with Stash's own page (the reverse proxy or tunnel has no
+  `/jasna` location).
 
 ## Requirements
 
+- [stash-jasna-bridge](https://github.com/org0ne/stash-jasna-bridge) running
+  beside Jasna (Jasna 0.10.x with an NVIDIA GPU). Set it up first.
 - Stash v0.31.x (tested on a v0.31.1 release and a develop build).
-- Jasna 0.10.x with NVIDIA GPU, started as `jasna --stream --no-browser`
-  plus whatever processing flags you want (settings are launch-time only;
-  there is no runtime settings API).
-- Jasna and Stash must see the media at the **same absolute path**.
-- Browser: Chrome/Chromium verified. Firefox and Safari untested.
-- If Stash is served over **HTTPS**, use bridge mode with the bridge
-  reverse-proxied under the Stash domain (mixed-content rule). See "HTTPS
-  Stash" below. Plain-HTTP Stash can talk to Jasna's plain-HTTP port
-  directly.
+- Works on HTTP and HTTPS Stash alike: the bridge is served on the Stash
+  origin, so there is no mixed-content problem.
+- Browser: Chrome/Chromium and iOS Safari verified; Firefox works, less tested.
 
 ## Install
 
@@ -82,36 +63,26 @@ Easiest: add this depot as a plugin source in Stash
 https://org0ne.github.io/stash-plugins/stable/index.yml
 ```
 
-then install **Jasna Switch** from the list. For development, symlink this
-folder into Stash's `plugins/` directory instead:
+then install **Jasna Switch** from the list. Open any scene: the toggle
+appears top-right on the player.
+
+With the bridge reverse-proxied under the Stash domain (the recommended
+setup) there is nothing to configure - the plugin auto-detects it at
+`<stash-origin>/jasna`.
+
+**Overriding the bridge URL.** Set Settings > Plugins > Jasna Switch >
+**Bridge URL** only to point elsewhere, e.g. an absolute
+`http://host:8770` for a plain-HTTP Stash on a different origin. An absolute
+URL must also be added to `ui.csp.connect-src` in `jasna-switch.yml`
+(same-origin `/jasna` needs nothing), then reload plugins. **Bridge token**
+is only for the bridge's `auth.mode = token`.
+
+For development, symlink this folder into Stash's `plugins/` directory and
+reload:
 
 ```sh
 ln -s /path/to/stash-plugins/plugins/jasna-switch <stash config dir>/plugins/jasna-switch
 ```
-
-and Settings > Plugins > Reload plugins (or `mutation { reloadPlugins }`
-via GraphQL).
-
-Configure the Jasna endpoint in Settings > Plugins > Jasna Switch >
-**Jasna URL**, e.g. `http://192.168.11.113:8765`. If left empty the
-default in `jasna-switch.js` is used.
-
-An absolute Bridge URL or Jasna URL must also be allowed by Stash's
-Content Security Policy. `jasna-switch.yml` ships with the two origins used
-during development under `ui.csp.connect-src`; add yours there if it
-differs, then reload plugins. A relative Bridge URL needs nothing.
-
-Open any scene: the toggle appears directly below the player (under the
-scrubber strip).
-
-## HTTPS Stash
-
-Browsers block an HTTPS page from fetching `http://` resources, and Jasna's
-stream server is plain HTTP. Use bridge mode and serve the bridge under
-the same domain as Stash through your reverse proxy (see the bridge's
-`deploy/nginx-proxy-manager.md`); then Bridge URL is just `/jasna` and no
-TLS, CORS or CSP setup is needed. Plain-HTTP Stash can point at an
-absolute bridge or Jasna URL directly.
 
 ## Headless end-to-end test
 
@@ -131,10 +102,10 @@ the network log output. Arguments: scene id, poll seconds, `fresh` |
 ON -> OFF -> ON. Chrome is started with `--ignore-certificate-errors`, so a
 self-signed proxy cert is fine.
 
-## Known limitations (PoC)
+## Notes
 
-- One Jasna session at a time; no multi-user coordination.
-- The browser sends raw filesystem paths to Jasna; no path mapping.
-- No auth between browser and Jasna.
-- hls.js is loaded from jsdelivr (needs internet and a `script-src`
-  CSP entry, already in the manifest).
+- One Jasna session at a time (a single GPU pipeline); the bridge coordinates
+  ownership and takeover between viewers.
+- hls.js 1.7.2 is bundled (no CDN, no `script-src` exception).
+- On a stall, the plugin rides out hls.js's retries and shows RECOVERING
+  while the bridge restarts Jasna on the same token; see the bridge README.

@@ -6,7 +6,7 @@ description: >
   Adds a JASNA ON/OFF toggle to the Stash scene player, allowing
   Jasna-restored playback to be swapped in as an alternate rendition
   of the current scene without modifying Stash itself.
-version: 0.4.4
+version: 0.5.0
 
 ui:
   javascript:
@@ -20,40 +20,27 @@ ui:
     - hls.min.js
     - jasna-switch.js
 
-  # Jasna typically runs on a different host/port than Stash, so its
-  # origin must be allow-listed for fetch()/XHR to succeed. Add the origin
-  # you configure as "Jasna URL" below. If Stash is served over HTTPS the
-  # Jasna origin must be HTTPS too (browsers block mixed content); a
-  # plain-HTTP Stash can use Jasna's own http port directly.
-  # Not needed when the bridge is served under the Stash domain (Bridge URL
-  # "/jasna"): 'self' covers it. Only absolute Bridge/Jasna URLs need an entry.
+  # The reverse-proxied setup (Bridge URL "/jasna", or auto-detected) is
+  # same-origin, so 'self' covers it and nothing is needed here. Only an
+  # ABSOLUTE Bridge URL (http://host:8770) needs its origin allow-listed;
+  # add it below and reload plugins. An HTTPS Stash needs an https:// bridge.
   csp:
     connect-src:
-      - http://192.168.11.113:8770
-      - http://192.168.11.113:8765
+      - http://192.168.11.113:8770  # TEMP TEST ONLY
 
 settings:
   bridgeUrl:
     displayName: Bridge URL
     description: >
-      URL of stash-jasna-bridge. Relative ("/jasna") when it is served under
-      the Stash domain by the reverse proxy, or absolute
-      (http://192.168.11.113:8770) for a plain-HTTP Stash. When set, the
-      plugin uses the bridge (session ownership, idle timeout, HLS proxy)
-      and ignores Jasna URL. An absolute URL must also be in this plugin's
-      CSP connect-src.
+      Optional. URL of stash-jasna-bridge. Leave EMPTY for the usual
+      reverse-proxied setup: the plugin auto-detects the bridge at
+      <stash-origin>/jasna. Set it only to override, e.g. an absolute
+      http://host:8770 for a plain-HTTP Stash on another host (its origin
+      must then be in this plugin's CSP connect-src above).
     type: STRING
   bridgeToken:
     displayName: Bridge token
     description: >
       Shared secret for bridge auth.mode = token (sent as Authorization:
       Bearer). Leave empty for none / stash_cookie modes.
-    type: STRING
-  jasnaUrl:
-    displayName: Jasna URL
-    description: >
-      Base URL of the Jasna --stream server, e.g. http://192.168.11.113:8765
-      (or the HTTPS proxy in front of it when Stash itself is HTTPS). Must
-      also be listed in this plugin's CSP connect-src. Leave empty to use the
-      default compiled into jasna-switch.js.
     type: STRING
