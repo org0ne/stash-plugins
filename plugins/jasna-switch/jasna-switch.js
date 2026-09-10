@@ -43,6 +43,28 @@
   // absolute URL must also be listed under ui.csp.connect-src in the manifest.
   let BRIDGE_URL = "";
   let BRIDGE_TOKEN = "";
+  // Which corner of the video the badge sits in. Same 12px (8px on mobile)
+  // inset in every corner. Setting "Badge Corner": top-right (default),
+  // top-left, bottom-right, bottom-left.
+  // The badge corner is chosen from a dropdown on the badge itself (Stash
+  // plugin settings can't render a <select>), remembered per browser. The
+  // glyph on the picker is a square whose filled quadrant shows the corner.
+  const CORNER_GLYPH = { "top-left": "◰", "top-right": "◳",
+                         "bottom-right": "◲", "bottom-left": "◱" };
+  const CORNER_LABEL = { "top-left": "Top left", "top-right": "Top right",
+                         "bottom-right": "Bottom right", "bottom-left": "Bottom left" };
+  const BADGE_CORNERS = Object.keys(CORNER_GLYPH);
+  const CORNER_STORAGE_KEY = "jasna-switch:corner";
+  function readSavedCorner() {
+    try {
+      const c = localStorage.getItem(CORNER_STORAGE_KEY);
+      return BADGE_CORNERS.includes(c) ? c : "top-right";
+    } catch (e) { return "top-right"; }
+  }
+  function saveCorner(c) {
+    try { localStorage.setItem(CORNER_STORAGE_KEY, c); } catch (e) { /* private mode */ }
+  }
+  let BADGE_CORNER = readSavedCorner();
 
   async function loadPluginSettings() {
     try {
@@ -191,7 +213,11 @@
   function ensureBadgeStyle() {
     if (badgeStyleInjected) return;
     const css = `
-#jasna-badge{position:absolute;top:12px;right:12px;z-index:3;display:flex;gap:8px;align-items:center;transition:opacity .25s}
+#jasna-badge{position:absolute;z-index:3;display:flex;gap:8px;align-items:center;transition:opacity .25s}
+#jasna-badge[data-corner="top-right"]{top:12px;right:12px}
+#jasna-badge[data-corner="top-left"]{top:12px;left:12px}
+#jasna-badge[data-corner="bottom-right"]{bottom:var(--jasna-bottom,12px);right:12px}
+#jasna-badge[data-corner="bottom-left"]{bottom:var(--jasna-bottom,12px);left:12px}
 .video-js.vjs-user-inactive.vjs-playing #jasna-badge{opacity:0;pointer-events:none}
 #jasna-badge .jasna-pill{display:flex;align-items:center;gap:7px;background:rgba(20,20,31,.72);
   -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
@@ -215,9 +241,18 @@
 #jasna-badge .jasna-preset select{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;margin:0;cursor:pointer}
 #jasna-badge .jasna-preset.disabled{opacity:.5}
 #jasna-badge .jasna-preset.disabled select{pointer-events:none;cursor:default}
+#jasna-badge .jasna-corner{position:relative;overflow:hidden;padding:5px 9px;font-size:14px;line-height:1;color:var(--jl-muted,#8b9bc7)}
+#jasna-badge .jasna-corner select{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;margin:0;cursor:pointer}
 @keyframes jasna-pulse{50%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){#jasna-badge .jasna-pill .dot{animation:none!important}}
-@media (max-width:480px){#jasna-badge{top:8px;right:8px;gap:6px}#jasna-badge .jasna-pill{font-size:10px;padding:6px 10px}}`;
+@media (max-width:480px){
+  #jasna-badge{gap:6px}
+  #jasna-badge[data-corner="top-right"]{top:8px;right:8px}
+  #jasna-badge[data-corner="top-left"]{top:8px;left:8px}
+  #jasna-badge[data-corner="bottom-right"]{right:8px}
+  #jasna-badge[data-corner="bottom-left"]{left:8px}
+  #jasna-badge .jasna-pill{font-size:10px;padding:6px 10px}
+}`;
     const st = document.createElement("style");
     st.textContent = css;
     (document.head || document.documentElement).appendChild(st);
@@ -934,6 +969,50 @@
     if (wrap.classList.contains("disabled")) wrap.classList.remove("disabled");
   }
 
+  // Bottom corners must clear video.js's control bar + scrubber, whose height
+  // is not fixed (differs desktop/phone/fullscreen). Measure the topmost
+  // bottom-anchored control and set --jasna-bottom so the badge sits above it.
+  // Setting an inline custom property is a style-attribute change, invisible to
+  // the mount observer (childList/subtree), so this cannot loop.
+  const fsListenerAttached = new WeakSet();
+  let layoutListenersAttached = false;
+
+  function updateBottomInset(badge, vjs) {
+    if (!badge || !vjs) return;
+    const vb = vjs.getBoundingClientRect().bottom;
+    let region = 0;
+    for (const sel of [".vjs-control-bar", ".vjs-progress-control"]) {
+      const el = vjs.querySelector(sel);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (r.height > 0) region = Math.max(region, vb - r.top);
+    }
+    const val = (region > 0 ? Math.round(region) + 10 : 12) + "px";
+    if (badge.style.getPropertyValue("--jasna-bottom") !== val) {
+      badge.style.setProperty("--jasna-bottom", val);
+    }
+  }
+
+  function refreshBottomInset() {
+    const vjs = document.querySelector(".scene-player-container .VideoPlayer .video-js");
+    updateBottomInset(document.getElementById("jasna-badge"), vjs);
+  }
+
+  function ensureLayoutListeners(player) {
+    if (!layoutListenersAttached) {
+      layoutListenersAttached = true;
+      let raf = 0;
+      window.addEventListener("resize", () => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(refreshBottomInset);
+      });
+    }
+    if (player && typeof player.on === "function" && !fsListenerAttached.has(player)) {
+      fsListenerAttached.add(player);
+      player.on("fullscreenchange", () => setTimeout(refreshBottomInset, 50));
+    }
+  }
+
   function ensureButtonMounted() {
     const t0 = performance.now();
     perf.mountCalls++;
@@ -955,6 +1034,7 @@
     if (!badge) {
       badge = document.createElement("div");
       badge.id = "jasna-badge";
+      badge.dataset.corner = BADGE_CORNER;
 
       const toggle = document.createElement("button");
       toggle.id = "jasna-toggle-button";
@@ -990,8 +1070,36 @@
       preset.appendChild(caret);
       preset.appendChild(select);
 
+      const corner = document.createElement("label");
+      corner.className = "jasna-pill jasna-corner";
+      corner.title = "Badge corner";
+      const cglyph = document.createElement("span");
+      cglyph.id = "jasna-corner-glyph";
+      cglyph.textContent = CORNER_GLYPH[BADGE_CORNER];
+      const cselect = document.createElement("select");
+      cselect.id = "jasna-corner-select";
+      for (const name of BADGE_CORNERS) {
+        const opt = document.createElement("option");
+        opt.value = name; opt.textContent = CORNER_LABEL[name];
+        cselect.appendChild(opt);
+      }
+      cselect.value = BADGE_CORNER;
+      cselect.addEventListener("change", () => {
+        BADGE_CORNER = cselect.value;
+        saveCorner(BADGE_CORNER);
+        const b = document.getElementById("jasna-badge");
+        if (b) b.dataset.corner = BADGE_CORNER;
+        const g = document.getElementById("jasna-corner-glyph");
+        if (g) g.textContent = CORNER_GLYPH[BADGE_CORNER];
+        refreshBottomInset();
+        log(`Badge corner -> ${BADGE_CORNER}`);
+      });
+      corner.appendChild(cglyph);
+      corner.appendChild(cselect);
+
       badge.appendChild(toggle);
       badge.appendChild(preset);
+      badge.appendChild(corner);
       // A rebuild after a player re-render must not show OFF while a stream
       // is live: reflect the current state, not the initial one.
       if (state.source === "jasna") setButtonLabel("JASNA: ON");
@@ -999,8 +1107,12 @@
     }
 
     if (badge.parentElement !== vjs) vjs.appendChild(badge);
+    if (badge.dataset.corner !== BADGE_CORNER) badge.dataset.corner = BADGE_CORNER;
+    updateBottomInset(badge, vjs);
     renderPresetSelect();
-    ensureSeekListener(getVideoJsPlayer());
+    const player = getVideoJsPlayer();
+    ensureSeekListener(player);
+    ensureLayoutListeners(player);
   }
 
   // Mounting without a deep observer. On a scene page we wait for the video.js

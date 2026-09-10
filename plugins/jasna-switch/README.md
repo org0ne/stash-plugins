@@ -109,3 +109,9 @@ self-signed proxy cert is fine.
 - hls.js 1.7.2 is bundled (no CDN, no `script-src` exception).
 - On a stall, the plugin rides out hls.js's retries and shows RECOVERING
   while the bridge restarts Jasna on the same token; see the bridge README.
+- The badge's corner is chosen from a small dropdown on the badge itself (the
+  square glyph ◰◳◲◱ shows the current corner). Stash's plugin settings can't
+  render a dropdown, so the picker lives on the player and the choice is
+  remembered per browser. In a bottom corner the badge sits above the control
+  bar and scrubber (their height is measured at runtime, so it stays clear on
+  desktop, phone and in fullscreen).
