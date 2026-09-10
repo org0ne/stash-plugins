@@ -366,7 +366,11 @@
     const code = wrapper.querySelector('.studio-code');
     const subheader = wrapper.querySelector('.scene-subheader');
     let backdrop = wrapper.querySelector(':scope > .jl-codedate-backdrop');
-    if (!code || !subheader) {
+    // The bar needs only the Date to exist — a scene with no studio code
+    // still gets a full-width Code/Date bar, just with the Date alone
+    // (left, where Code would be). Suppressing the backdrop when Code was
+    // absent left the Date as naked text with no bar (reported 2026-09-10).
+    if (!subheader) {
       if (backdrop) setStyle(backdrop, 'display', 'none');
       return;
     }
@@ -384,7 +388,7 @@
     // single run. Reads first, then guarded writes, so a run whose inputs
     // haven't changed touches nothing.
     const height = Math.round(Math.max(
-      code.getBoundingClientRect().height,
+      code ? code.getBoundingClientRect().height : 0,
       subheader.getBoundingClientRect().height,
     ));
     // Both zero means the sidebar itself isn't laid out right now (e.g.
