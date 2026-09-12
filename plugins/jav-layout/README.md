@@ -259,6 +259,23 @@ those variables alongside the plugin's own `--jl-*` tokens. **If you
 have the separate `dracula-theme` plugin installed, disable it** — this
 plugin now contains it, and there is no reason to load it twice.
 
+### Scene header backdrop
+
+**Settings → Plugins → JAV Layout → Scene header backdrop** adds an
+optional gradient behind the scene page's identity header (studio logo,
+code/date bar, title, toolbar). Off by default.
+
+| Value | What it draws |
+| --- | --- |
+| None (default) | Nothing; the header sits on the page ground. |
+| Floor | The header recedes onto the theme's deep surface, fading back to the page ground by the mode bar. No hue, so it reads the same under every theme. |
+| Signature line | A 2px hairline under the player (at the sidebar's top edge on wide layouts) running from the theme's accent to its link color, over a faint accent wash. Tropical Punch draws magenta to mint, Abyss cyan to periwinkle. |
+
+The fade's height follows the header (it ends at the mode bar, wherever
+the title's line count puts it). The signature pair comes from
+`--jl-signature-from` / `--jl-signature-to`, which default to the
+accent and link; a theme block in `themes.css` can set its own.
+
 Adding a theme is three edits: two `html[data-jl-theme="…"]` blocks in
 `themes.css` (the `--jl-*` tokens, and the base-app palette — each
 `:root`-level list names the slots), and an entry in `THEMES` in

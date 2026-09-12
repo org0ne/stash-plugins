@@ -1182,3 +1182,61 @@ a.jl-scene-director-value:hover {
 @media (prefers-reduced-motion: reduce) {
   .jl-mode, .jl-head, .jl-head .jl-chevron { transition: none !important; }
 }
+
+/* ------------------------------------------------------------
+ *  Header backdrop (2026-09-11) — an optional gradient behind the
+ *  identity header, from the "Gradients at 390" review page (linked in
+ *  CLAUDE.md's Theming section). Selected by the `headerBackdrop`
+ *  setting; theme.js stamps it on <html> as data-jl-backdrop, absent
+ *  when the setting is "none", so the default costs no rules at all.
+ *
+ *  The header wrapper is display: contents (see the layout section
+ *  above), so there is no header box to paint. Both variants are
+ *  pseudo-elements on .scene-tabs itself, laid over its own (transparent)
+ *  background and under every child via z-index: -1 inside an isolated
+ *  stacking context. `--jl-backdrop-h` is the distance from the top of
+ *  the scroller to the mode bar's top, measured by sizeHeaderBackdrop()
+ *  in scene-dashboard.js (the title wraps, so it can't be a constant);
+ *  until it is measured the fade has no height and only the signature's
+ *  fixed 2px hairline shows, which is the intended failsafe.
+ *
+ *  floor      the header recedes onto the deep surface, fading back to
+ *             the page ground by the mode bar. No hue, so it reads the
+ *             same under every theme.
+ *  signature  a 2px hairline at the very top (under the player on
+ *             phones, at the sidebar's top edge on wide layouts) running
+ *             from --jl-signature-from to --jl-signature-to — accent to
+ *             link unless a theme block says otherwise — over a 7 %
+ *             accent wash that fades out by 70 % of the header.
+ * ------------------------------------------------------------ */
+html[data-jl-backdrop] .scene-tabs[data-jl-mode] {
+  position: relative;
+  isolation: isolate;
+}
+html[data-jl-backdrop] .scene-tabs[data-jl-mode]::before,
+html[data-jl-backdrop] .scene-tabs[data-jl-mode]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: var(--jl-backdrop-h, 0px);
+  pointer-events: none;
+  z-index: -1;
+}
+html[data-jl-backdrop="floor"] .scene-tabs[data-jl-mode]::before {
+  background: linear-gradient(180deg,
+    var(--jl-surface-deep),
+    color-mix(in srgb, var(--jl-surface-deep) 55%, transparent) 60%,
+    transparent);
+}
+html[data-jl-backdrop="floor"] .scene-tabs[data-jl-mode]::after { content: none; }
+html[data-jl-backdrop="signature"] .scene-tabs[data-jl-mode]::before {
+  height: 2px;
+  background: linear-gradient(90deg, var(--jl-signature-from), var(--jl-signature-to));
+}
+html[data-jl-backdrop="signature"] .scene-tabs[data-jl-mode]::after {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--jl-accent) 7%, transparent),
+    transparent 70%);
+}

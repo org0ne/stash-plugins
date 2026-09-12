@@ -78,6 +78,11 @@
   --jl-accent-wash-soft:  color-mix(in srgb, var(--jl-accent) 10%, transparent);
   --jl-accent-border:     color-mix(in srgb, var(--jl-accent) 40%, transparent);
   --jl-danger-border:     color-mix(in srgb, var(--jl-danger) 40%, transparent);
+  /* The per-theme signature gradient — used in exactly one place, the
+     "signature" header backdrop (scene-dashboard.css). Derived from the
+     accent and link by default; a theme block may set its own pair. */
+  --jl-signature-from:    var(--jl-accent);
+  --jl-signature-to:      var(--jl-link);
 }
 
 /* ------------------------------------------------------------

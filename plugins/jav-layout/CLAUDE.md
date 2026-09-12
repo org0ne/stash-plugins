@@ -225,6 +225,31 @@ across three runs — so the refactor changed no visible output.
   grounds compress — every dark page ground is within ~10 of some other —
   so the accent is what carries distinctness, same as the 2026-09-03
   dedup found.
+- **Scene header backdrop setting (2026-09-11, v2.3.0)** — `headerBackdrop`,
+  values `none` (default) / `floor` / `signature`, from the "Gradients at
+  390" review page (live renders of four backdrop directions and three
+  overflow-fade treatments at iPhone width, CSS under each):
+  https://claude.ai/code/artifact/f4a6a624-180d-4ead-8be2-79402e04a38f.
+  Accent-wash and ambient-cover were reviewed and not taken; the fades
+  are still pending a pick. Mechanics: `theme.js` now drives BOTH closed-
+  list settings from one `SETTINGS` table (key, localStorage key, html
+  dataset attribute, default, options) — same two-stage apply and the
+  same hidden-native-row + sibling `<select>` panel per setting; the
+  default is the absence of the attribute, so `none` costs no rules.
+  `data-jl-backdrop` on `<html>` selects pseudo-elements on `.scene-tabs`
+  (the header wrapper is `display: contents`, there is no header box):
+  `::before`/`::after`, `z-index: -1` inside `isolation: isolate`, height
+  from `--jl-backdrop-h`, which `sizeHeaderBackdrop()` in
+  scene-dashboard.js measures as the mode bar's top relative to the
+  scroller (plus scrollTop) and writes as a custom property on the root
+  — called from `measure()` and the per-run pass next to
+  `sizeCodeDateBackdrop`, and re-queued by the `jl-backdrop-change`
+  event theme.js dispatches when the attribute changes (an attribute
+  write neither observer sees). Unmeasured, the fade has 0 height and
+  only the signature's fixed 2px hairline shows — the failsafe. The
+  signature pair is `--jl-signature-from/-to` in themes.css's derived
+  block, defaulting to accent → link; no theme overrides it yet. Console
+  preview: `JLTheme.backdrop.preview('signature')`.
 - **Adding a theme**: two `html[data-jl-theme="<id>"]` blocks in
   `themes.css` (the `--jl-*` tokens and the base-app palette, each with
   an attribution comment), an entry in `THEMES` in `theme.js`, a row in

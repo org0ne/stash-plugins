@@ -4,7 +4,7 @@ description: >
   reading-order sidebar (identity, description, tags, then a five-mode
   switcher with Performers/File/History swapping in below it), replacing
   the nine-tab bar.
-version: 2.2.0
+version: 2.3.0
 
 ui:
   # Loaded in order. fonts.css just registers @font-face rules (self-
@@ -54,4 +54,14 @@ settings:
       rose-pine-moon, kanagawa-wave, tokyo-night, moonlight, synthwave-84,
       aura-dark, horizon-dark, sonokai, monokai, tropical-punch, ube-mango,
       blood-orange, matcha, brass-ink and abyss.
+    type: STRING
+  headerBackdrop:
+    displayName: Scene header backdrop
+    description: >
+      Optional gradient behind the scene page's identity header (studio
+      logo, code/date bar, title, toolbar). Like the theme, this plugin
+      replaces the field with a dropdown in Settings › Plugins; raw values
+      are none (default), floor (the header recedes onto the deep
+      surface) and signature (a 2px accent-to-link hairline under the
+      player with a faint accent wash).
     type: STRING

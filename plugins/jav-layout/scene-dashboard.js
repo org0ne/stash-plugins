@@ -360,6 +360,37 @@
    * pill can render at very slightly different heights depending on
    * content/font metrics, and using the taller of the two avoids a sliver
    * of the shorter one poking out past the backdrop's edge. */
+  /* Header backdrop (2026-09-11) — the optional gradient behind the
+   * identity header, chosen by the `headerBackdrop` setting and stamped
+   * on <html> as data-jl-backdrop by theme.js. It is painted by pseudo-
+   * elements on .scene-tabs itself (the header wrapper is display:
+   * contents and has no box), so the only thing to size is how far down
+   * the fade runs: to the mode bar's top edge, which moves with the
+   * title's line count. Written as a custom property on the root, read
+   * by the ::before/::after rules in scene-dashboard.css. Same read-
+   * first / guarded-write discipline as sizeCodeDateBackdrop below. The
+   * distance is measured in the scroller's content coordinates (plus
+   * scrollTop), since on wide layouts .scene-tabs is the scroller and an
+   * absolutely positioned child scrolls with its content. */
+  function sizeHeaderBackdrop(root) {
+    const PROP = '--jl-backdrop-h';
+    if (!('jlBackdrop' in document.documentElement.dataset)) {
+      if (root.style.getPropertyValue(PROP)) root.style.removeProperty(PROP);
+      return;
+    }
+    const modes = root.querySelector('.jl-modes-row');
+    if (!modes) return;
+    const rootRect = root.getBoundingClientRect();
+    const modeRect = modes.getBoundingClientRect();
+    // Either box at zero means the sidebar isn't laid out right now —
+    // keep the last good value, same as the code/date bar.
+    if (rootRect.height === 0 || modeRect.height === 0) return;
+    const h = Math.round(modeRect.top - rootRect.top + root.scrollTop - root.clientTop);
+    if (h <= 0) return;
+    const value = `${h}px`;
+    if (root.style.getPropertyValue(PROP) !== value) root.style.setProperty(PROP, value);
+  }
+
   function sizeCodeDateBackdrop(root) {
     const wrapper = root.querySelector(':scope > div:first-child');
     if (!wrapper) return;
@@ -1020,6 +1051,7 @@
     }
 
     sizeCodeDateBackdrop(root);
+    sizeHeaderBackdrop(root);
 
     return seen;
   }
@@ -1139,6 +1171,7 @@
     const contentCol = contentRow && contentRow.firstElementChild;
     if (contentCol) sizeTagsBackdrop(contentCol);
     sizeCodeDateBackdrop(root);
+    sizeHeaderBackdrop(root);
   }
 
   function syncModeBar(root) {
@@ -1267,6 +1300,11 @@
     });
   }
   window.addEventListener('resize', queueRemeasure);
+  // theme.js fires this when the header-backdrop setting changes (or is
+  // previewed from the console) — an attribute write on <html>, which
+  // neither observer above sees, and the fade's height is only measured
+  // while the attribute is present.
+  document.addEventListener('jl-backdrop-change', queueRemeasure);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(queueRemeasure);
 
   run();

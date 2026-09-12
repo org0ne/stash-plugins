@@ -1,19 +1,16 @@
 // ==StashScript==
 // name JAV Layout — Theme
-// version 1.0
-// description Applies the plugin's `theme` setting as data-jl-theme on
-//             <html> (themes.css keys every color token off it) and
-//             replaces the setting's raw text field in Settings › Plugins
-//             with a dropdown of the themes themes.css actually defines.
+// version 1.1
+// description Applies the plugin's `theme` and `headerBackdrop` settings
+//             as data-jl-theme / data-jl-backdrop on <html> (themes.css
+//             and scene-dashboard.css key off them) and replaces each
+//             setting's raw text field in Settings › Plugins with a
+//             dropdown of the values the stylesheets actually define.
 // ==/StashScript==
 ;(() => {
   'use strict';
 
   const PLUGIN_ID = 'jav-layout';
-  const SETTING_KEY = 'theme';
-  const SETTING_ID = `plugin-${PLUGIN_ID}-${SETTING_KEY}`;
-  const STORAGE_KEY = 'jl.theme';
-  const DEFAULT_THEME = 'dracula';
 
   // One entry per `html[data-jl-theme="…"]` block in themes.css. The id is
   // the value stored in the plugin setting and the attribute; the label is
@@ -40,24 +37,63 @@
     { id: 'abyss',            label: 'Abyss' },
   ];
 
-  const isKnown = id => THEMES.some(t => t.id === id);
-  const normalize = id => (isKnown(id) ? id : DEFAULT_THEME);
+  // One entry per `html[data-jl-backdrop="…"]` variant in
+  // scene-dashboard.css (Header backdrop section), plus "none".
+  const BACKDROPS = [
+    { id: 'none',      label: 'None (default)' },
+    { id: 'floor',     label: 'Floor — header recedes onto the deep surface' },
+    { id: 'signature', label: 'Signature line — accent-to-link hairline under the player' },
+  ];
 
-  /* The default theme is the bare `:root` block in themes.css, so it is
-   * expressed as NO attribute rather than data-jl-theme="dracula" — an
-   * unknown or missing value degrades to Dracula for free, which is the
-   * failsafe this plugin wants (same spirit as constraint 6 in CLAUDE.md:
-   * if this script never runs, the page is Dracula). Writes are
-   * equality-guarded like every other per-run DOM write in this plugin. */
-  function apply(id) {
-    id = normalize(id);
+  /* Every closed-list setting this plugin owns, driven by one table so a
+   * third one is a row here plus its stylesheet rules, nothing else.
+   *   key      the plugin setting key (manifest) and the native row's id suffix
+   *   storage  localStorage key for the first-paint cache
+   *   attr     dataset property on <html>; absent when the value is the default
+   *   dflt     the value that means "no attribute"
+   *   event    optional DOM event fired after a change, for stylesheets
+   *            whose consumers need to re-measure (scene-dashboard.js) */
+  const SETTINGS = [
+    {
+      key: 'theme', storage: 'jl.theme', attr: 'jlTheme', dflt: 'dracula',
+      label: 'Color theme',
+      help: 'Palette for the whole app — stash’s own pages and everything this plugin draws. Applies immediately and is saved to this plugin’s settings.',
+      options: THEMES, noun: 'theme',
+    },
+    {
+      key: 'headerBackdrop', storage: 'jl.backdrop', attr: 'jlBackdrop', dflt: 'none',
+      label: 'Scene header backdrop',
+      help: 'An optional gradient behind the scene page’s identity header (studio logo, code/date bar, title, toolbar). Applies immediately and is saved to this plugin’s settings.',
+      options: BACKDROPS, noun: 'backdrop', event: 'jl-backdrop-change',
+    },
+  ];
+  for (const s of SETTINGS) {
+    s.rowId = `plugin-${PLUGIN_ID}-${s.key}`;
+    s.current = s.dflt;
+    s.selectEl = null;
+  }
+
+  const normalize = (s, id) => (s.options.some(o => o.id === id) ? id : s.dflt);
+
+  /* The default value is expressed as NO attribute rather than, say,
+   * data-jl-theme="dracula": themes.css's bare `:root` block is Dracula,
+   * and scene-dashboard.css's backdrop rules only match when the
+   * attribute exists — so an unknown or missing value degrades to the
+   * default for free, which is the failsafe this plugin wants (same
+   * spirit as constraint 6 in CLAUDE.md: if this script never runs, the
+   * page is Dracula with no backdrop). Writes are equality-guarded like
+   * every other per-run DOM write in this plugin. */
+  function apply(s, id) {
+    id = normalize(s, id);
     const html = document.documentElement;
-    if (id === DEFAULT_THEME) {
-      if ('jlTheme' in html.dataset) delete html.dataset.jlTheme;
-    } else if (html.dataset.jlTheme !== id) {
-      html.dataset.jlTheme = id;
+    const before = html.dataset[s.attr];
+    if (id === s.dflt) {
+      if (s.attr in html.dataset) delete html.dataset[s.attr];
+    } else if (html.dataset[s.attr] !== id) {
+      html.dataset[s.attr] = id;
     }
-    try { localStorage.setItem(STORAGE_KEY, id); } catch (e) { /* private mode */ }
+    try { localStorage.setItem(s.storage, id); } catch (e) { /* private mode */ }
+    if (s.event && html.dataset[s.attr] !== before) document.dispatchEvent(new Event(s.event));
     return id;
   }
 
@@ -65,8 +101,9 @@
    *    bundle, so there is always some Dracula-colored paint before the
    *    settings round trip below resolves. The cached value closes that
    *    gap on every load after the first. */
-  let current = DEFAULT_THEME;
-  try { current = apply(localStorage.getItem(STORAGE_KEY) || DEFAULT_THEME); } catch (e) { /* ignore */ }
+  for (const s of SETTINGS) {
+    try { s.current = apply(s, localStorage.getItem(s.storage) || s.dflt); } catch (e) { /* ignore */ }
+  }
 
   async function gql(query, variables) {
     const res = await fetch('/graphql', {
@@ -80,32 +117,31 @@
     return json.data;
   }
 
-  async function readSetting() {
+  async function readSettings() {
     const data = await gql('{ configuration { plugins } }');
-    return data?.configuration?.plugins?.[PLUGIN_ID]?.[SETTING_KEY];
+    return data?.configuration?.plugins?.[PLUGIN_ID] || {};
   }
 
   /* `configurePlugin` REPLACES the plugin's whole settings map, so the
    * current map is read first and the new value merged into it — the same
    * config-clobbering landmine collection-colors hit and documented in its
-   * own source (writing one key alone wiped the others). jav-layout has
-   * only this one setting today, but the merge costs nothing and keeps
-   * that from becoming a bug the day a second setting is added. */
-  async function writeSetting(id) {
-    const data = await gql('{ configuration { plugins } }');
-    const existing = data?.configuration?.plugins?.[PLUGIN_ID] || {};
+   * own source (writing one key alone wiped the others). With two settings
+   * here the merge is what keeps changing the backdrop from wiping the
+   * theme, and vice versa. */
+  async function writeSetting(key, value) {
+    const existing = await readSettings();
     await gql(
       `mutation($input: Map!) { configurePlugin(plugin_id: "${PLUGIN_ID}", input: $input) }`,
-      { input: { ...existing, [SETTING_KEY]: id } },
+      { input: { ...existing, [key]: value } },
     );
   }
 
-  /* 2. Authoritative, from the plugin setting. Wins over the cache: the
+  /* 2. Authoritative, from the plugin settings. Wins over the cache: the
    *    cache only exists to hide the first-paint gap, and a setting
    *    changed from another browser must still take effect here. */
-  readSetting()
-    .then(v => { current = apply(v || DEFAULT_THEME); syncSelect(); })
-    .catch(e => console.warn('[JavLayout theme] could not read plugin settings, using cached theme', e));
+  readSettings()
+    .then(map => { for (const s of SETTINGS) { s.current = apply(s, map[s.key] || s.dflt); syncSelect(s); } })
+    .catch(e => console.warn('[JavLayout theme] could not read plugin settings, using cached values', e));
 
   /* ============================
    *  SETTINGS PANEL (Settings › Plugins › JAV Layout)
@@ -113,58 +149,59 @@
    *  `plugin-<pluginId>-<settingKey>` (confirmed live: the row holds the
    *  h3 / current-value / description block and an Edit button that opens
    *  a free-text modal). A free-text field is the wrong control for a
-   *  closed list of themes, so that native row is hidden and a sibling
-   *  row with a <select> takes its place — inserted, never moving or
-   *  re-parenting anything React owns (CLAUDE.md constraint 1). The
-   *  native row stays in the DOM as the escape hatch.
+   *  closed list, so each native row is hidden and a sibling row with a
+   *  <select> takes its place — inserted, never moving or re-parenting
+   *  anything React owns (CLAUDE.md constraint 1). The native rows stay
+   *  in the DOM as the escape hatch.
    * ============================ */
-  let selectEl = null;
-
-  function syncSelect() {
-    if (selectEl && selectEl.value !== current) selectEl.value = current;
+  function syncSelect(s) {
+    if (s.selectEl && s.selectEl.value !== s.current) s.selectEl.value = s.current;
   }
 
-  function buildRow() {
+  function buildRow(s) {
     const row = document.createElement('div');
+    // .jl-theme-setting is kept on every row for the stylesheet hooks and
+    // for anything else that looked for it; data-jl-key says which one.
     row.className = 'setting jl-theme-setting';
+    row.dataset.jlKey = s.key;
 
     const text = document.createElement('div');
     const h3 = document.createElement('h3');
-    h3.textContent = 'Color theme';
+    h3.textContent = s.label;
     const sub = document.createElement('div');
     sub.className = 'sub-heading';
-    sub.textContent = 'Palette for the whole app — stash’s own pages and everything this plugin draws. Applies immediately and is saved to this plugin’s settings.';
+    sub.textContent = s.help;
     text.appendChild(h3);
     text.appendChild(sub);
 
     const control = document.createElement('div');
     const select = document.createElement('select');
     select.className = 'form-control input-control jl-theme-select';
-    select.setAttribute('aria-label', 'Color theme');
-    for (const t of THEMES) {
+    select.setAttribute('aria-label', s.label);
+    for (const o of s.options) {
       const opt = document.createElement('option');
-      opt.value = t.id;
-      opt.textContent = t.label;
+      opt.value = o.id;
+      opt.textContent = o.label;
       select.appendChild(opt);
     }
-    select.value = current;
+    select.value = s.current;
     const status = document.createElement('div');
     status.className = 'sub-heading jl-theme-status';
     status.setAttribute('aria-live', 'polite');
 
     select.addEventListener('change', () => {
-      const previous = current;
-      current = apply(select.value);
+      const previous = s.current;
+      s.current = apply(s, select.value);
       status.textContent = 'Saving…';
-      writeSetting(current)
+      writeSetting(s.key, s.current)
         .then(() => { status.textContent = 'Saved'; setTimeout(() => { if (status.textContent === 'Saved') status.textContent = ''; }, 1500); })
         .catch(e => {
           console.error('[JavLayout theme] save failed', e);
           // Keep the page and the dropdown honest about what is actually
           // persisted: revert both to the last value known to be saved.
-          current = apply(previous);
+          s.current = apply(s, previous);
           select.value = previous;
-          status.textContent = 'Could not save the theme — see the browser console.';
+          status.textContent = `Could not save the ${s.noun} — see the browser console.`;
         });
     });
 
@@ -172,7 +209,7 @@
     control.appendChild(status);
     row.appendChild(text);
     row.appendChild(control);
-    selectEl = select;
+    s.selectEl = select;
     return row;
   }
 
@@ -180,20 +217,22 @@
     // Cheap route gate first: this runs from a body-wide observer (below),
     // and every other page can bail before touching the DOM at all.
     if (!location.pathname.startsWith('/settings')) return;
-    const native = document.getElementById(SETTING_ID);
-    if (!native) return;
-    const container = native.closest('.plugin-settings');
-    if (!container) return;
-    if (container.querySelector(':scope > .jl-theme-setting')) return;
-    if (native.style.display !== 'none') native.style.display = 'none';
-    container.insertBefore(buildRow(), native);
+    for (const s of SETTINGS) {
+      const native = document.getElementById(s.rowId);
+      if (!native) continue;
+      const container = native.closest('.plugin-settings');
+      if (!container) continue;
+      if (container.querySelector(`:scope > .jl-theme-setting[data-jl-key="${s.key}"]`)) continue;
+      if (native.style.display !== 'none') native.style.display = 'none';
+      container.insertBefore(buildRow(s), native);
+    }
   }
 
   /* Body-wide childList observer, same shape as the other files' — but
-   * its callback is a pathname check and one getElementById on every
-   * page except Settings, so it costs nothing measurable elsewhere (the
-   * 2026-09-02 profile is the reference for what "measurable" means
-   * here — see CLAUDE.md's Testing section). */
+   * its callback is a pathname check and one getElementById per setting
+   * on every page except Settings, so it costs nothing measurable
+   * elsewhere (the 2026-09-02 profile is the reference for what
+   * "measurable" means here — see CLAUDE.md's Testing section). */
   let queued = false;
   new MutationObserver(() => {
     if (queued) return;
@@ -205,7 +244,13 @@
   }).observe(document.body, { childList: true, subtree: true });
   trySetupSettingsPanel();
 
-  // For other plugins / the console: read or switch the theme without
-  // going through Settings (switching here does NOT persist).
-  window.JLTheme = { list: () => THEMES.map(t => ({ ...t })), current: () => current, preview: id => { current = apply(id); syncSelect(); return current; } };
+  // For other plugins / the console: read or switch a setting without
+  // going through Settings (switching here does NOT persist). The theme
+  // keeps its original top-level shape; the backdrop hangs off .backdrop.
+  const api = s => ({
+    list: () => s.options.map(o => ({ ...o })),
+    current: () => s.current,
+    preview: id => { s.current = apply(s, id); syncSelect(s); return s.current; },
+  });
+  window.JLTheme = { ...api(SETTINGS[0]), backdrop: api(SETTINGS[1]) };
 })();
