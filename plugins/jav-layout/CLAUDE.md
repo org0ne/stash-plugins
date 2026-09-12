@@ -205,6 +205,26 @@ across three runs — so the refactor changed no visible output.
   page, per the `--selection` note above, not by palette names. Every
   block was verified live to parse (cssRules count) and to paint the
   page ground, since a stray `*/` swallowed a whole block once before.
+- **Six original palettes added 2026-09-11 (v2.2.0)** — Tropical Punch,
+  Ube & Mango, Blood Orange, Matcha, Brass & Ink, Abyss — drawn for the
+  plugin rather than taken from an upstream, so no notices row. The brief:
+  every shipped theme but Monokai is a pink accent on a cool purple-or-
+  navy ground, so these take the other hue families (teal, violet-with-
+  yellow-primary, warm charcoal, green, true neutral, ink-black-cyan).
+  Designed and measured on a published page (the mock card and sidebar
+  per theme, every token swatched with its contrast against the surface
+  it sits on, and Lab ΔE to the nearest shipped theme):
+  https://claude.ai/code/artifact/87fd62e6-d6f4-4d89-ab79-a92cc148128d.
+  Rules applied: every body-role token ≥ 4.5:1, dim/comment/disabled/
+  gloomy ≥ 3:1, card lift +25–32 per channel, accent ≥ 15 ΔE from every
+  shipped accent. Tropical Punch's first draft (#ff5c8d on #12222b) sat
+  within ΔE 10 of Sonokai on all three axes and was retuned (accent
+  toward magenta, ground more teal) before landing. Known trade-offs are
+  in each block's comment: Matcha's accent and OK badge are both greens;
+  Abyss's accent and link are both cool. Note the CIE76 numbers on dark
+  grounds compress — every dark page ground is within ~10 of some other —
+  so the accent is what carries distinctness, same as the 2026-09-03
+  dedup found.
 - **Adding a theme**: two `html[data-jl-theme="<id>"]` blocks in
   `themes.css` (the `--jl-*` tokens and the base-app palette, each with
   an attribution comment), an entry in `THEMES` in `theme.js`, a row in

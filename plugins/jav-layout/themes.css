@@ -629,3 +629,287 @@ html[data-jl-theme="monokai"] {
   --vsc_text_field:   #1e1f1c;
   --vsc_text_field_border: #272822;
 }
+
+/* ============================================================
+ *  ORIGINAL PALETTES (2026-09-11) — six drawn for this plugin, not
+ *  taken from an upstream project, so no attribution row applies (the
+ *  notices file says so). Chosen to cover the hue families the shipped
+ *  eleven don't: every one of those but Monokai is a pink accent on a
+ *  cool purple-or-navy ground. Each was checked against every shipped
+ *  theme by Lab ΔE on page/card/accent (all six are 15+ away on accent),
+ *  and every text token was measured against the surface it sits on:
+ *  ≥ 4.5:1 for body roles, ≥ 3:1 for --jl-dim/--comment/--disabled/
+ *  --gloomy_white, which are low by design. Card grounds (--selection)
+ *  are +25–32 per channel over the page, per the card-surface note in
+ *  CLAUDE.md. The design page these came from, with the mock card and
+ *  sidebar per theme and every swatch's contrast, is linked from
+ *  CLAUDE.md's Theming section.
+ * ============================================================ */
+
+/* ---- Tropical Punch — original (2026-09-11) ----
+   Guava-magenta accent, lagoon-mint links, mango headings on a teal-black
+   ground. Danger is pomegranate (orange-red), a clear hue step from the
+   accent. First draft (#ff5c8d on #12222b) measured within Lab ΔE 10 of
+   Sonokai on page, card and accent — the near-duplicate line used on
+   2026-09-03 — so the accent moved toward magenta and the ground took more
+   teal; Sonokai is now 26 ΔE away on accent. */
+html[data-jl-theme="tropical-punch"] {
+  --jl-accent:        #ff47a6;
+  --jl-link:          #5ce8c4;
+  --jl-heading:       #ffcd7a;
+  --jl-text:          #e9e2d6;
+  --jl-muted:         #a9b7b1;
+  --jl-dim:           #5c7f8a;
+  --jl-fg:            #f4eee3;
+  --jl-surface-base:  #0a1f27;
+  --jl-surface-deep:  #071820;
+  --jl-pill-base:     #0a1f27;
+  --jl-popup-text:    #fff8ee;
+  --jl-danger:        #ff6a4a;
+  --jl-on-danger:     #1a0c08;
+  --jl-ok:            #b4f56b;
+  --background:       #0d2a33;
+  --foreground:       #f4eee3;
+  --selection:        #2a4751;
+  --comment:          #5c7f8a;
+  --red:              #ff6a4a;
+  --orange:           #ffa24f;
+  --yellow:           #ffe27a;
+  --green:            #b4f56b;
+  --purple:           #ff47a6;
+  --cyan:             #5ce8c4;
+  --pink:             #ff7fc2;
+  --superdark:        #08202a;
+  --alt_bg:           #163440;
+  --intermediate_bg:  #1f3b47;
+  --misty_white:      #d7d3c8;
+  --overcast_white:   #a9b5b1;
+  --gloomy_white:     #83989e;
+  --tag_background:   #3b5561;
+  --disabled:         #5c7f8a;
+  --ansi_black:       #08202a;
+  --vsc_text_field:   #08202a;
+  --vsc_text_field_border:#0a1f27;
+}
+
+/* ---- Ube & Mango — original (2026-09-11) ----
+   Halo-halo colors: violet ground, but the primary action color is mango
+   yellow (over 10:1 on the code bar), ube-lavender links, coconut-cream
+   headings. Ground is near Synthwave/Dracula in hue; the accent is 70+ ΔE
+   from every shipped accent, which is what makes it a different theme. */
+html[data-jl-theme="ube-mango"] {
+  --jl-accent:        #ffbf4d;
+  --jl-link:          #b99cff;
+  --jl-heading:       #ffe6b8;
+  --jl-text:          #e6dff5;
+  --jl-muted:         #a89fc4;
+  --jl-dim:           #6f6590;
+  --jl-fg:            #f2ecff;
+  --jl-surface-base:  #160f28;
+  --jl-surface-deep:  #0f0a1c;
+  --jl-pill-base:     #160f28;
+  --jl-popup-text:    #fff7e6;
+  --jl-danger:        #ff6b8a;
+  --jl-on-danger:     #1d1630;
+  --jl-ok:            #8ef0b5;
+  --background:       #1d1630;
+  --foreground:       #f2ecff;
+  --selection:        #3a3350;
+  --comment:          #6f6590;
+  --red:              #ff6b8a;
+  --orange:           #ff9f5a;
+  --yellow:           #ffbf4d;
+  --green:            #8ef0b5;
+  --purple:           #b99cff;
+  --cyan:             #7fdcff;
+  --pink:             #ff8ccf;
+  --superdark:        #130e21;
+  --alt_bg:           #241c3a;
+  --intermediate_bg:  #2e2645;
+  --misty_white:      #d6cfe8;
+  --overcast_white:   #a89fc4;
+  --gloomy_white:     #8a82a8;
+  --tag_background:   #4b4463;
+  --disabled:         #6f6590;
+  --ansi_black:       #130e21;
+  --vsc_text_field:   #130e21;
+  --vsc_text_field_border:#160f28;
+}
+
+/* ---- Blood Orange — original (2026-09-11) ----
+   The warm one: brown-cast charcoal (nothing shipped is warm-neutral),
+   blood-orange accent, peach headings, a cool sky-blue link that separates
+   from everything warm around it. Danger is raspberry, not red-orange, so
+   Save and Delete stay a hue apart. Muted/dim are warm greys, not the
+   blue-tinted Dracula ramp. */
+html[data-jl-theme="blood-orange"] {
+  --jl-accent:        #ff6a3d;
+  --jl-link:          #7fc4ff;
+  --jl-heading:       #ffd3b3;
+  --jl-text:          #eae0d8;
+  --jl-muted:         #b3a59c;
+  --jl-dim:           #7c6f68;
+  --jl-fg:            #f5ede6;
+  --jl-surface-base:  #17120f;
+  --jl-surface-deep:  #100c0a;
+  --jl-pill-base:     #17120f;
+  --jl-popup-text:    #fff6ee;
+  --jl-danger:        #f24c6a;
+  --jl-on-danger:     #1f1a18;
+  --jl-ok:            #a8e05f;
+  --background:       #1f1a18;
+  --foreground:       #f5ede6;
+  --selection:        #3c3531;
+  --comment:          #7c6f68;
+  --red:              #f24c6a;
+  --orange:           #ff6a3d;
+  --yellow:           #ffc06a;
+  --green:            #a8e05f;
+  --purple:           #ff6a3d;
+  --cyan:             #7fc4ff;
+  --pink:             #ff8fa8;
+  --superdark:        #151110;
+  --alt_bg:           #272120;
+  --intermediate_bg:  #302927;
+  --misty_white:      #d9cfc7;
+  --overcast_white:   #b3a59c;
+  --gloomy_white:     #8f837b;
+  --tag_background:   #4c433e;
+  --disabled:         #7c6f68;
+  --ansi_black:       #151110;
+  --vsc_text_field:   #151110;
+  --vsc_text_field_border:#17120f;
+}
+
+/* ---- Matcha — original (2026-09-11) ----
+   Green-grey ground, matcha (yellow-green) accent, teal links, rice-paper
+   headings. The quiet one. Known trade-off: accent and --jl-ok are both
+   greens (yellow-green vs mint, ΔE 40), held apart by hue and use — the
+   watched badge and the studio code never share a surface. */
+html[data-jl-theme="matcha"] {
+  --jl-accent:        #b6d45a;
+  --jl-link:          #7ad3c3;
+  --jl-heading:       #f3e9c6;
+  --jl-text:          #e3dfcd;
+  --jl-muted:         #a7ad98;
+  --jl-dim:           #6e7c6b;
+  --jl-fg:            #f0ecdc;
+  --jl-surface-base:  #101510;
+  --jl-surface-deep:  #0b0f0b;
+  --jl-pill-base:     #101510;
+  --jl-popup-text:    #fbf8ec;
+  --jl-danger:        #ff7a6b;
+  --jl-on-danger:     #161c16;
+  --jl-ok:            #6fe0a3;
+  --background:       #161c16;
+  --foreground:       #f0ecdc;
+  --selection:        #313b31;
+  --comment:          #6e7c6b;
+  --red:              #ff7a6b;
+  --orange:           #ffb066;
+  --yellow:           #f1d372;
+  --green:            #b6d45a;
+  --purple:           #b6d45a;
+  --cyan:             #7ad3c3;
+  --pink:             #f0a0c0;
+  --superdark:        #0f140f;
+  --alt_bg:           #1d241d;
+  --intermediate_bg:  #252d25;
+  --misty_white:      #d3d1c1;
+  --overcast_white:   #a7ad98;
+  --gloomy_white:     #87907f;
+  --tag_background:   #414d41;
+  --disabled:         #6e7c6b;
+  --ansi_black:       #0f140f;
+  --vsc_text_field:   #0f140f;
+  --vsc_text_field_border:#101510;
+}
+
+/* ---- Brass & Ink — original (2026-09-11) ----
+   True-neutral charcoal (no hue bias), one brass accent, steel-blue links,
+   ivory headings. Brass is dustier and greener than Ube & Mango's mango so
+   the two yellow-accent themes don't collapse into one. The only theme
+   whose muted/dim are pure greys. */
+html[data-jl-theme="brass-ink"] {
+  --jl-accent:        #d9b24c;
+  --jl-link:          #8fc8f0;
+  --jl-heading:       #fff0c9;
+  --jl-text:          #e4e1d8;
+  --jl-muted:         #aeaba3;
+  --jl-dim:           #77767c;
+  --jl-fg:            #f1eee6;
+  --jl-surface-base:  #121214;
+  --jl-surface-deep:  #0c0c0e;
+  --jl-pill-base:     #121214;
+  --jl-popup-text:    #fff8ea;
+  --jl-danger:        #ff6161;
+  --jl-on-danger:     #1a1a1d;
+  --jl-ok:            #7fe08f;
+  --background:       #1a1a1d;
+  --foreground:       #f1eee6;
+  --selection:        #36363b;
+  --comment:          #77767c;
+  --red:              #ff6161;
+  --orange:           #ffa054;
+  --yellow:           #d9b24c;
+  --green:            #7fe08f;
+  --purple:           #d9b24c;
+  --cyan:             #8fc8f0;
+  --pink:             #ff8fb8;
+  --superdark:        #111113;
+  --alt_bg:           #212124;
+  --intermediate_bg:  #29292d;
+  --misty_white:      #d5d2ca;
+  --overcast_white:   #aeaba3;
+  --gloomy_white:     #8b8a86;
+  --tag_background:   #46464c;
+  --disabled:         #77767c;
+  --ansi_black:       #111113;
+  --vsc_text_field:   #111113;
+  --vsc_text_field_border:#121214;
+}
+
+/* ---- Abyss — original (2026-09-11) ----
+   Bioluminescence on ink: the darkest ground of the set, electric-cyan
+   accent, periwinkle links, ice headings. All-cool on purpose, so danger
+   and orange jump out. Known trade-off: accent and link are both cool,
+   so code-vs-performer separation leans on luminance and hue distance
+   (ΔE 52) rather than temperature — the weakest role split of the six. */
+html[data-jl-theme="abyss"] {
+  --jl-accent:        #3ee0ff;
+  --jl-link:          #9aa8ff;
+  --jl-heading:       #d9f4ff;
+  --jl-text:          #d5dded;
+  --jl-muted:         #95a3c0;
+  --jl-dim:           #5c6a86;
+  --jl-fg:            #e6edf7;
+  --jl-surface-base:  #080d16;
+  --jl-surface-deep:  #050810;
+  --jl-pill-base:     #080d16;
+  --jl-popup-text:    #f2f8ff;
+  --jl-danger:        #ff5f7e;
+  --jl-on-danger:     #0c111c;
+  --jl-ok:            #6cf5b0;
+  --background:       #0c111c;
+  --foreground:       #e6edf7;
+  --selection:        #262d3c;
+  --comment:          #5c6a86;
+  --red:              #ff5f7e;
+  --orange:           #ffa96a;
+  --yellow:           #ffd97a;
+  --green:            #6cf5b0;
+  --purple:           #3ee0ff;
+  --cyan:             #3ee0ff;
+  --pink:             #ff8ad4;
+  --superdark:        #070a12;
+  --alt_bg:           #131a27;
+  --intermediate_bg:  #1b2231;
+  --misty_white:      #c6d0e4;
+  --overcast_white:   #95a3c0;
+  --gloomy_white:     #7583a0;
+  --tag_background:   #363f52;
+  --disabled:         #5c6a86;
+  --ansi_black:       #070a12;
+  --vsc_text_field:   #070a12;
+  --vsc_text_field_border:#080d16;
+}

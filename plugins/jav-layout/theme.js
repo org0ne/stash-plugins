@@ -30,6 +30,14 @@
     { id: 'horizon-dark',     label: 'Horizon Dark' },
     { id: 'sonokai',          label: 'Sonokai' },
     { id: 'monokai',          label: 'Monokai' },
+    // Original palettes (2026-09-11) — drawn for this plugin, not from an
+    // upstream project; see the ORIGINAL PALETTES section of themes.css.
+    { id: 'tropical-punch',   label: 'Tropical Punch' },
+    { id: 'ube-mango',        label: 'Ube & Mango' },
+    { id: 'blood-orange',     label: 'Blood Orange' },
+    { id: 'matcha',           label: 'Matcha' },
+    { id: 'brass-ink',        label: 'Brass & Ink' },
+    { id: 'abyss',            label: 'Abyss' },
   ];
 
   const isKnown = id => THEMES.some(t => t.id === id);

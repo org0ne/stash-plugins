@@ -4,7 +4,7 @@ description: >
   reading-order sidebar (identity, description, tags, then a five-mode
   switcher with Performers/File/History swapping in below it), replacing
   the nine-tab bar.
-version: 2.1.3
+version: 2.2.0
 
 ui:
   # Loaded in order. fonts.css just registers @font-face rules (self-
@@ -52,5 +52,6 @@ settings:
       dropdown in Settings › Plugins; if you ever see the raw field
       instead, valid values are dracula (default), catppuccin-mocha,
       rose-pine-moon, kanagawa-wave, tokyo-night, moonlight, synthwave-84,
-      aura-dark, horizon-dark, sonokai and monokai.
+      aura-dark, horizon-dark, sonokai, monokai, tropical-punch, ube-mango,
+      blood-orange, matcha, brass-ink and abyss.
     type: STRING

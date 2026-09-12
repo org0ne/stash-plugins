@@ -30,6 +30,10 @@ projects below — no files from them ship with this plugin.
 | Sonokai | https://github.com/sainnhe/sonokai | Copyright (c) 2020 sainnhe |
 | Monokai | https://github.com/microsoft/vscode (extensions/theme-monokai) | Copyright (c) 2015 - present Microsoft Corporation; palette by Wimer Hazenberg (2006) |
 
+Tropical Punch, Ube & Mango, Blood Orange, Matcha, Brass & Ink and Abyss
+are original palettes drawn for this plugin (2026-09-11) and carry no
+third-party notice; they are covered by this plugin's own LICENSE.
+
 ## Icons (CC BY 4.0)
 
 `clean-cards.js` embeds the path data of three Font Awesome Free 6.7.2

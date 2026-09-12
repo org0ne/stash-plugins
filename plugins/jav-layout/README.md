@@ -239,6 +239,12 @@ plugin replaces stash's free-text field for this setting) with:
 | Horizon Dark | coral pink / teal, warm. Its red doubles as the accent. |
 | Sonokai | Monokai's energy with a real text ramp. Its red doubles as the accent. |
 | Monokai | the 2006 classic: hot pink / cyan / green / orange on olive-black. |
+| Tropical Punch | guava-magenta / lagoon mint / mango on a teal-black ground. Original. |
+| Ube & Mango | a violet ground whose primary is mango yellow, with ube-lavender links. Original. |
+| Blood Orange | the warm one: blood orange / sky blue / peach on a brown-cast charcoal. Original. |
+| Matcha | matcha yellow-green / teal / rice paper on green-grey. The quiet one. Original. |
+| Brass & Ink | one brass accent and steel-blue links on a true-neutral charcoal. Original. |
+| Abyss | electric cyan / periwinkle / ice on the darkest ground of the set. Original. |
 
 The choice applies immediately, is saved in the plugin's settings, and is
 cached in `localStorage` under `jl.theme` so later page loads paint in
