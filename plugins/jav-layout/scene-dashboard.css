@@ -579,6 +579,98 @@ a.jl-scene-director-value:hover {
   display: none;
 }
 
+/* Link tiles — every scene URL and Stash ID as one favicon-sized tile
+   (buildSceneLinksRow() in scene-dashboard.js), on their own line
+   between the collection pill's line (.jl-scene-badges, 40) and the
+   Toolbar (50). Same full-line flex item as its neighbours; wraps when
+   a scene has more tiles than fit (eight URLs plus an ID is ~300px, one
+   line even at 390). Collapses on :empty so a scene with no links costs
+   no row and no row-gap. */
+.scene-tabs[data-jl-mode] .jl-scene-links {
+  order: 45;
+  flex: 0 0 100%;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.scene-tabs[data-jl-mode] .jl-scene-links:empty {
+  display: none;
+}
+/* 16px icons at their native size, no chrome around a real favicon —
+   only the monogram fallback gets a box (requested 2026-09-12, after
+   a 28/16 first cut and a 21/12 shrink: "target 16px, no boxes around
+   actual favicons, just around anything that does not have a favicon").
+   The anchor is a 20px square (2px of hit area around the 16px content
+   on every side) with no background or border of its own, so a loaded
+   favicon sits bare on the page. */
+.jl-scene-link {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  text-decoration: none;
+}
+.jl-scene-link:hover,
+.jl-scene-link:focus-visible {
+  text-decoration: none;
+  outline: none;
+}
+/* Stash IDs lead the row; the first URL tile after the last ID tile
+   gets a little extra room so the two groups read as two. */
+.jl-scene-link[data-jl-link="stashbox"] + .jl-scene-link[data-jl-link="url"] {
+  margin-left: 4px;
+}
+/* The monogram is the resting state: the endpoint's initial in the
+   accent (Stash IDs) or the site's initial in the link color (URLs),
+   in a 16px box of the Metadata card's own well/line surface recipe so
+   it reads as a placeholder tile, not text. The favicon <img> is
+   display:none until its load event proves it decoded — a 404 page, an
+   empty file, a blocked host or a slow one all leave the monogram in
+   place rather than a broken-image glyph. */
+.jl-scene-link-mono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--jl-well);
+  border: 1px solid var(--jl-line);
+  font-family: var(--jl-font-ui);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--jl-link);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+.jl-scene-link[data-jl-link="stashbox"] .jl-scene-link-mono {
+  color: var(--jl-accent);
+}
+.jl-scene-link:hover .jl-scene-link-mono,
+.jl-scene-link:focus-visible .jl-scene-link-mono {
+  border-color: var(--jl-accent-border);
+  background: var(--jl-accent-wash-soft);
+}
+.jl-scene-link-icon {
+  display: none;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  transition: opacity 120ms ease;
+}
+.jl-scene-link:hover .jl-scene-link-icon,
+.jl-scene-link:focus-visible .jl-scene-link-icon {
+  opacity: 0.8;
+}
+.jl-scene-link-loaded .jl-scene-link-mono { display: none; }
+.jl-scene-link-loaded .jl-scene-link-icon { display: block; }
+
 /* Compact performer name list — sits between the Code/Date bar (order 10-12)
    and Title (order 20), matching the scene-card grid tile's own DOM order
    (code-date bar, then performers, then title — see clean-cards.js

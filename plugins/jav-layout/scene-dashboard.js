@@ -579,6 +579,196 @@
     }).catch(e => console.warn('[SceneDashboard] watched badge', e));
   }
 
+  /* Link tiles: every scene URL and every Stash ID as one favicon-sized
+   * tile each, on their own line between the collection pill's line
+   * (`.jl-scene-badges`, order 40) and the Toolbar (order 50) — Stash IDs
+   * first, then the URLs in stash's own order. Requested 2026-09-12.
+   *
+   * The source is the File Info pane's own native markup, not a GraphQL
+   * fetch: SceneFileInfoPanel already renders both lists — a "URLs" <dt>
+   * whose <dd> holds one <a> per url, and a "Stash IDs" <dt> whose <dd>
+   * holds one `.stash-id-pill` per id, each carrying the endpoint's
+   * configured name in data-endpoint plus stash's own already-resolved
+   * web link (endpoint minus `/graphql`, plus `/scenes/<id>`) — and
+   * constraint 2 says that pane is mounted in every mode, so it can be
+   * read even while Browse isn't showing it. Reading it also means an
+   * edit to a scene's URLs re-renders the pane, the body observer sees
+   * that childList change, and this row rebuilds on the next pass: no
+   * cache to invalidate, no second definition of the link. The "URLs"
+   * <dt> is matched by its hard-coded English text (same tradeoff as
+   * CARD_TITLES); the Stash ID pills are matched by class, which is
+   * language-independent. Nothing native is moved (constraint 1): the
+   * tiles are new elements built from the native anchors' href/text.
+   *
+   * Each tile is a monogram — the endpoint name's first letter, or the
+   * first letter of the site's registrable domain (siteName()) — that
+   * the site's own favicon paints over once it loads, so nothing is
+   * blank while a request is in flight or after one fails. The favicon
+   * comes straight from the site (`https://<host>/favicon.ico`, no
+   * referrer), never via a third-party favicon service. Measured
+   * 2026-09-12 across this library's 49 most-used hosts: root
+   * favicon.ico loads for 15; Google's and DuckDuckGo's services would
+   * cover 44 and 41, but each would be told every host on every scene
+   * view, and neither has an icon for javstash.org or stashdb.org, so
+   * the Stash ID tiles are monograms under any strategy. The loaded
+   * state is a class toggle on the tile — an attribute mutation the
+   * childList-only body observer never sees. Rebuilt only when the
+   * (kind, href, name) list changes (`jlLinksSig`), for the same
+   * busy-loop reason as the info row above: replaceChildren() is a
+   * childList mutation the body observer *does* see. */
+  /* Known favicon paths for hosts that don't serve one at the root. One
+   * platform hosts most of the JAV studio sites (every "works/detail"
+   * URL host) and declares its icon as /favicons/<brand>/favicon.ico,
+   * where <brand> is a short code that can't be derived from the
+   * hostname (bi-av.com → chijo, to-satsu.com → hentaishinshi,
+   * premium-beauty.com → premium). Read from each site's own
+   * <link rel="shortcut icon"> 2026-09-12 (reported live for moodyz.com)
+   * and confirmed to load as an image (64×64) for every entry. Tried
+   * before the root guesses; an entry that stops working just falls
+   * through to them and then the monogram. */
+  const FAVICON_PATHS = {
+    's1s1s1.com': '/favicons/s1/favicon.ico',
+    'moodyz.com': '/favicons/moodyz/favicon.ico',
+    'ideapocket.com': '/favicons/ideapocket/favicon.ico',
+    'av-e-body.com': '/favicons/e-body/favicon.ico',
+    'kawaiikawaii.jp': '/favicons/kawaii/favicon.ico',
+    'madonna-av.com': '/favicons/madonna/favicon.ico',
+    'honnaka.jp': '/favicons/honnaka/favicon.ico',
+    'premium-beauty.com': '/favicons/premium/favicon.ico',
+    'wanz-factory.com': '/favicons/wanz-factory/favicon.ico',
+    'dasdas.jp': '/favicons/dasdas/favicon.ico',
+    'muku.tv': '/favicons/muku/favicon.ico',
+    'hhh-av.com': '/favicons/hhh/favicon.ico',
+    'fitch-av.com': '/favicons/fitch-av/favicon.ico',
+    'attackers.net': '/favicons/attackers/favicon.ico',
+    'oppai-av.com': '/favicons/oppai/favicon.ico',
+    'tameikegoro.jp': '/favicons/tameikegoro/favicon.ico',
+    'bi-av.com': '/favicons/chijo/favicon.ico',
+    'nanpa-japan.jp': '/favicons/nanpa-japan/favicon.ico',
+    'kirakira-av.com': '/favicons/kirakira/favicon.ico',
+    'befreebe.com': '/favicons/befree/favicon.ico',
+    'rookie-av.jp': '/favicons/rookie/favicon.ico',
+    'mko-labo.net': '/favicons/mko-labo/favicon.ico',
+    'mvg.jp': '/favicons/mvg/favicon.ico',
+    'bibian-av.com': '/favicons/bibian/favicon.ico',
+    'to-satsu.com': '/favicons/hentaishinshi/favicon.ico',
+    'hajimekikaku.com': '/favicons/hajimekikaku/favicon.ico',
+    'av-opera.jp': '/favicons/opera/favicon.ico',
+    'miman.jp': '/favicons/miman/favicon.ico',
+  };
+
+  /* Registrable domain of a hostname — "archive.org" for web.archive.org,
+   * "dmm.co.jp" for video.dmm.co.jp. Second-level registries (co.jp,
+   * com.au, ...) are a generic label right before a two-letter country
+   * TLD, in which case the registrable name is one label further left. */
+  function registrableDomain(hostname) {
+    const labels = hostname.toLowerCase().split('.').filter(Boolean);
+    if (labels.length < 2) return labels[0] || '';
+    let i = labels.length - 2;
+    if (labels.length >= 3 && labels[labels.length - 1].length === 2 &&
+        /^(co|ne|or|ac|go|ed|gr|com|net|org)$/.test(labels[i])) i -= 1;
+    return labels.slice(i).join('.');
+  }
+  function siteName(hostname) {
+    return registrableDomain(hostname).split('.')[0] || '';
+  }
+
+  function collectSceneLinks(fileinfo) {
+    const list = fileinfo && fileinfo.querySelector('dl.scene-file-info');
+    if (!list) return [];
+    const links = [];
+    for (const pill of list.querySelectorAll('.stash-id-pill')) {
+      const a = pill.querySelector('a[href]');
+      if (!a) continue;
+      const name = (pill.dataset.endpoint || '').trim();
+      links.push({ kind: 'stashbox', href: a.getAttribute('href'), name });
+    }
+    const urlsLabel = [...list.querySelectorAll(':scope > dt')]
+      .find(dt => /^URLs?:?$/i.test(dt.textContent.trim()));
+    const urlsCell = urlsLabel && urlsLabel.nextElementSibling;
+    if (urlsCell && urlsCell.tagName === 'DD') {
+      for (const a of urlsCell.querySelectorAll('a[href]')) {
+        links.push({ kind: 'url', href: a.getAttribute('href'), name: '' });
+      }
+    }
+    return links;
+  }
+
+  function buildSceneLinksRow(metaCol, fileinfo) {
+    let row = metaCol.querySelector(':scope > .jl-scene-links');
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'jl-scene-links';
+      metaCol.appendChild(row);
+    }
+    const links = collectSceneLinks(fileinfo);
+    const sig = JSON.stringify(links);
+    if (row.dataset.jlLinksSig === sig) return;
+    row.dataset.jlLinksSig = sig;
+    row.replaceChildren();
+    for (const link of links) {
+      let url = null;
+      try { url = new URL(link.href, location.href); } catch (e) { /* not a URL — monogram only */ }
+      const host = url && /^https?:$/.test(url.protocol) ? url.hostname : '';
+      const label = link.kind === 'stashbox' ? (link.name || host || 'Stash ID') : host || link.href;
+      const letter = (link.kind === 'stashbox' && link.name ? link.name : siteName(host) || label).charAt(0);
+
+      const a = document.createElement('a');
+      a.className = 'jl-scene-link';
+      a.dataset.jlLink = link.kind;
+      a.href = link.href;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.title = label;
+      a.setAttribute('aria-label', label);
+
+      const mono = document.createElement('span');
+      mono.className = 'jl-scene-link-mono';
+      mono.setAttribute('aria-hidden', 'true');
+      mono.textContent = letter;
+      a.appendChild(mono);
+
+      if (host) {
+        // Candidates in order: a known per-host path, the link's own host's
+        // root icon, then its registrable domain's — web.archive.org 404s
+        // /favicon.ico but archive.org serves one (reported 2026-09-12; a
+        // page's own <link rel=icon> can't be read cross-origin, hence the
+        // table). Each failure advances to the next; when none loads, the
+        // monogram simply stays.
+        // Candidates are full URLs: a known non-root path first (FAVICON_PATHS,
+        // keyed by host with any leading "www." dropped), then /favicon.ico
+        // on the host, then on its registrable domain.
+        const parent = registrableDomain(host);
+        const bare = host.replace(/^www\./, '');
+        const candidates = [];
+        const known = FAVICON_PATHS[host] || FAVICON_PATHS[bare];
+        if (known) candidates.push(`${url.protocol}//${host}${known}`);
+        candidates.push(`${url.protocol}//${host}/favicon.ico`);
+        if (parent && parent !== host) candidates.push(`${url.protocol}//${parent}/favicon.ico`);
+        const img = document.createElement('img');
+        img.className = 'jl-scene-link-icon';
+        img.alt = '';
+        img.decoding = 'async';
+        img.referrerPolicy = 'no-referrer';
+        let next = 0;
+        const tryNext = () => {
+          if (next >= candidates.length) return;
+          img.src = candidates[next++];
+        };
+        img.addEventListener('load', () => {
+          // A 0×0 "image" (an empty 200 from a site whose favicon.ico is a
+          // placeholder file) fires load in some engines — treat as a miss.
+          if (img.naturalWidth > 0) a.classList.add('jl-scene-link-loaded');
+          else tryNext();
+        });
+        img.addEventListener('error', tryNext);
+        tryNext();
+        a.appendChild(img);
+      }
+      row.appendChild(a);
+    }
+  }
+
   function sizeTagsBackdrop(contentCol) {
     let backdrop = contentCol.querySelector(':scope > .jl-tags-backdrop');
     if (!backdrop) {
@@ -965,6 +1155,7 @@
         ensureGroupHead(root, metaCol, 'metadata', CARD_TITLES.metadata);
         buildSceneBadgeRow(metaCol, subheader);
         syncWatchedBadge(metaCol);
+        buildSceneLinksRow(metaCol, seen.fileinfo);
       }
 
       const contentRow = details.querySelector(':scope > .row:nth-child(2)');

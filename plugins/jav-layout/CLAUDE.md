@@ -3054,6 +3054,50 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
   strip between Original Title and Toolbar; see the reverted-mirroring note
   in the Layout section above. This parenthetical previously described the
   mirrored-into-Metadata version, which was reverted.)
+- **Link tiles row, order: 45 (2026-09-12, v2.4.0).** Every scene URL
+  and Stash ID as a bare 16px favicon at native size inside a 20px
+  anchor, no chrome — only the monogram fallback gets a 16px bordered
+  box (first cut was a 28px boxed tile with a 16px icon, then 21/12,
+  then this, all on request the same day) (`buildSceneLinksRow()`,
+  `.jl-scene-links`), on its own line between the collection pill's
+  line (`.jl-scene-badges`, 40) and the Toolbar (50), Stash IDs first —
+  requested as exactly that placement. Source is the File Info pane's
+  native "URLs" `<dd>` anchors and `.stash-id-pill`s (mounted in every
+  mode per constraint 2; the pill's `data-endpoint` gives the stash-box's
+  configured name and its `<a>` gives stash's own resolved web link), read
+  on every `tagPanes()` pass and rebuilt only on a `(kind, href, name)`
+  signature change — so a URL edit re-renders the pane, the body
+  observer fires, and the row follows, with no fetch and no cache.
+  Favicons are fetched **direct from each site** (`/favicon.ico`, no
+  referrer) — a known per-host path from `FAVICON_PATHS` first (the 28
+  studio sites on the shared "works/detail" platform declare
+  `/favicons/<brand>/favicon.ico` with an underivable brand code, all
+  read from their own HTML and confirmed to load, 64×64; reported live
+  for moodyz.com), then the link's own host's root icon, then its
+  registrable domain's (`registrableDomain()`) when that differs, added
+  because web.archive.org 404s the root icon while archive.org serves
+  it — over a monogram that stays if every candidate fails; the `<img>`
+  is `display: none` until its load event adds `.jl-scene-link-loaded`
+  (a class toggle the childList-only body observer never sees — 0 idle
+  mutations measured). Deliberately no third-party favicon service.
+  Numbers behind that, measured 2026-09-12 across the library's 49
+  most-used URL hosts (22,914 scenes, 15,191 with URLs): root
+  favicon.ico loads in a real browser for 15 (r18.dev, both dmm hosts,
+  1pondo, javbus, javdb, faleno, km-produce, choi-waru, waap, aurora,
+  mousouzoku, falenogroup, fc2, deeps); most studio sites serve an empty
+  200 or a 404 at the root and declare their icon elsewhere in HTML
+  (unreadable cross-origin). Google's s2 service covers 44 and
+  DuckDuckGo's 41 — but either is told every host on every scene view,
+  and **neither has an icon for javstash.org or stashdb.org**, so the
+  Stash ID tiles are monograms under any strategy. Switching to a
+  service is a one-line change to the `img.src` line if the user ever
+  asks; a 404 from those services still returns a placeholder image
+  that fires `load`, so a `naturalWidth`/size check would be needed to
+  keep the monogram. Verified live 2026-09-12 at 1400 and 390 (iPhone
+  UA): order 45, 10px above and below, 20×20 anchors hit-testable, groups
+  separated by an extra 6px, row collapses to nothing on a scene with no
+  links (toolbar gap stays 10px), stays visible in Markers mode, and
+  rebuilds correctly after scene → performer → scene SPA navigation.
 - **Performer page: aliases brightened, not muted, on explicit request.**
   A performer-page review initially recommended dimming `.alias-head` to
   match Original Title's muted treatment on the scene page — rejected: "for

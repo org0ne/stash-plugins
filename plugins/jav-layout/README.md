@@ -172,6 +172,9 @@ entity pages.
 |                                    |
 |  Title                            |
 |  Original Title                   |
+|  1080p | 29.97 fps | Director     |
+|  [Collection pill]     ✔ Watched  |
+|  [J] [r] [d] [d]   <- link tiles  |  <- Stash IDs first, then URLs
 |  Toolbar (rating, O-count, …)     |
 +-----------------------------------+
 |  [ Browse | Markers | Filters | … ]  <- mode switcher: the same slot
@@ -207,6 +210,21 @@ section for the mechanics.
 
 Subheader (date) is shown as-is, native and unmodified, sharing the
 Studio Code line; fps/resolution are mirrored into Metadata instead.
+
+**Link tiles** (v2.4.0): every URL on the scene and every Stash ID it
+carries, as a row of 16px favicons between the collection pill's
+line and the toolbar — Stash IDs first, in stash's own order after that.
+Each one opens the link in a new tab and is titled with the site's
+hostname (or the stash-box's configured name). A small boxed monogram
+stands in until the site's own favicon loads: a known path for the
+major JAV studio sites (`FAVICON_PATHS` in `scene-dashboard.js` — add a
+line there for a site that keeps its monogram), then `/favicon.ico` on
+the link's host and on its parent domain (so a web.archive.org link
+gets archive.org's icon). Sites with none of those, including both
+stash-box sites, keep the monogram. Nothing is fetched through a third-party favicon service,
+so no outside party is told which sites a scene links to. Built from the
+File Info card's own native URL and Stash ID lists, so editing a scene's
+URLs updates the row on save.
 
 Everything is placed with flexbox `order` on `.scene-tabs` itself
 (already a `flex-direction: column` box in stash's own CSS); pieces from
