@@ -6,7 +6,7 @@ description: >
   Adds a JASNA ON/OFF toggle to the Stash scene player, allowing
   Jasna-restored playback to be swapped in as an alternate rendition
   of the current scene without modifying Stash itself.
-version: 0.7.0
+version: 0.8.0
 
 ui:
   javascript:
@@ -43,4 +43,18 @@ settings:
     description: >
       Shared secret for bridge auth.mode = token (sent as Authorization:
       Bearer). Leave empty for none / stash_cookie modes.
+    type: STRING
+  customPresets:
+    displayName: Custom presets
+    description: >
+      Your own Jasna presets for the preset picker, as "name = flags",
+      separated by ";". An unquoted "#" after the flags starts a comment,
+      shown in the picker. Example:
+      av1 cq30 = --detection-model rfdetr-v6-large --secondary-restoration unet-4x --codec av1 --cq 30 # hq, av1;
+      fast h264 = --codec h264 --cq 28.
+      Quote a value with spaces ("--lut '/path/My LUT.cube'"). Needs
+      jasna.custom_presets = true (and manage_process) in bridge.toml; the
+      bridge rejects --stream*, --input/--output, license and post-export
+      flags. Reload the page after changing this here; the preset pill on
+      the player can also add, rename and remove entries in place.
     type: STRING

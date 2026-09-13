@@ -42,6 +42,15 @@
   // absolute URL must also be listed under ui.csp.connect-src in the manifest.
   let BRIDGE_URL = "";
   let BRIDGE_TOKEN = "";
+  // User-defined presets from the "Custom presets" setting: [{name, flags}].
+  // They join the bridge's configured presets in the picker, and a session
+  // started on one sends its flags along ({preset, flags}); the bridge must
+  // have jasna.custom_presets = true (it reports that as custom_allowed on
+  // GET /presets) or the toggle fails with the bridge's message.
+  let CUSTOM_PRESETS = [];
+  // The plugin's settings map as last read; configurePlugin replaces the
+  // whole map, so edits to one key must send the others back unchanged.
+  let PLUGIN_SETTINGS = {};
   // Which corner of the video the badge sits in. Same 12px (8px on mobile)
   // inset in every corner. Setting "Badge Corner": top-right (default),
   // top-left, bottom-right, bottom-left.
@@ -76,11 +85,13 @@
       const json = await resp.json();
       const cfg = json.data && json.data.configuration && json.data.configuration.plugins;
       const mine = (cfg && cfg[PLUGIN_ID]) || {};
+      PLUGIN_SETTINGS = { ...mine };
       if (typeof mine.bridgeUrl === "string" && mine.bridgeUrl.trim()) {
         BRIDGE_URL = mine.bridgeUrl.trim().replace(/\/+$/, "");
         if (BRIDGE_URL.startsWith("/")) BRIDGE_URL = window.location.origin + BRIDGE_URL;
       }
       if (typeof mine.bridgeToken === "string") BRIDGE_TOKEN = mine.bridgeToken.trim();
+      if (typeof mine.customPresets === "string") CUSTOM_PRESETS = parseCustomPresets(mine.customPresets);
     } catch (err) {
       console.log("[Jasna] WARNING: could not read plugin settings: " + err.message);
     }
@@ -105,6 +116,171 @@
     }
   }
 
+  // "Custom presets" setting: `name = flags # comment; name2 = flags`
+  // (newlines work as separators too). The name is everything before the
+  // first "=", trimmed; the flags are split like a shell would, so a value
+  // with spaces can be quoted ('...' or "..."); an unquoted "#" starts an
+  // optional comment, shown in the picker in place of "custom". Same name
+  // rule as the bridge (1-40 chars of letters, digits, space . _ + -); bad
+  // entries are skipped with a console line, never a crash, since this runs
+  // on every page load.
+  const CUSTOM_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,39}$/;
+
+  function tokenizeFlags(text) {
+    const out = [];
+    let cur = "", quote = null, has = false, comment = "";
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (quote) {
+        if (c === quote) quote = null;
+        else if (c === "\\" && quote === '"' && i + 1 < text.length) cur += text[++i];
+        else cur += c;
+      } else if (c === '"' || c === "'") {
+        quote = c; has = true;
+      } else if (c === "\\" && i + 1 < text.length) {
+        cur += text[++i]; has = true;
+      } else if (c === "#" && !has) {
+        comment = text.slice(i + 1).trim();
+        break;
+      } else if (/\s/.test(c)) {
+        if (has) { out.push(cur); cur = ""; has = false; }
+      } else {
+        cur += c; has = true;
+      }
+    }
+    if (quote) throw new Error("unterminated quote");
+    if (has) out.push(cur);
+    return { flags: out, comment };
+  }
+
+  function parseCustomPresets(text) {
+    const presets = [];
+    const seen = new Set();
+    for (const raw of String(text || "").split(/[;\n]/)) {
+      const entry = raw.trim();
+      if (!entry) continue;
+      const eq = entry.indexOf("=");
+      const name = eq < 0 ? "" : entry.slice(0, eq).trim();
+      const flagText = eq < 0 ? "" : entry.slice(eq + 1).trim();
+      let why = null, flags = [], comment = "";
+      if (eq < 0) why = 'missing "=" (expected "name = flags")';
+      else if (!CUSTOM_NAME_RE.test(name)) why = "name must be 1-40 characters: letters, digits, space . _ + -";
+      else if (seen.has(name)) why = "duplicate name";
+      else {
+        try { ({ flags, comment } = tokenizeFlags(flagText)); } catch (err) { why = err.message; }
+        if (!why && !flags.length) why = "no flags";
+        else if (!why && !flags[0].startsWith("-")) why = `flags must start with a flag, not "${flags[0]}"`;
+      }
+      if (why) { log(`Custom preset skipped (${why}): ${entry}`); continue; }
+      seen.add(name);
+      presets.push({ name, flags, description: comment.slice(0, 120) });
+    }
+    if (presets.length) log(`Custom presets: ${presets.map((p) => p.name).join(", ")}`);
+    return presets;
+  }
+
+  // Inverse of parseCustomPresets, for writing edits back to the setting.
+  // A flag that would not survive the tokenizer as-is (spaces, quotes, "#")
+  // is double-quoted with backslash escapes, which tokenizeFlags undoes.
+  function quoteFlag(t) {
+    return /^[A-Za-z0-9_.,:\/=+@%~-]+$/.test(t) ? t : '"' + t.replace(/[\\"]/g, (m) => "\\" + m) + '"';
+  }
+  function serializeCustomPresets(list) {
+    return list.map((p) => {
+      let line = `${p.name} = ${p.flags.map(quoteFlag).join(" ")}`;
+      const c = (p.description || "").replace(/[;\n]/g, ",").trim();
+      if (c) line += ` # ${c}`;
+      return line;
+    }).join("; ");
+  }
+
+  // Persist the current CUSTOM_PRESETS to the "Custom presets" setting via
+  // Stash GraphQL (the same store Settings > Plugins writes), so the edit
+  // survives reloads and reaches other browsers on the next page load.
+  async function saveCustomPresets() {
+    const input = { ...PLUGIN_SETTINGS, customPresets: serializeCustomPresets(CUSTOM_PRESETS) };
+    const resp = await fetch("/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        query: "mutation JasnaSwitchSave($id: ID!, $input: Map!) { configurePlugin(plugin_id: $id, input: $input) }",
+        variables: { id: PLUGIN_ID, input },
+      }),
+    });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok || (json.errors && json.errors.length)) {
+      throw new Error((json.errors && json.errors[0].message) || `HTTP ${resp.status}`);
+    }
+    PLUGIN_SETTINGS = input;
+  }
+
+  // Rebuild the picker's custom entries from CUSTOM_PRESETS after an edit,
+  // keeping the bridge's own presets and the current warmth untouched.
+  function refreshCustomEntries() {
+    state.presets = state.presets.filter((p) => !p.custom);
+    const taken = new Set(state.presets.map((p) => p.name));
+    for (const c of CUSTOM_PRESETS) {
+      if (!taken.has(c.name)) state.presets.push({ name: c.name, description: c.description || "custom", flags: c.flags, custom: true });
+    }
+    if (!state.presets.some((p) => p.name === state.preset)) {
+      state.preset = state.defaultPreset || (state.presets[0] && state.presets[0].name) || null;
+      if (state.preset) savePreset(state.preset);
+    }
+    renderPresetSelect();
+  }
+
+  // Management entries at the bottom of the preset dropdown. They use the
+  // browser's prompt/confirm dialogs: the pill is a native <select>, so this
+  // works the same on desktop and in the phone's OS picker with no extra UI.
+  const PRESET_ACTIONS = {
+    "\u0000add": "\uff0b Add custom preset\u2026",
+    "\u0000rename": "\u270e Rename custom preset\u2026",
+    "\u0000remove": "\u2715 Remove custom preset\u2026",
+  };
+
+  async function onPresetAction(action) {
+    const cur = CUSTOM_PRESETS.find((p) => p.name === state.preset);
+    const before = CUSTOM_PRESETS.slice();
+    try {
+      if (action === "\u0000add") {
+        const text = window.prompt("New custom preset, as: name = flags # comment\n\nExample:\nav1 cq30 = --codec av1 --cq 30 # av1, quality 30", "");
+        if (!text || !text.trim()) return;
+        const parsed = parseCustomPresets(text);
+        if (!parsed.length) { window.alert("Could not parse that preset; see the browser console ([Jasna] lines)."); return; }
+        const p = parsed[0];
+        if (state.presets.some((x) => x.name === p.name)) { window.alert(`A preset named "${p.name}" already exists.`); return; }
+        CUSTOM_PRESETS.push(p);
+        await saveCustomPresets();
+        log(`Custom preset added: ${p.name}`);
+        state.preset = p.name; savePreset(p.name);
+      } else if (action === "\u0000rename") {
+        if (!cur) { window.alert("Pick one of your custom presets first; the bridge's presets are renamed in bridge.toml."); return; }
+        const name = window.prompt(`Rename "${cur.name}" to:`, cur.name);
+        if (name === null) return;
+        const nn = name.trim();
+        if (nn === cur.name) return;
+        if (!CUSTOM_NAME_RE.test(nn)) { window.alert("Names are 1-40 characters: letters, digits, space . _ + -"); return; }
+        if (state.presets.some((x) => x.name === nn)) { window.alert(`A preset named "${nn}" already exists.`); return; }
+        cur.name = nn;
+        await saveCustomPresets();
+        log(`Custom preset renamed -> ${nn}`);
+        state.preset = nn; savePreset(nn);
+      } else if (action === "\u0000remove") {
+        if (!cur) { window.alert("Pick one of your custom presets first; the bridge's presets live in bridge.toml."); return; }
+        if (!window.confirm(`Remove custom preset "${cur.name}"?`)) return;
+        CUSTOM_PRESETS = CUSTOM_PRESETS.filter((p) => p !== cur);
+        await saveCustomPresets();
+        log(`Custom preset removed: ${cur.name}`);
+      }
+    } catch (err) {
+      CUSTOM_PRESETS = before;
+      log(`ERROR: saving custom presets failed: ${err.message}`);
+      window.alert("Saving the preset failed: " + err.message);
+    }
+    refreshCustomEntries();
+  }
+
   const PRESET_STORAGE_KEY = "jasna-switch:preset";
 
   function readSavedPreset() {
@@ -125,6 +301,20 @@
       const data = await resp.json();
       state.presets = Array.isArray(data.presets) ? data.presets : [];
       state.warm = !!data.warm;
+      state.defaultPreset = data.default || null;
+      state.customAllowed = !!data.custom_allowed;
+      if (CUSTOM_PRESETS.length) {
+        if (!data.custom_allowed) {
+          log("WARNING: the bridge does not allow custom presets (needs jasna.custom_presets = true " +
+              "and manage_process = true in bridge.toml); the Custom presets setting is ignored");
+        } else {
+          const taken = new Set(state.presets.map((p) => p.name));
+          for (const c of CUSTOM_PRESETS) {
+            if (taken.has(c.name)) { log(`Custom preset "${c.name}" skipped: the bridge has a preset by that name`); continue; }
+            state.presets.push({ name: c.name, description: c.description || "custom", flags: c.flags, custom: true });
+          }
+        }
+      }
       const names = state.presets.map((p) => p.name);
       const saved = readSavedPreset();
       state.preset = saved && names.includes(saved) ? saved : (data.default || null);
@@ -157,7 +347,9 @@
     sessionToken: null,
     heartbeatTimer: null,
     preset: null,        // chosen preset name (bridge mode); null = bridge default
-    presets: [],         // [{name, description}] from GET /presets
+    presets: [],         // [{name, description}] from GET /presets, plus custom ones ({flags, custom: true})
+    defaultPreset: null, // the bridge's default preset name
+    customAllowed: false,// bridge accepts custom presets (jasna.custom_presets = true)
     warm: false,         // bridge reports Jasna warm (cold-start hint)
     canTakeover: false,  // last busy response said the idle owner can be taken over
   };
@@ -336,6 +528,8 @@
     opts = opts || {};
     const payload = { scene_id: sceneId, time };
     if (state.preset) payload.preset = state.preset;
+    const chosen = state.presets.find((p) => p.name === state.preset);
+    if (chosen && chosen.custom) payload.flags = chosen.flags;
     if (opts.force) payload.force = true;
     const resp = await fetch(`${BRIDGE_URL}/session`, {
       method: "POST",
@@ -899,10 +1093,13 @@
     const wrap = document.getElementById("jasna-preset");
     const sel = document.getElementById("jasna-preset-select");
     if (!wrap || !sel) return;
-    const show = bridgeMode() && state.presets.length > 1;
+    const show = bridgeMode() && (state.presets.length > 1 || state.customAllowed);
     if (wrap.hidden !== !show) wrap.hidden = !show;
     if (!show) return;
-    const want = state.presets.map((p) => p.name).join("|");
+    // A custom preset re-parsed with new flags must rebuild the list too.
+    const isCustom = state.presets.some((p) => p.custom && p.name === state.preset);
+    const want = state.presets.map((p) => (p.custom ? p.name + "=" + p.flags.join(" ") + "#" + p.description : p.name)).join("|")
+      + (state.customAllowed ? `|actions:${isCustom ? "edit" : "add"}` : "");
     if (sel.dataset.built !== want) {
       sel.innerHTML = "";
       for (const p of state.presets) {
@@ -910,6 +1107,18 @@
         opt.value = p.name;
         opt.textContent = p.description ? `${p.name} \u2014 ${p.description}` : p.name;
         sel.appendChild(opt);
+      }
+      if (state.customAllowed) {
+        const grp = document.createElement("optgroup");
+        grp.label = "Custom presets";
+        for (const [value, label] of Object.entries(PRESET_ACTIONS)) {
+          const opt = document.createElement("option");
+          opt.value = value;
+          opt.textContent = label;
+          if (value !== "\u0000add" && !isCustom) opt.disabled = true;
+          grp.appendChild(opt);
+        }
+        sel.appendChild(grp);
       }
       sel.dataset.built = want;
     }
@@ -1019,7 +1228,15 @@
       caret.textContent = "\u25be";
       const select = document.createElement("select");
       select.id = "jasna-preset-select";
-      select.addEventListener("change", () => onPresetChange(select.value));
+      select.addEventListener("change", () => {
+        if (PRESET_ACTIONS[select.value]) {
+          const action = select.value;
+          select.value = state.preset || "";
+          onPresetAction(action);
+        } else {
+          onPresetChange(select.value);
+        }
+      });
       preset.appendChild(pname);
       preset.appendChild(caret);
       preset.appendChild(select);

@@ -28,7 +28,8 @@ reverse-proxied under the Stash domain the plugin **auto-detects** it at
 3. Seeking while ON needs nothing special: Jasna serves a static VOD
    playlist and the bridge renders/caches segments on demand.
 4. Changing the preset pill mid-stream restarts Jasna on the new preset in
-   place, no toggle-off needed.
+   place, no toggle-off needed. Presets come from the bridge's config plus
+   any defined in the plugin's *Custom presets* setting (sent as flags).
 5. Toggle OFF: destroys hls.js, ends the bridge session, and restores the
    original Stash source, seeking back.
 
@@ -71,6 +72,38 @@ appears top-right on the player.
 With the bridge reverse-proxied under the Stash domain (the recommended
 setup) there is nothing to configure - the plugin auto-detects it at
 `<stash-origin>/jasna`.
+
+**Custom presets.** The preset pill lists the presets configured in the
+bridge's `bridge.toml`. To add your own without touching the bridge, fill in
+Settings > Plugins > Jasna Switch > **Custom presets** with one entry per
+preset, `name = flags`, separated by `;`:
+
+```
+av1 cq30 = --detection-model rfdetr-v6-large --secondary-restoration unet-4x --codec av1 --cq 30 # hq detection, av1; fast h264 = --codec h264 --cq 28
+```
+
+The flags are Jasna's own command-line flags (`jasna --help`); quote a value
+with spaces (`--lut '/path/My LUT.cube'`). An unquoted `#` after the flags
+starts a comment, shown in the picker instead of the word *custom*. Names
+are 1-40 characters of
+letters, digits, space, `.`, `_`, `+`, `-`, and may not repeat a bridge preset
+name. Reload the page after changing the setting; entries the plugin cannot
+parse are skipped with a `[Jasna]` line in the browser console. Custom presets
+are shown as `name — comment` (or `name — custom`) in the pill and behave
+like the others: picking
+one mid-stream restarts Jasna on its flags. The bridge must allow them
+(`jasna.custom_presets = true` alongside `manage_process = true` in
+`bridge.toml`); it refuses flags that would take Jasna out from under it
+(`--stream*`, `--input`/`--output`, license and post-export flags), and an
+unpermitted or rejected preset shows as `JASNA: ERROR` with the reason in the
+console.
+
+You can also manage them from the player: the preset pill's dropdown ends
+with **Add**, **Rename** and **Remove custom preset** entries. Add asks for a
+`name = flags # comment` line; Rename and Remove act on the custom preset
+currently selected in the pill (the bridge's own presets are edited in
+`bridge.toml`). Changes are written back to the Custom presets setting through
+Stash, so they persist and other browsers pick them up on their next page load.
 
 **Overriding the bridge URL.** Set Settings > Plugins > Jasna Switch >
 **Bridge URL** only to point elsewhere, e.g. an absolute
