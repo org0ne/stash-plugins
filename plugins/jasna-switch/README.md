@@ -18,7 +18,9 @@ reverse-proxied under the Stash domain the plugin **auto-detects** it at
 ## How it works
 
 1. On a scene page the plugin finds the scene id from the URL and the video
-   player, and reads the bridge URL (the setting, or auto-detect).
+   player, and reads the bridge URL (the setting, or auto-detect). It does
+   not query Stash about the scene: the bridge resolves the file itself and
+   rejects a scene that has none, which shows as `JASNA: ERROR`.
 2. Toggle ON: captures time/paused/volume/rate, POSTs `{scene_id, time,
    preset}` to the bridge (the browser never sends filesystem paths), gets a
    session token and playlist path, attaches hls.js to the player's

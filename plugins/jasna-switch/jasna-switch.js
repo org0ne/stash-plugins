@@ -3,7 +3,6 @@
 // Implements Phases 2-7 of stash-jasna-poc.md, corrected against a live
 // Jasna 0.10.0 instance:
 //   - a JASNA ON/OFF button injected next to the scene player
-//   - GraphQL scene/file lookup on scene page load
 //   - Stash <-> Jasna source switching, preserving position/state
 //   - fail-back to normal Stash playback on any Jasna error
 //
@@ -146,7 +145,6 @@
   // object only tracks what's needed to switch sources and restore state.
   const state = {
     sceneId: null,
-    path: null,
     source: "stash", // "stash" | "jasna" | "switching"
     currentTime: 0,
     playing: false,
@@ -264,41 +262,7 @@
     return iu ? iu.getPlayer() : null;
   }
 
-  // --- Phase 3: scene/file discovery via GraphQL ---
-
-  // performers is not used here; it is requested because another plugin's
-  // fetch hook (CleanCards' processScene) assumes every findScene response
-  // has it and throws otherwise (seen 2026-09-08).
-  async function fetchScene(sceneId) {
-    const query = `
-      query FindSceneJasna($id: ID!) {
-        findScene(id: $id) {
-          id
-          files {
-            path
-            duration
-          }
-          performers {
-            id
-          }
-        }
-      }
-    `;
-    const resp = await fetch("/graphql", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ query, variables: { id: sceneId } }),
-    });
-    if (!resp.ok) {
-      throw new Error(`GraphQL request failed: HTTP ${resp.status}`);
-    }
-    const json = await resp.json();
-    if (json.errors && json.errors.length) {
-      throw new Error(json.errors[0].message);
-    }
-    return json.data && json.data.findScene;
-  }
+  // --- Scene tracking ---
 
   function extractSceneId(pathname) {
     const m = pathname.match(/^\/scenes\/(\d+)/);
@@ -311,7 +275,6 @@
 
     if (!sceneId) {
       state.sceneId = null;
-      state.path = null;
       setButtonDisabled(true);
       return;
     }
@@ -330,21 +293,12 @@
     setButtonLabel("JASNA: OFF");
     log(`Scene ${sceneId}`);
 
-    try {
-      const scene = await fetchScene(sceneId);
-      const file = scene && scene.files && scene.files[0];
-      if (!file) throw new Error("no video file found for scene");
-      if (scene.files.length > 1) {
-        log(`WARNING: scene has ${scene.files.length} files, using the first`);
-      }
-      state.path = file.path;
-      log(`File: ${file.path}`);
-      setButtonDisabled(false);
-    } catch (err) {
-      log(`ERROR: scene lookup failed: ${err.message}`);
-      state.path = null;
-      setButtonDisabled(true);
-    }
+    // No per-scene GraphQL lookup here. The bridge resolves the scene's file
+    // itself when a session is requested and answers 404 ("scene N has no
+    // files") for a scene without one, which the toggle surfaces as
+    // JASNA: ERROR. Querying Stash up front only duplicated that check and
+    // cost a findScene round trip on every scene page view.
+    setButtonDisabled(false);
   }
 
   // --- Bridge client (bridge mode) ---
@@ -789,8 +743,8 @@
       setTimeout(() => { if (state.source === "stash") setButtonLabel("JASNA: OFF"); }, 3000);
       return;
     }
-    if (!state.path) {
-      log("Scene file unavailable; cannot enable Jasna");
+    if (!state.sceneId) {
+      log("Not on a scene page; cannot enable Jasna");
       return;
     }
 
@@ -1041,7 +995,7 @@
       toggle.className = "jasna-pill";
       toggle.type = "button";
       toggle.dataset.state = "off";
-      toggle.disabled = !state.path;
+      toggle.disabled = !state.sceneId;
       const dot = document.createElement("span");
       dot.className = "dot";
       const label = document.createElement("span");
