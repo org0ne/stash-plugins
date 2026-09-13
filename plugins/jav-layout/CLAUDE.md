@@ -3054,6 +3054,15 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
   strip between Original Title and Toolbar; see the reverted-mirroring note
   in the Layout section above. This parenthetical previously described the
   mirrored-into-Metadata version, which was reverted.)
+- **Duration joined the info row (2026-09-12, v2.4.1)** — the row is now
+  Resolution | fps | Duration | Director, in that order on request.
+  Duration isn't in `.scene-subheader` (only date/fps/resolution are);
+  it's read from the File Info pane's own "Duration:" `<dt>`/`<dd>`
+  (first match, i.e. the primary file), already formatted h:mm:ss by
+  stash, so `buildSceneBadgeRow()` takes `seen.fileinfo` as a third
+  argument and the duration is part of `jlInfoSig`. Same
+  segment-with-divider-only-between logic, so a scene with no file
+  (no Duration row) drops the segment without a dangling pipe.
 - **Link tiles row, order: 45 (2026-09-12, v2.4.0).** Every scene URL
   and Stash ID as a bare 16px favicon at native size inside a 20px
   anchor, no chrome — only the monogram fallback gets a 16px bordered

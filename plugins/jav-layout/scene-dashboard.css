@@ -459,7 +459,7 @@
      each other on font, not just on color/weight/height. */
   font-family: var(--jl-font-mono) !important;
 }
-/* Scene badge block: one combined "Resolution | fps | Director" readout
+/* Scene badge block: one combined "Resolution | fps | Duration | Director" readout
    above a second line holding just the collection-colors badge slot,
    between Original Title (30) and Toolbar (50) — see
    buildSceneBadgeRow() in scene-dashboard.js. Left-aligned like Title/

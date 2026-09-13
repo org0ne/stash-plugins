@@ -430,7 +430,7 @@
     setStyle(backdrop, 'marginBottom', `-${height}px`);
   }
 
-  /* Badge block: one combined "Resolution | fps | Director" line, above a
+  /* Badge block: one combined "Resolution | fps | Duration | Director" line, above a
    * second line holding just the collection-colors badge slot — both in
    * Metadata's column at order 40, the position the collection-colors
    * plugin's own pill used to occupy on its own, back when that plugin
@@ -474,7 +474,7 @@
    * Reuses `subheader`'s already-queried `.frame-rate`/`.resolution` and
    * `metaCol`'s already-labeled Director `<h6>` — both already computed
    * by the caller a few lines up — rather than re-querying independently. */
-  function buildSceneBadgeRow(metaCol, subheader) {
+  function buildSceneBadgeRow(metaCol, subheader, fileinfo) {
     let block = metaCol.querySelector(':scope > .jl-scene-badges');
     if (!block) {
       block = document.createElement('div');
@@ -484,6 +484,15 @@
 
     const resolution = subheader?.querySelector('.resolution')?.textContent.trim();
     const frameRate = subheader?.querySelector('.frame-rate')?.textContent.trim();
+    // Duration isn't in the subheader — it's the File Info pane's own
+    // "Duration:" <dt>/<dd> pair (mounted in every mode, constraint 2),
+    // already formatted by stash as h:mm:ss. First match = the primary
+    // file on a multi-file scene. Label matched by its hard-coded English
+    // text, same tradeoff as CARD_TITLES. Added 2026-09-12.
+    const durationLabel = fileinfo && [...fileinfo.querySelectorAll('dl.scene-file-info dt')]
+      .find(dt => /^Duration:?$/i.test(dt.textContent.trim()));
+    const durationCell = durationLabel && durationLabel.nextElementSibling;
+    const duration = durationCell && durationCell.tagName === 'DD' ? durationCell.textContent.trim() : '';
     const directorSource = metaCol.querySelector(':scope > h6[data-jl-label="Director"] a');
 
     let infoRow = block.querySelector(':scope > .jl-scene-info-row');
@@ -492,13 +501,14 @@
       infoRow.className = 'jl-scene-info-row';
       block.insertBefore(infoRow, block.firstChild);
     }
-    const sig = JSON.stringify([resolution || '', frameRate || '', directorSource ? directorSource.href + '|' + directorSource.textContent : '']);
+    const sig = JSON.stringify([resolution || '', frameRate || '', duration || '', directorSource ? directorSource.href + '|' + directorSource.textContent : '']);
     if (infoRow.dataset.jlInfoSig !== sig) {
       infoRow.dataset.jlInfoSig = sig;
       infoRow.replaceChildren();
       const segments = [];
       if (resolution) segments.push(document.createTextNode(resolution));
       if (frameRate) segments.push(document.createTextNode(frameRate));
+      if (duration) segments.push(document.createTextNode(duration));
       if (directorSource) {
         // Label + link travel together as one segment (one DocumentFragment),
         // not two — the "|" separator logic below only runs *between*
@@ -1153,7 +1163,7 @@
         }
 
         ensureGroupHead(root, metaCol, 'metadata', CARD_TITLES.metadata);
-        buildSceneBadgeRow(metaCol, subheader);
+        buildSceneBadgeRow(metaCol, subheader, seen.fileinfo);
         syncWatchedBadge(metaCol);
         buildSceneLinksRow(metaCol, seen.fileinfo);
       }

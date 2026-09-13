@@ -172,7 +172,7 @@ entity pages.
 |                                    |
 |  Title                            |
 |  Original Title                   |
-|  1080p | 29.97 fps | Director     |
+|  1080p | 29.97 fps | 2:04:18 | Dir |
 |  [Collection pill]     ✔ Watched  |
 |  [J] [r] [d] [d]   <- link tiles  |  <- Stash IDs first, then URLs
 |  Toolbar (rating, O-count, …)     |
