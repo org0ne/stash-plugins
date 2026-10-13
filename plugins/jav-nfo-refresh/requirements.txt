@@ -1,0 +1,9 @@
+# Install into the Python that Stash runs plugins with (Settings -> System
+# -> Python path), e.g.:  /srv/stash/.venv/bin/pip install -r requirements.txt
+stashapp-tools>=0.2.50
+requests>=2.31
+# Translation engine "deep-translator" (free, unofficial)
+deep-translator>=1.11.4
+# Translation engines "cloud-llm" (and the v3 client in general). Optional:
+# only imported when that engine is selected.
+google-cloud-translate>=3.15
