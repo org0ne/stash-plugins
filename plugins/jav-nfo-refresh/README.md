@@ -84,7 +84,7 @@ its URLs are merged rather than replacing the list.
 | Update release date | off | Scene date + NFO `premiered`/`releasedate`. |
 | Disable translation | off | Also skips genre tags, which are only written translated. |
 | Translation engine | `deep-translator` | `deep-translator`, `cloud-nmt` or `cloud-llm`. The free engine is rate-limited by Google and fails in bursts; the cloud engines are reliable. |
-| Google Cloud API key / project ID / region / credentials file | | Per engine; the project ID is read from the credentials file when blank. |
+| Google Cloud API key / project ID / region / credentials file | | Per engine. The credentials file may be an absolute path or a bare filename for a key placed in the plugin folder (`*.json` there is git-ignored); the project ID is read from it when blank. |
 | Plain translated title | off | Skip the `{Performers} - [{Group}] {Title} [{Code}]` rebuild. |
 | Disable Stash updates | off | NFO only. |
 | Disable NFO writes | off | Stash only; the sidecar is never read either. |

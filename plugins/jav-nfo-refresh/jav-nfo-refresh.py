@@ -36,7 +36,7 @@ from stashapi.stashapp import StashInterface
 import jav_nfo_core as core
 
 PLUGIN_ID = "jav-nfo-refresh"
-PLUGIN_VERSION = "1.0.0"
+PLUGIN_VERSION = "1.0.1"
 
 DEFAULT_TRIGGER_TAG = "JAV NFO Refresh"
 DEFAULT_ORIGINAL_TITLE_FIELD = "Original Title"
@@ -67,6 +67,20 @@ log = logging.getLogger(PLUGIN_ID)
 # ---------------------------------------------------------------------------
 # Configuration: plugin settings + task args
 # ---------------------------------------------------------------------------
+
+PLUGIN_DIR = Path(__file__).resolve().parent
+
+
+def resolve_plugin_path(value: str) -> Optional[str]:
+    """A file setting: "~" is expanded and a relative path is taken relative
+    to the plugin's own directory (the working directory Stash starts the
+    process in is not something to rely on)."""
+    if not value:
+        return None
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = PLUGIN_DIR / path
+    return str(path)
 
 class Config:
     def __init__(self, settings: Dict[str, Any], args: Dict[str, Any]):
@@ -102,7 +116,7 @@ class Config:
         self.cloud_api_key = text("cloudApiKey") or None
         self.cloud_project_id = text("cloudProjectId") or None
         self.cloud_region = text("cloudRegion", "us-central1")
-        self.cloud_credentials_file = text("cloudCredentialsFile") or None
+        self.cloud_credentials_file = resolve_plugin_path(text("cloudCredentialsFile"))
 
         self.update_stash = not flag("disableStashUpdate")
         self.write_nfo = not flag("disableNfoWrite")

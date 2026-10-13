@@ -6,7 +6,7 @@ description: >
   genres as tags, and the same data mirrored into the .nfo sidecar next to
   the video file.
 url: https://github.com/org0ne/stash-plugins
-version: 1.0.0
+version: 1.0.1
 
 exec:
   - python
@@ -120,8 +120,10 @@ settings:
   cloudCredentialsFile:
     displayName: Google Cloud credentials file
     description: >
-      Path (on the Stash host) to a service account JSON key for the
-      cloud-llm engine. Blank = Application Default Credentials.
+      Service account JSON key for the cloud-llm engine. Absolute path on
+      the Stash host, or a bare filename for a file placed in this plugin's
+      own folder (key files there are git-ignored). Blank = Application
+      Default Credentials.
     type: STRING
   plainTitle:
     displayName: Plain translated title
