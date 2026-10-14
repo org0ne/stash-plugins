@@ -38,7 +38,7 @@ from stashapi.stashapp import StashInterface
 import jav_nfo_core as core
 
 PLUGIN_ID = "jav-nfo-refresh"
-PLUGIN_VERSION = "1.3.1"
+PLUGIN_VERSION = "1.3.2"
 
 DEFAULT_TRIGGER_TAG = "JAV NFO Refresh"
 DEFAULT_ORIGINAL_TITLE_FIELD = "Original Title"
@@ -760,7 +760,10 @@ def process_scene_scrape(ctx: SceneContext, run: "Run") -> Tuple[core.ProcessRes
         if stopped_at is not None:
             log.info("%s: already refreshed from %s -- nothing new (use the Rescrape task "
                      "to re-query).", ctx.label, stopped_at)
-            return core.ProcessResult("already_refreshed", code=code, outcomes=outcomes), ""
+            # A refreshed scene is by definition not a code failure: a stale
+            # Failed / Not Found left over from an earlier miss is cleared.
+            ctx.check("not_found", False)
+            return core.ProcessResult("already_refreshed", code=code, outcomes=outcomes), "tags only"
         errored = "error" in outcomes.values()
         ctx.check("source_error", errored)
         ctx.check("not_found", not errored)
@@ -1100,8 +1103,12 @@ class Run:
             try:
                 error = ctx.load_nfo() if ctx.path else None
                 outcome = from_log.get(str(scene["id"]))
+                # A scene some source already refreshed is not a failure,
+                # whatever an older run said.
+                if ctx.refreshed_by():
+                    outcome = "ok"
                 # Local evidence beats an old log line for the code itself.
-                if ctx.path and ctx.code() is None:
+                elif ctx.path and ctx.code() is None:
                     outcome = "no_code"
                 elif outcome == "no_code":
                     outcome = "not_found"   # has a code now; the sources still missed it
@@ -1114,8 +1121,12 @@ class Run:
                     ctx.add_tags([OUTCOME_TAGS["source_error"]], nfo=False)
                     ctx.remove_tag(core.FAILED_GENRE)
                 elif outcome == "ok":
-                    ctx.remove_tag(core.FAILED_GENRE)   # a later run succeeded; stale tag
-                    outcome = "succeeded_later"
+                    # Refreshed by a source: the Failed umbrella and its two
+                    # code-failure children are stale.
+                    ctx.remove_tag(core.FAILED_GENRE)
+                    ctx.remove_tag(OUTCOME_TAGS["no_code"], nfo=False)
+                    ctx.remove_tag(OUTCOME_TAGS["not_found"], nfo=False)
+                    outcome = "refreshed_already"
                 else:
                     outcome = "unclassified"
                 if error:
