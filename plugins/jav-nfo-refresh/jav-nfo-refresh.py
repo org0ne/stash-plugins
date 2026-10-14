@@ -38,7 +38,7 @@ from stashapi.stashapp import StashInterface
 import jav_nfo_core as core
 
 PLUGIN_ID = "jav-nfo-refresh"
-PLUGIN_VERSION = "1.3.0"
+PLUGIN_VERSION = "1.3.1"
 
 DEFAULT_TRIGGER_TAG = "JAV NFO Refresh"
 DEFAULT_ORIGINAL_TITLE_FIELD = "Original Title"
@@ -57,6 +57,10 @@ JAVSTASH_ENDPOINT_FALLBACK = "https://javstash.org/graphql"
 # do about it. A tag is added when its condition is seen and removed again
 # the next time the condition is checked and found clear.
 PARENT_TAG = "Metadata Refresh"
+# The provenance tags ("nfo refreshed javstash", ...) and the manual
+# override live under a separate parent, so PARENT_TAG + children is
+# exactly "scenes that need a look" and never the successes.
+SOURCE_PARENT_TAG = "Metadata Refresh Source"
 MANUAL_TAG = "Metadata Refreshed Manually"   # pre-existing: "do not touch"
 OUTCOME_TAGS = {
     "no_code": "Refresh: No Studio Code",
@@ -72,7 +76,10 @@ OUTCOME_TAGS = {
     "nfo_error": "Refresh: NFO Error",
 }
 TAG_DESCRIPTIONS = {
-    PARENT_TAG: "Outcome tags written by the jav-nfo-refresh plugin.",
+    PARENT_TAG: "Outcome tags written by the jav-nfo-refresh plugin: every child means a scene "
+                "worth a look. Successful refreshes are under 'Metadata Refresh Source'.",
+    SOURCE_PARENT_TAG: "Which source last refreshed a scene (jav-nfo-refresh plugin), plus the "
+                       "manual override.",
     "no_code": "No studio code in the Studio Code field, the NFO tagline or the filename. "
                "Enter the Studio Code, then re-tag the scene.",
     "not_found": "Every selected source missed the code. Check the code or variant by hand, "
@@ -248,18 +255,23 @@ class TagCache:
         log.info("created tag %r (id %s)", name, tag_id)
         return tag_id
 
-    def add_parent(self, tag_id: Optional[str], parent_id: Optional[str]) -> None:
-        """Put an existing tag under a parent (keeping any parents it has)."""
+    def add_parent(self, tag_id: Optional[str], parent_id: Optional[str],
+                   instead_of: Optional[str] = None) -> None:
+        """Put an existing tag under a parent, keeping its other parents
+        except `instead_of`, which is dropped (used to move a tag)."""
         if not tag_id or not parent_id or tag_id == parent_id:
             return
         parents = self._parents.get(tag_id, [])
-        if parent_id in parents:
+        wanted = [p for p in parents if p != instead_of]
+        if parent_id not in wanted:
+            wanted.append(parent_id)
+        if wanted == parents:
             return
         if self.dry_run:
             log.info("[dry-run] would nest tag %s under %s", tag_id, parent_id)
             return
-        self.stash.update_tag({"id": tag_id, "parent_ids": parents + [parent_id]})
-        self._parents[tag_id] = parents + [parent_id]
+        self.stash.update_tag({"id": tag_id, "parent_ids": wanted})
+        self._parents[tag_id] = wanted
 
 
 def scene_file_path(scene: Dict[str, Any]) -> Optional[Path]:
@@ -927,8 +939,9 @@ class Run:
         parent = self.tags.ensure(PARENT_TAG, TAG_DESCRIPTIONS[PARENT_TAG])
         failed = self.tags.ensure(core.FAILED_GENRE, "", parent)
         self.tags.add_parent(failed, parent)
+        source_parent = self.tags.ensure(SOURCE_PARENT_TAG, TAG_DESCRIPTIONS[SOURCE_PARENT_TAG])
         for name in (MANUAL_TAG, *core.REFRESHED_GENRES.values()):
-            self.tags.add_parent(self.tags.get(name), parent)
+            self.tags.add_parent(self.tags.ensure(name), source_parent, instead_of=parent)
         for key, name in OUTCOME_TAGS.items():
             under = failed if key in FAILED_CHILDREN else parent
             tag_id = self.tags.ensure(name, TAG_DESCRIPTIONS[key], under)

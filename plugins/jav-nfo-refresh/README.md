@@ -81,8 +81,12 @@ logged at Error level.
 ### Outcome tags
 
 Every run leaves its outcome on the scene as tags, all nested under a
-`Metadata Refresh` parent so one filter catches them. Each tag's name says
-what to do about it; the same text is stored as the tag's description.
+`Metadata Refresh` parent so one filter (that tag, children included) is
+the worklist of scenes worth a look. The provenance tags (`nfo refreshed
+javstash` and friends) and `Metadata Refreshed Manually` sit under a
+separate `Metadata Refresh Source` parent, so the worklist never includes
+plain successes. Each tag's name says what to do about it; the same text
+is stored as the tag's description.
 
 | Tag | Set when | What you do |
 | --- | --- | --- |
