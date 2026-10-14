@@ -308,7 +308,10 @@ class SceneContext:
         # answers "read-only file system" for files on a drive that is
         # still spinning up, so give it a few tries before giving up.
         error = None
-        for attempt in range(1, WRITE_PROBE_ATTEMPTS + 1):
+        # Once a full set of retries has failed in this run, the drive is
+        # evidently not coming back: later scenes get a single attempt.
+        attempts = 1 if self.run.drive_wait_exhausted else WRITE_PROBE_ATTEMPTS
+        for attempt in range(1, attempts + 1):
             try:
                 with open(self.nfo_path, "r+b"):
                     pass
@@ -316,12 +319,13 @@ class SceneContext:
                 break
             except OSError as exc:
                 error = exc.strerror or str(exc)
-                if attempt < WRITE_PROBE_ATTEMPTS:
+                if attempt < attempts:
                     log.warning("%s: %s is not writable (%s) -- waiting %ds for the drive "
                                 "(attempt %d/%d).", self.label, self.nfo_path.name, error,
                                 WRITE_PROBE_WAIT, attempt, WRITE_PROBE_ATTEMPTS)
                     time.sleep(WRITE_PROBE_WAIT)
         if error:
+            self.run.drive_wait_exhausted = True
             log.error("%s: %s is not writable (%s) -- skipping scene. Fix the share "
                       "or turn on 'Disable NFO writes'.", self.label, self.nfo_path.name, error)
             return f"nfo_not_writable: {error}"
@@ -779,6 +783,7 @@ class Run:
         self.cfg = cfg
         self.timestamp = datetime.now().isoformat(timespec="seconds")
         self.counts: Dict[str, int] = {}
+        self.drive_wait_exhausted = False
         self.javstash_endpoint, api_key = javstash_endpoint_and_key(stash, cfg)
         self.tags = TagCache(stash, cfg.dry_run)
         self.trigger_tag_id = self.tags.get(cfg.trigger_tag)
