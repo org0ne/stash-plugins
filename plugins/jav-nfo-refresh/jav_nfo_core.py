@@ -147,6 +147,22 @@ log = logging.getLogger("jav-nfo-refresh")
 # Code normalization / extraction
 # ---------------------------------------------------------------------------
 
+# Matches a trailing "-pt1", "_part2", " pt2", " Part 2", "-cd1", "-disc2"
+# style multi-part indicator. A separator (hyphen, underscore or space)
+# before the keyword is REQUIRED specifically to avoid false positives: a
+# code like "SDCD-123" legitimately ends in letters "CD" right before its
+# digit suffix, but there's no separator introducing it as a separate
+# "part" segment the way "ABP-576-pt1" has, so it won't match.
+PART_SUFFIX_RE = re.compile(r"[-_\s]+(?:pt|part|cd|disc|disk)\.?\s*\d+$", re.IGNORECASE)
+
+# The canonical code shape after cleaning: LABEL-[prefix]DIGITS[suffix].
+# The number may carry up to three letters in front ("MXPC-S011",
+# "H4610-ORI962") and up to two behind ("KTRA-309E", "IBW-610Z",
+# "GOKU-055D"); both are kept in the canonical code. Greedy LABEL keeps
+# multi-hyphen labels ("FC2-PPV-2581845") whole.
+CODE_SHAPE_RE = re.compile(r"^(.+)-([A-Z]{0,3})(\d+)([A-Z]{0,2})$")
+
+
 def normalize_code(raw: str) -> Optional[str]:
     """
     Normalize a studio code to a canonical "LABEL-DIGITS" form (uppercase,
@@ -181,7 +197,9 @@ def normalize_code(raw: str) -> Optional[str]:
         if m:
             return m.group(0).lower()
 
-    cleaned = raw.strip().upper()
+    # A multi-part marker ("SOE-339 pt2", "MOT-139 Part 2", "ABP-576-cd1")
+    # is never part of the code, wherever the string came from.
+    cleaned = PART_SUFFIX_RE.sub("", raw.strip()).upper()
     # keep only letters, digits, hyphen, underscore for matching purposes
     cleaned = re.sub(r"[^A-Z0-9_-]", "", cleaned)
     # normalize underscore to hyphen so e.g. "T28_442" and "T28-442" both
@@ -190,20 +208,24 @@ def normalize_code(raw: str) -> Optional[str]:
     if not cleaned:
         return None
 
-    m = re.match(r"^(.+)-(\d+)$", cleaned)
+    m = CODE_SHAPE_RE.match(cleaned)
     if m:
-        label, digits = m.group(1), m.group(2)
+        label, prefix, digits, suffix = m.groups()
     else:
         # No separator at all -- fall back to splitting at the start of
         # the trailing digit run (e.g. "GRACE035" -> "GRACE" + "035").
-        m2 = re.match(r"^([A-Z0-9]*[A-Z])(\d+)$", cleaned)
+        # The label must hold at least two letters here: a lone letter
+        # followed by digits ("T28", the first half of "T28_442") is far
+        # more likely to be a fragment than a real code.
+        m2 = re.match(r"^([A-Z0-9]*[A-Z][A-Z0-9]*[A-Z])(\d+)([A-Z]{0,2})$", cleaned)
         if not m2:
             return None
-        label, digits = m2.group(1), m2.group(2)
+        label, digits, suffix = m2.groups()
+        prefix = ""
 
     if not re.search(r"[A-Z]", label):
         return None  # a purely-numeric "label" isn't a real code
-    return f"{label}-{digits}"
+    return f"{label}-{prefix}{digits}{suffix}"
 
 
 def extract_code_from_nfo(root: ET.Element) -> Optional[str]:
@@ -215,31 +237,27 @@ def extract_code_from_nfo(root: ET.Element) -> Optional[str]:
     return None
 
 
-# Matches a trailing "-pt1", "_part2", "-cd1", "-disc2", "-disk1" style
-# multi-part indicator. The separator before the keyword is REQUIRED
-# (not optional) specifically to avoid false positives: a code like
-# "SDCD-123" legitimately ends in letters "CD" right before its digit
-# suffix, but there's no second hyphen/underscore introducing it as a
-# separate "part" segment the way "ABP-576-pt1" has, so it won't match.
-PART_SUFFIX_RE = re.compile(r"[-_](?:pt|part|cd|disc|disk)\d+$", re.IGNORECASE)
-
-
 def extract_code_from_filename(path: Path) -> Optional[str]:
-    stem = path.stem  # filename without the .nfo extension
+    stem = path.stem  # filename without the extension
     stem_clean = PART_SUFFIX_RE.sub("", stem)
 
-    # Try an uncensored-style code (1pondo/Caribbeancom/...) anywhere in
-    # the stem first. These codes contain their own underscore between
-    # the date and shoot number (e.g. "092621_001-1pon"), so the legacy
-    # "everything before the first underscore" rule below would truncate
-    # them to just the date and fail to recognize them.
-    code = normalize_code(stem_clean)
+    # Uncensored-style codes (1pondo/Caribbeancom/...) first, anywhere in
+    # the stem: they contain their own underscore between the date and
+    # shoot number ("092621_001-1pon"), so the before-the-underscore rule
+    # below would truncate them to just the date.
+    for pattern in UNCENSORED_CODE_PATTERNS.values():
+        m = pattern.search(stem_clean)
+        if m:
+            return m.group(0).lower()
+
+    # Everything before the first "_" -- quality/source tags hang off an
+    # underscore ("ABP-576_1080p") and must not be read as a suffix.
+    candidate = PART_SUFFIX_RE.sub("", stem_clean.split("_", 1)[0])
+    code = normalize_code(candidate)
     if code:
         return code
-
-    candidate = stem.split("_", 1)[0]
-    candidate = PART_SUFFIX_RE.sub("", candidate)
-    return normalize_code(candidate)
+    # Last resort: the whole stem ("T28_442" -> "T28-442").
+    return normalize_code(stem_clean)
 
 
 def get_code_for_file(root: ET.Element, path: Path) -> Optional[str]:
@@ -257,8 +275,20 @@ def strip_numeric_prefix(code: str) -> Optional[str]:
     field; libredmm's normalized_id), so it's used as an alternate lookup
     term. Returns None if the code has no numeric prefix.
     """
-    m = re.match(r"^\d+([A-Z]+-\d+)$", code)
+    m = re.match(r"^\d+([A-Z]+-[A-Z]{0,3}\d+[A-Z]{0,2})$", code)
     return m.group(1) if m else None
+
+
+def strip_edition_suffix(code: str) -> Optional[str]:
+    """
+    For codes with trailing edition/variant letters ("KTRA-309E",
+    "IBW-610Z", "NAAC-038B"), the bare "KTRA-309" form -- what the sources
+    usually file the release under. Returns None when there is no suffix.
+    """
+    m = CODE_SHAPE_RE.match(code)
+    if not m or not m.group(4):
+        return None
+    return f"{m.group(1)}-{m.group(2)}{m.group(3)}"
 
 
 def uncensored_bare_code(local_code: str) -> Optional[str]:
@@ -309,16 +339,19 @@ def code_match_key(code: Optional[str]) -> Optional[str]:
     """
     if not code:
         return None
-    m = re.match(r"^([A-Z0-9-]*[A-Z][A-Z0-9-]*)-(\d+)$", code)
-    if m:
-        return f"{m.group(1)}-{int(m.group(2))}"
+    m = CODE_SHAPE_RE.match(code)
+    if m and re.search(r"[A-Z]", m.group(1)):
+        label, prefix, digits, suffix = m.groups()
+        return f"{label}-{prefix}{int(digits)}{suffix}"
     return code.lower()
 
 
 def acceptable_code_forms(code: str) -> List[str]:
     """The local code plus every alternate form a source might file it under."""
     forms = [code]
-    for alt in (strip_numeric_prefix(code), uncensored_bare_code(code)):
+    bare = strip_edition_suffix(code)
+    for alt in (strip_numeric_prefix(code), uncensored_bare_code(code), bare,
+                strip_numeric_prefix(bare) if bare else None):
         if alt and alt not in forms:
             forms.append(alt)
     return forms

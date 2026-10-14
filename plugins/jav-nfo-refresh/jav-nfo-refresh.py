@@ -37,7 +37,7 @@ from stashapi.stashapp import StashInterface
 import jav_nfo_core as core
 
 PLUGIN_ID = "jav-nfo-refresh"
-PLUGIN_VERSION = "1.1.2"
+PLUGIN_VERSION = "1.2.0"
 
 DEFAULT_TRIGGER_TAG = "JAV NFO Refresh"
 DEFAULT_ORIGINAL_TITLE_FIELD = "Original Title"
@@ -362,8 +362,16 @@ class SceneContext:
         code = core.normalize_code(self.scene.get("code") or "")
         if not code and self.root is not None:
             code = core.extract_code_from_nfo(self.root)
-        if not code and self.path is not None:
-            code = core.extract_code_from_filename(self.path)
+        file_code = core.extract_code_from_filename(self.path) if self.path is not None else None
+        if not code:
+            code = file_code
+        elif file_code and core.code_match_key(file_code) != core.code_match_key(code) \
+                and file_code not in core.acceptable_code_forms(code):
+            # Stash's Studio Code wins, but a disagreement with the filename
+            # usually means one of them is wrong -- say so.
+            log.warning("%s: Studio Code %s disagrees with the filename (%s) -- using %s. "
+                        "Fix the Studio Code (or the tagline) if the file is right.",
+                        self.label, code, file_code, code)
         return code
 
     def refreshed_by(self) -> List[str]:

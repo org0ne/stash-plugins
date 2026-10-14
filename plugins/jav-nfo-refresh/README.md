@@ -57,7 +57,11 @@ logged at Error level.
 ### How a scene is judged
 
 - **Studio code**: the scene's Studio Code field, then the NFO `tagline`,
-  then the filename.
+  then the filename. Edition letters are kept (`KTRA-309E`, `IBW-610Z`,
+  `MXPC-S011`) and the bare form (`KTRA-309`) is also tried on the
+  sources; part markers (`-pt1`, ` Part 2`) are dropped. When the Studio
+  Code disagrees with the filename the Studio Code wins and a warning is
+  logged.
 - **Already refreshed by a source**: its marker tag (`nfo refreshed
   javstash` / `nfo refreshed LibreDMM` / `nfo refreshed jav321`) on the
   scene, the same marker as an NFO genre, a javstash stash ID on the scene,
