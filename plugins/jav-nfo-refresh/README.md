@@ -42,13 +42,17 @@ tasks under Settings → Tasks → Plugin Tasks:
 
 | Task | What it does |
 | --- | --- |
+| Check settings | Logs every effective setting and where it comes from, verifies the API key, credentials file and trigger tag, and runs a one-word test translation through the configured engine. Writes nothing. Run this first. |
 | Refresh tagged scenes | Look each tagged scene up; scenes a source already refreshed are skipped without a request. |
 | Refresh tagged scenes (dry run) | Same, but only logs what would change. |
 | Rescrape tagged scenes | Query the sources even for already-refreshed scenes. Existing translations are kept unless the description changed. |
 | Re-translate tagged scenes | No lookups. Re-translate title and details from the existing `Original Title` / `Original Description` (or the NFO). Genres untouched. |
 | Re-translate tagged scenes (dry run) | Same, but only logs. |
 
-Progress and per-scene outcomes go to the Stash log (Settings → Logs).
+Progress and per-scene outcomes go to the Stash log (Settings → Logs,
+level Info or lower). Every run starts with a header line stating the
+effective mode, sources and translation engine, and source errors are
+logged at Error level.
 
 ### How a scene is judged
 

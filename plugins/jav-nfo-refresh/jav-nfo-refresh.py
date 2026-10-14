@@ -36,7 +36,7 @@ from stashapi.stashapp import StashInterface
 import jav_nfo_core as core
 
 PLUGIN_ID = "jav-nfo-refresh"
-PLUGIN_VERSION = "1.0.1"
+PLUGIN_VERSION = "1.1.0"
 
 DEFAULT_TRIGGER_TAG = "JAV NFO Refresh"
 DEFAULT_ORIGINAL_TITLE_FIELD = "Original Title"
@@ -97,6 +97,7 @@ class Config:
                 return None
             return float(value)
 
+        self.raw_settings = dict(settings)
         self.trigger_tag = text("triggerTag", DEFAULT_TRIGGER_TAG)
         self.remove_trigger_tag = flag("removeTriggerTag")
         self.sources = core.parse_source_list(text("sources", "all"))
@@ -138,7 +139,7 @@ class Config:
         self.no_backup = not self.nfo_backup
 
     def validate(self) -> None:
-        if self.mode not in ("scrape", "translate_only"):
+        if self.mode not in ("scrape", "translate_only", "check"):
             raise SystemExit(f"Unknown task mode {self.mode!r}.")
         if not self.update_stash and not self.write_nfo:
             raise SystemExit("Both 'Disable Stash updates' and 'Disable NFO writes' are "
@@ -777,10 +778,15 @@ class Run:
 
     def main(self) -> None:
         scenes = self.tagged_scenes()
+        translate_desc = "off"
+        if self.translator:
+            translate_desc = f"{self.cfg.translation_engine} via {type(self.translator).__name__}"
+            if hasattr(self.translator, "model_path"):
+                translate_desc += f" ({self.translator.model_path})"
         log.info("%s v%s: %d scene(s) tagged %r; mode=%s%s; sources=%s; translate=%s; "
                  "stash=%s; nfo=%s", PLUGIN_ID, PLUGIN_VERSION, len(scenes), self.cfg.trigger_tag,
                  self.cfg.mode, " (dry run)" if self.cfg.dry_run else "", self.cfg.sources,
-                 self.cfg.translation_engine if self.translator else "off",
+                 translate_desc,
                  "on" if self.cfg.update_stash else "off", "on" if self.cfg.write_nfo else "off")
         for i, scene in enumerate(scenes):
             slog.progress(i / len(scenes))
@@ -799,6 +805,154 @@ class Run:
         log.info("done: %s", summary)
 
 
+# ---------------------------------------------------------------------------
+# "Check settings" task
+# ---------------------------------------------------------------------------
+
+def check_settings(stash: StashInterface, cfg: Config) -> None:
+    """Log every effective setting with where it came from, verify the
+    files and keys it points at, build the translator and run a one-word
+    test translation through it. Nothing is written to Stash or disk."""
+    raw = cfg.raw_settings
+    problems: List[str] = []
+
+    def src(key: str) -> str:
+        value = raw.get(key)
+        return "setting" if value not in (None, "", False) else "default"
+
+    def line(label: str, value: Any, key: Optional[str] = None, note: str = "") -> None:
+        origin = f" [{src(key)}]" if key else ""
+        log.info("  %-28s %s%s%s", label, value, origin, f"  -- {note}" if note else "")
+
+    log.info("=== %s v%s settings check ===", PLUGIN_ID, PLUGIN_VERSION)
+    unknown = sorted(k for k in raw if k not in KNOWN_SETTINGS)
+    if unknown:
+        problems.append(f"unknown setting key(s) stored for this plugin: {unknown}")
+
+    # Scene selection
+    log.info("Scene selection")
+    trigger_id = None
+    try:
+        tags = TagCache(stash, dry_run=True)
+        trigger_id = tags.get(cfg.trigger_tag)
+    except Exception as exc:
+        problems.append(f"could not list tags: {exc}")
+    if trigger_id:
+        count = len(stash.find_scenes(
+            f={"tags": {"value": [trigger_id], "modifier": "INCLUDES", "depth": 0}},
+            fragment="id") or [])
+        line("Trigger tag", repr(cfg.trigger_tag), "triggerTag", f"exists (id {trigger_id}), {count} scene(s) tagged")
+    else:
+        line("Trigger tag", repr(cfg.trigger_tag), "triggerTag", "DOES NOT EXIST")
+        problems.append(f"trigger tag {cfg.trigger_tag!r} does not exist in Stash")
+    line("Remove trigger tag when done", cfg.remove_trigger_tag, "removeTriggerTag")
+
+    # Sources
+    log.info("Sources")
+    line("Sources", ", ".join(cfg.sources), "sources", "priority order")
+    endpoint, api_key = javstash_endpoint_and_key(stash, cfg)
+    if core.SOURCE_JAVSTASH in cfg.sources:
+        if cfg.javstash_api_key:
+            line("javstash API key", f"set ({len(cfg.javstash_api_key)} chars)", "javstashApiKey")
+        elif api_key:
+            line("javstash API key", f"from stash-box {endpoint}", None)
+        else:
+            line("javstash API key", "MISSING", "javstashApiKey")
+            problems.append("javstash is selected but no API key is set and no javstash stash-box is configured")
+    line("javstash stash_ids endpoint", endpoint)
+    line("Request delay", f"{cfg.delay:g}s", "requestDelay")
+    line("libredmm processing wait", f"{cfg.processing_wait:g}s", "libredmmProcessingWait")
+    line("Update release date", cfg.update_release_date, "updateReleaseDate")
+
+    # Writes
+    log.info("Writes")
+    line("Stash updates", "on" if cfg.update_stash else "OFF", "disableStashUpdate")
+    line("NFO writes", "on" if cfg.write_nfo else "OFF", "disableNfoWrite")
+    line("NFO backup", "on" if cfg.nfo_backup else "OFF", "disableNfoBackup")
+    line("Tag failures", "on" if cfg.mark_failed else "OFF", "disableFailedTag")
+    line("Plain translated title", cfg.plain_title, "plainTitle")
+    line("Original title field", repr(cfg.original_title_field), "originalTitleField")
+    line("Original description field", repr(cfg.original_description_field), "originalDescriptionField")
+
+    # Translation
+    log.info("Translation")
+    if not cfg.translate:
+        line("Translation", "OFF", "disableTranslation", "no title/details translation and no genre tags")
+    else:
+        line("Engine", cfg.translation_engine, "translationEngine")
+        backend, model = TRANSLATION_ENGINES[cfg.translation_engine]
+        if cfg.cloud_api_key:
+            line("Google Cloud API key", f"set ({len(cfg.cloud_api_key)} chars)", "cloudApiKey",
+                 "" if model == "nmt" and backend == "cloud" else "not used by this engine")
+        elif cfg.translation_engine == "cloud-nmt":
+            line("Google Cloud API key", "MISSING", "cloudApiKey")
+            problems.append("cloud-nmt needs the Google Cloud API key setting")
+        if cfg.translation_engine == "cloud-llm":
+            path = cfg.cloud_credentials_file
+            project_id = cfg.cloud_project_id
+            if path:
+                exists = Path(path).is_file()
+                line("Credentials file", path, "cloudCredentialsFile",
+                     "found" if exists else "NOT FOUND")
+                if not exists:
+                    problems.append(f"credentials file not found: {path}")
+                elif not project_id:
+                    try:
+                        with open(path, encoding="utf-8") as f:
+                            key = json.load(f)
+                        project_id = key.get("project_id")
+                        line("Service account", key.get("client_email", "?"), None, "from credentials file")
+                    except (OSError, ValueError) as exc:
+                        problems.append(f"credentials file is not a readable JSON key: {exc}")
+            else:
+                line("Credentials file", "blank", "cloudCredentialsFile",
+                     "Application Default Credentials will be used")
+            line("Project ID", project_id or "MISSING", "cloudProjectId",
+                 "" if cfg.cloud_project_id or not project_id else "from credentials file")
+            if not project_id:
+                problems.append("cloud-llm needs a project ID (setting, or project_id in the credentials file)")
+            line("Region", cfg.cloud_region, "cloudRegion")
+        else:
+            for key, label in (("cloudCredentialsFile", "Credentials file"),
+                               ("cloudProjectId", "Project ID"), ("cloudRegion", "Region")):
+                if raw.get(key):
+                    line(label, raw[key], key, "not used by this engine")
+
+        # Build the real translator and push one word through it.
+        try:
+            translator = build_translator(cfg)
+            line("Backend class", type(translator).__name__)
+            if hasattr(translator, "model_path"):
+                line("Model", translator.model_path)
+            sample = "日本語のテスト"
+            result = translator.translate_ja_to_en(sample)
+            if result:
+                line("Test translation", f"{sample!r} -> {result!r}", None, "engine is working")
+            else:
+                problems.append("test translation returned nothing (see the warning above)")
+        except SystemExit as exc:
+            problems.append(f"translator could not be built: {exc.code}")
+        except Exception as exc:
+            problems.append(f"translator failed: {exc}")
+
+    if problems:
+        for p in problems:
+            log.error("PROBLEM: %s", p)
+        log.info("=== settings check finished with %d problem(s) ===", len(problems))
+    else:
+        log.info("=== settings check passed: no problems found ===")
+
+
+KNOWN_SETTINGS = {
+    "triggerTag", "removeTriggerTag", "sources", "javstashApiKey", "requestDelay",
+    "libredmmProcessingWait", "updateReleaseDate", "disableTranslation",
+    "translationEngine", "cloudApiKey", "cloudProjectId", "cloudRegion",
+    "cloudCredentialsFile", "plainTitle", "disableStashUpdate", "disableNfoWrite",
+    "disableNfoBackup", "disableFailedTag", "originalTitleField",
+    "originalDescriptionField",
+}
+
+
 def main() -> None:
     # Only our own logger (shared with jav_nfo_core) goes through the Stash
     # handler; stashapi writes its own lines directly, so a root handler
@@ -814,7 +968,10 @@ def main() -> None:
     cfg = Config(settings, payload.get("args") or {})
     try:
         cfg.validate()
-        Run(stash, cfg).main()
+        if cfg.mode == "check":
+            check_settings(stash, cfg)
+        else:
+            Run(stash, cfg).main()
     except SystemExit as exc:
         if exc.code not in (None, 0):
             log.error("%s", exc.code)
