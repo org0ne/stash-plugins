@@ -1,0 +1,168 @@
+name: JAV NFO Refresh
+description: >
+  Refreshes Japanese-source metadata for tagged scenes from javstash.org,
+  libredmm.com and jav321.com: original title and description into custom
+  fields, optional English translation into title and details, scraped
+  genres as tags, and the same data mirrored into the .nfo sidecar next to
+  the video file.
+url: https://github.com/org0ne/stash-plugins
+version: 1.1.2
+
+exec:
+  - python
+  - "{pluginDir}/jav-nfo-refresh.py"
+interface: raw
+
+tasks:
+  - name: Check settings
+    description: >
+      Log every effective setting and where it comes from, verify the API
+      key, credentials file and trigger tag, and run a one-word test
+      translation through the configured engine. Writes nothing.
+    defaultArgs:
+      mode: check
+  - name: Refresh tagged scenes
+    description: >
+      Look every scene carrying the trigger tag up on the selected sources
+      and write what they return. Scenes a source already refreshed are
+      skipped without a request.
+    defaultArgs:
+      mode: scrape
+  - name: Refresh tagged scenes (dry run)
+    description: Same as above, but only logs what would change. Nothing is written.
+    defaultArgs:
+      mode: scrape
+      dry_run: true
+  - name: Rescrape tagged scenes
+    description: >
+      Query the sources even for scenes they already refreshed, to pick up
+      upstream changes or add genres to older scenes. Existing translations
+      are kept unless the description changed.
+    defaultArgs:
+      mode: scrape
+      rescrape: true
+  - name: Re-translate tagged scenes
+    description: >
+      No lookups. Re-translate title and details from the existing Original
+      Title / Original Description custom fields (or the NFO), e.g. after
+      switching translation engine. Genres are never touched.
+    defaultArgs:
+      mode: translate_only
+      retranslate: true
+  - name: Re-translate tagged scenes (dry run)
+    description: Same as above, but only logs what would change.
+    defaultArgs:
+      mode: translate_only
+      retranslate: true
+      dry_run: true
+
+settings:
+  triggerTag:
+    displayName: Trigger tag
+    description: >
+      Scenes carrying this tag are processed by the tasks. Create the tag in
+      Stash yourself. Default: "JAV NFO Refresh".
+    type: STRING
+  removeTriggerTag:
+    displayName: Remove trigger tag when done
+    description: >
+      Take the trigger tag off each scene once it has been processed
+      (including scenes that turned out to need nothing). Scenes that hit a
+      source error keep it so the next run retries them.
+    type: BOOLEAN
+  sources:
+    displayName: Sources
+    description: >
+      Comma-separated subset of javstash, libredmm, jav321 (or "all").
+      Priority is always javstash > libredmm > jav321: a lower source is
+      only asked when every higher one misses. Default: all.
+    type: STRING
+  javstashApiKey:
+    displayName: javstash API key
+    description: >
+      Leave blank to reuse the key of the javstash stash-box configured
+      under Settings -> Metadata Providers.
+    type: STRING
+  requestDelay:
+    displayName: Request delay (seconds)
+    description: Minimum gap between consecutive requests to each source. Default 1.
+    type: NUMBER
+  libredmmProcessingWait:
+    displayName: libredmm processing wait (seconds)
+    description: >
+      libredmm answers "processing" for codes it has not scraped yet. How
+      long to keep re-polling such a code before counting it as a miss.
+      Blank = 30 when libredmm is the first selected source, 0 otherwise.
+    type: NUMBER
+  updateReleaseDate:
+    displayName: Update release date
+    description: Also write the scraped release date to the scene date and the NFO premiered/releasedate tags.
+    type: BOOLEAN
+  disableTranslation:
+    displayName: Disable translation
+    description: >
+      Skip the English translation step entirely. Genres are only written
+      translated, so this also skips genre tags.
+    type: BOOLEAN
+  translationEngine:
+    displayName: Translation engine
+    description: >
+      deep-translator (free, unofficial, no key), cloud-nmt (Google Cloud
+      Translation v2, API key, 500k chars/month free) or cloud-llm (Google
+      Cloud Translation LLM, service account + project, billed).
+      Default: deep-translator.
+    type: STRING
+  cloudApiKey:
+    displayName: Google Cloud API key
+    description: Only for the cloud-nmt engine.
+    type: STRING
+  cloudProjectId:
+    displayName: Google Cloud project ID
+    description: Only for the cloud-llm engine. Blank = the project_id in the credentials file.
+    type: STRING
+  cloudRegion:
+    displayName: Google Cloud region
+    description: Only for the cloud-llm engine; must not be "global". Default us-central1.
+    type: STRING
+  cloudCredentialsFile:
+    displayName: Google Cloud credentials file
+    description: >
+      Service account JSON key for the cloud-llm engine. Absolute path on
+      the Stash host, or a bare filename for a file placed in this plugin's
+      own folder (key files there are git-ignored). Blank = Application
+      Default Credentials.
+    type: STRING
+  plainTitle:
+    displayName: Plain translated title
+    description: >
+      Write the translated title as-is instead of rebuilding it as
+      "{Performers} - [{Group}] {Title} [{Code}]".
+    type: BOOLEAN
+  disableStashUpdate:
+    displayName: Disable Stash updates
+    description: Only write the NFO sidecar; leave the Stash scene untouched.
+    type: BOOLEAN
+  disableNfoWrite:
+    displayName: Disable NFO writes
+    description: Only update the Stash scene; never read or write the .nfo sidecar.
+    type: BOOLEAN
+  disableNfoBackup:
+    displayName: Disable NFO backup
+    description: >
+      Normally the first write of each .nfo keeps a .nfo.bak copy and the
+      old title is kept in <title_backup>. Turn that off here.
+    type: BOOLEAN
+  disableFailedTag:
+    displayName: Don't tag failures
+    description: >
+      Normally a scene no source could match gets the "Metadata Refresh
+      Failed" tag (and NFO genre) so failures are filterable. Turn that off here.
+    type: BOOLEAN
+  originalTitleField:
+    displayName: Original title custom field
+    description: Custom field that holds the Japanese title. Default "Original Title".
+    type: STRING
+  originalDescriptionField:
+    displayName: Original description custom field
+    description: Custom field that holds the Japanese description. Default "Original Description".
+    type: STRING
