@@ -36,7 +36,7 @@ from stashapi.stashapp import StashInterface
 import jav_nfo_core as core
 
 PLUGIN_ID = "jav-nfo-refresh"
-PLUGIN_VERSION = "1.1.0"
+PLUGIN_VERSION = "1.1.1"
 
 DEFAULT_TRIGGER_TAG = "JAV NFO Refresh"
 DEFAULT_ORIGINAL_TITLE_FIELD = "Original Title"
@@ -255,6 +255,10 @@ def build_translator(cfg: Config) -> Optional[core.BaseTranslator]:
 # One scene = Stash record + optional NFO sidecar
 # ---------------------------------------------------------------------------
 
+class NfoWriteError(Exception):
+    """The .nfo could not be written; nothing was changed in Stash either."""
+
+
 class SceneContext:
     """Everything the per-scene logic needs, plus the pending writes."""
 
@@ -293,6 +297,17 @@ class SceneContext:
             return f"parse_error: {exc}"
         self.root = self.tree.getroot()
         self.nfo_before = self.nfo_snapshot()
+        # Probe write access up front (open for update, touch nothing): a
+        # read-only share would otherwise only surface after the sources
+        # were queried and the translation paid for.
+        try:
+            with open(self.nfo_path, "r+b"):
+                pass
+        except OSError as exc:
+            log.error("%s: %s is not writable (%s) -- skipping scene. Fix the share "
+                      "or turn on 'Disable NFO writes'.", self.label, self.nfo_path.name,
+                      exc.strerror or exc)
+            return f"nfo_not_writable: {exc.strerror or exc}"
         return None
 
     def nfo_snapshot(self) -> bytes:
@@ -505,8 +520,12 @@ class SceneContext:
             log.info("%s: [dry-run] would update %s -- %s", self.label, " + ".join(summary), what)
             return
         if nfo_changed:
-            core.backup_nfo_file(self.nfo_path, self.cfg.backup_mode)
-            core.write_nfo(self.tree, self.nfo_path)
+            try:
+                core.backup_nfo_file(self.nfo_path, self.cfg.backup_mode)
+                core.write_nfo(self.tree, self.nfo_path)
+            except OSError as exc:
+                # Leave Stash alone too, so the two stores don't drift apart.
+                raise NfoWriteError(f"{self.nfo_path.name}: {exc.strerror or exc}") from exc
         if stash_changed:
             payload = {"id": self.scene["id"], **self.update}
             if self.custom_partial:
@@ -767,7 +786,8 @@ class Run:
             return core.ProcessResult("no_file")
         error = ctx.load_nfo()
         if error:
-            return core.ProcessResult("parse_error", detail=error)
+            status = error.split(":", 1)[0]
+            return core.ProcessResult(status, detail=error)
         if self.cfg.mode == "translate_only":
             return process_scene_translate_only(ctx, self)
         result = process_scene_scrape(ctx, self)
@@ -792,6 +812,10 @@ class Run:
             slog.progress(i / len(scenes))
             try:
                 result = self.process(scene)
+            except NfoWriteError as exc:
+                log.error("%s: NFO write failed: %s -- scene left unchanged in Stash too.",
+                          scene_label(scene), exc)
+                result = core.ProcessResult("nfo_write_error", detail=str(exc))
             except Exception as exc:  # one bad scene must not abort the batch
                 log.error("%s: unexpected error: %s\n%s", scene_label(scene), exc,
                           traceback.format_exc())
