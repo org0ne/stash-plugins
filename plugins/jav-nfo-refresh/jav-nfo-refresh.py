@@ -24,6 +24,7 @@ import copy
 import json
 import logging
 import sys
+import time
 import traceback
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -36,7 +37,7 @@ from stashapi.stashapp import StashInterface
 import jav_nfo_core as core
 
 PLUGIN_ID = "jav-nfo-refresh"
-PLUGIN_VERSION = "1.1.1"
+PLUGIN_VERSION = "1.1.2"
 
 DEFAULT_TRIGGER_TAG = "JAV NFO Refresh"
 DEFAULT_ORIGINAL_TITLE_FIELD = "Original Title"
@@ -44,6 +45,10 @@ DEFAULT_ORIGINAL_DESCRIPTION_FIELD = "Original Description"
 # Custom field holding the ISO timestamp of the last title/details
 # translation -- the Stash-side twin of the NFO's <title_translated>.
 TRANSLATED_AT_FIELD = "Translated At"
+# NFO writability probe: attempts and seconds between them (a NAS drive
+# spinning up takes 10-30 s).
+WRITE_PROBE_ATTEMPTS = 4
+WRITE_PROBE_WAIT = 10
 # Used for <stash_ids> when Stash has no javstash stash-box configured.
 JAVSTASH_ENDPOINT_FALLBACK = "https://javstash.org/graphql"
 
@@ -298,16 +303,28 @@ class SceneContext:
         self.root = self.tree.getroot()
         self.nfo_before = self.nfo_snapshot()
         # Probe write access up front (open for update, touch nothing): a
-        # read-only share would otherwise only surface after the sources
-        # were queried and the translation paid for.
-        try:
-            with open(self.nfo_path, "r+b"):
-                pass
-        except OSError as exc:
+        # read-only file would otherwise only surface after the sources
+        # were queried and the translation paid for. A pooled NAS share
+        # answers "read-only file system" for files on a drive that is
+        # still spinning up, so give it a few tries before giving up.
+        error = None
+        for attempt in range(1, WRITE_PROBE_ATTEMPTS + 1):
+            try:
+                with open(self.nfo_path, "r+b"):
+                    pass
+                error = None
+                break
+            except OSError as exc:
+                error = exc.strerror or str(exc)
+                if attempt < WRITE_PROBE_ATTEMPTS:
+                    log.warning("%s: %s is not writable (%s) -- waiting %ds for the drive "
+                                "(attempt %d/%d).", self.label, self.nfo_path.name, error,
+                                WRITE_PROBE_WAIT, attempt, WRITE_PROBE_ATTEMPTS)
+                    time.sleep(WRITE_PROBE_WAIT)
+        if error:
             log.error("%s: %s is not writable (%s) -- skipping scene. Fix the share "
-                      "or turn on 'Disable NFO writes'.", self.label, self.nfo_path.name,
-                      exc.strerror or exc)
-            return f"nfo_not_writable: {exc.strerror or exc}"
+                      "or turn on 'Disable NFO writes'.", self.label, self.nfo_path.name, error)
+            return f"nfo_not_writable: {error}"
         return None
 
     def nfo_snapshot(self) -> bytes:
