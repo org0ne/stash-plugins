@@ -23,6 +23,7 @@ from the standalone jav_nfo_refresh_unified.py CLI.
 import copy
 import json
 import logging
+import re
 import sys
 import time
 import traceback
@@ -37,7 +38,7 @@ from stashapi.stashapp import StashInterface
 import jav_nfo_core as core
 
 PLUGIN_ID = "jav-nfo-refresh"
-PLUGIN_VERSION = "1.2.0"
+PLUGIN_VERSION = "1.3.0"
 
 DEFAULT_TRIGGER_TAG = "JAV NFO Refresh"
 DEFAULT_ORIGINAL_TITLE_FIELD = "Original Title"
@@ -51,6 +52,55 @@ WRITE_PROBE_ATTEMPTS = 4
 WRITE_PROBE_WAIT = 10
 # Used for <stash_ids> when Stash has no javstash stash-box configured.
 JAVSTASH_ENDPOINT_FALLBACK = "https://javstash.org/graphql"
+
+# Outcome tags. Every one is a child of PARENT_TAG; each name says what to
+# do about it. A tag is added when its condition is seen and removed again
+# the next time the condition is checked and found clear.
+PARENT_TAG = "Metadata Refresh"
+MANUAL_TAG = "Metadata Refreshed Manually"   # pre-existing: "do not touch"
+OUTCOME_TAGS = {
+    "no_code": "Refresh: No Studio Code",
+    "not_found": "Refresh: Not Found",
+    "source_error": "Refresh: Source Error",
+    "code_mismatch": "Refresh: Code Mismatch",
+    "alt_match": "Refresh: Alternate Match",
+    "merged": "Refresh: Merged",
+    "no_source_text": "Refresh: No Original Text",
+    "translation_failed": "Refresh: Translation Failed",
+    "genres_incomplete": "Refresh: Genres Incomplete",
+    "no_nfo": "Refresh: No NFO",
+    "nfo_error": "Refresh: NFO Error",
+}
+TAG_DESCRIPTIONS = {
+    PARENT_TAG: "Outcome tags written by the jav-nfo-refresh plugin.",
+    "no_code": "No studio code in the Studio Code field, the NFO tagline or the filename. "
+               "Enter the Studio Code, then re-tag the scene.",
+    "not_found": "Every selected source missed the code. Check the code or variant by hand, "
+                 "or tag the scene 'Metadata Refreshed Manually'.",
+    "source_error": "A source returned errors (outage, rate limit). Nothing to do: the trigger "
+                    "tag is kept and the next run retries.",
+    "code_mismatch": "The Studio Code disagrees with the filename; the Studio Code was used. "
+                     "Decide which is right, fix it, re-tag.",
+    "alt_match": "A source matched a different form of the code (e.g. KTRA-309 for KTRA-309E). "
+                 "Spot-check that it is the same release.",
+    "merged": "A lower-priority source only filled gaps on a scene a higher one refreshed "
+              "earlier. Spot-check the mixed data.",
+    "no_source_text": "Re-translate found no Original Title / Original Description. Run Refresh, "
+                      "or paste the Japanese text into the custom fields.",
+    "translation_failed": "The title or description translation returned nothing; nothing was "
+                          "overwritten. The trigger tag is kept so a re-run retries.",
+    "genres_incomplete": "Some genres could not be translated and were skipped. The trigger tag "
+                         "is kept so a re-run picks them up.",
+    "no_nfo": "No .nfo sidecar next to the file, so only Stash was updated.",
+    "nfo_error": "The .nfo sidecar is unreadable, invalid XML or not writable. Fix the file or "
+                 "the share; the trigger tag is kept.",
+}
+# Children of the existing "Metadata Refresh Failed" tag, which stays the
+# umbrella for "a human has to look at this code".
+FAILED_CHILDREN = ("no_code", "not_found")
+# These keep the trigger tag on the scene so a plain re-run retries it.
+TRANSIENT_FLAGS = {"source_error", "translation_failed", "genres_incomplete", "nfo_error"}
+TRANSIENT_STATUSES = {"api_error", "nfo_not_writable", "nfo_write_error", "parse_error", "error"}
 
 TRANSLATION_ENGINES = {
     "deep-translator": ("deep-translator", "nmt"),
@@ -144,7 +194,7 @@ class Config:
         self.no_backup = not self.nfo_backup
 
     def validate(self) -> None:
-        if self.mode not in ("scrape", "translate_only", "check"):
+        if self.mode not in ("scrape", "translate_only", "check", "reclassify"):
             raise SystemExit(f"Unknown task mode {self.mode!r}.")
         if not self.update_stash and not self.write_nfo:
             raise SystemExit("Both 'Disable Stash updates' and 'Disable NFO writes' are "
@@ -169,25 +219,47 @@ class TagCache:
         self.stash = stash
         self.dry_run = dry_run
         self._ids: Dict[str, str] = {}
-        for tag in stash.find_tags(fragment="id name aliases") or []:
+        self._parents: Dict[str, List[str]] = {}
+        for tag in stash.find_tags(fragment="id name aliases parents { id }") or []:
             self._ids.setdefault(tag["name"].strip().lower(), tag["id"])
+            self._parents[tag["id"]] = [p["id"] for p in tag.get("parents") or []]
             for alias in tag.get("aliases") or []:
                 self._ids.setdefault(alias.strip().lower(), tag["id"])
 
     def get(self, name: str) -> Optional[str]:
         return self._ids.get(name.strip().lower())
 
-    def ensure(self, name: str) -> Optional[str]:
+    def ensure(self, name: str, description: str = "",
+               parent_id: Optional[str] = None) -> Optional[str]:
         tag_id = self.get(name)
         if tag_id or self.dry_run:
             if not tag_id:
                 log.info("[dry-run] would create tag %r", name)
             return tag_id
-        created = self.stash.create_tag({"name": name.strip()})
+        tag_in: Dict[str, Any] = {"name": name.strip()}
+        if description:
+            tag_in["description"] = description
+        if parent_id:
+            tag_in["parent_ids"] = [parent_id]
+        created = self.stash.create_tag(tag_in)
         tag_id = created["id"]
         self._ids[name.strip().lower()] = tag_id
+        self._parents[tag_id] = [parent_id] if parent_id else []
         log.info("created tag %r (id %s)", name, tag_id)
         return tag_id
+
+    def add_parent(self, tag_id: Optional[str], parent_id: Optional[str]) -> None:
+        """Put an existing tag under a parent (keeping any parents it has)."""
+        if not tag_id or not parent_id or tag_id == parent_id:
+            return
+        parents = self._parents.get(tag_id, [])
+        if parent_id in parents:
+            return
+        if self.dry_run:
+            log.info("[dry-run] would nest tag %s under %s", tag_id, parent_id)
+            return
+        self.stash.update_tag({"id": tag_id, "parent_ids": parents + [parent_id]})
+        self._parents[tag_id] = parents + [parent_id]
 
 
 def scene_file_path(scene: Dict[str, Any]) -> Optional[Path]:
@@ -281,6 +353,15 @@ class SceneContext:
         self.tree: Optional[ET.ElementTree] = None
         self.root: Optional[ET.Element] = None
         self.nfo_before: Optional[bytes] = None
+        # Outcome bookkeeping for the tags: a condition that was looked at
+        # goes into `checked`, one that holds goes into `flags` too.
+        self.flags: set = set()
+        self.checked: set = set()
+
+    def check(self, key: str, hit: bool) -> None:
+        self.checked.add(key)
+        if hit:
+            self.flags.add(key)
 
     # -- loading ----------------------------------------------------------
 
@@ -290,15 +371,19 @@ class SceneContext:
         if not self.cfg.write_nfo or self.path is None:
             return None
         self.nfo_path = self.path.with_suffix(".nfo")
-        if not self.nfo_path.exists():
+        exists = self.nfo_path.exists()
+        self.check("no_nfo", not exists)
+        if not exists:
             log.info("%s: no .nfo sidecar at %s -- Stash only.", self.label, self.nfo_path.name)
             self.nfo_path = None
+            self.check("nfo_error", False)
             return None
         try:
             self.tree = ET.parse(self.nfo_path)
         except ET.ParseError as exc:
             log.error("%s: %s is not valid XML (%s) -- skipping scene.",
                       self.label, self.nfo_path.name, exc)
+            self.check("nfo_error", True)
             return f"parse_error: {exc}"
         self.root = self.tree.getroot()
         self.nfo_before = self.nfo_snapshot()
@@ -324,6 +409,7 @@ class SceneContext:
                                 "(attempt %d/%d).", self.label, self.nfo_path.name, error,
                                 WRITE_PROBE_WAIT, attempt, WRITE_PROBE_ATTEMPTS)
                     time.sleep(WRITE_PROBE_WAIT)
+        self.check("nfo_error", bool(error))
         if error:
             self.run.drive_wait_exhausted = True
             log.error("%s: %s is not writable (%s) -- skipping scene. Fix the share "
@@ -363,16 +449,35 @@ class SceneContext:
         if not code and self.root is not None:
             code = core.extract_code_from_nfo(self.root)
         file_code = core.extract_code_from_filename(self.path) if self.path is not None else None
+        mismatch = False
         if not code:
             code = file_code
-        elif file_code and core.code_match_key(file_code) != core.code_match_key(code) \
-                and file_code not in core.acceptable_code_forms(code):
+        elif file_code and not self.filename_agrees(code):
             # Stash's Studio Code wins, but a disagreement with the filename
             # usually means one of them is wrong -- say so.
+            mismatch = True
             log.warning("%s: Studio Code %s disagrees with the filename (%s) -- using %s. "
                         "Fix the Studio Code (or the tagline) if the file is right.",
                         self.label, code, file_code, code)
+        self.check("code_mismatch", mismatch)
+        self.check("no_code", not code)
+        if not code:
+            log.warning("%s: no studio code in Stash, NFO tagline or filename.", self.label)
         return code
+
+    def filename_agrees(self, code: str) -> bool:
+        """True when the filename spells the same release as `code`, in any
+        of the forms the parser knows (before-underscore part, whole stem,
+        alternate forms, or the bare date-number of an uncensored code:
+        "Carib-010823-001" and "010823-001-carib" are the same thing)."""
+        stem = core.PART_SUFFIX_RE.sub("", self.path.stem)
+        bare = core.uncensored_bare_code(code)
+        if bare and bare.replace("_", "-") in stem.replace("_", "-"):
+            return True
+        candidates = {core.extract_code_from_filename(self.path), core.normalize_code(stem)}
+        keys = {core.code_match_key(f) for c in candidates if c for f in core.acceptable_code_forms(c)}
+        accepted = {core.code_match_key(f) for f in core.acceptable_code_forms(code)}
+        return bool(keys & accepted)
 
     def refreshed_by(self) -> List[str]:
         """Sources that already refreshed this scene, judged from BOTH
@@ -486,9 +591,9 @@ class SceneContext:
             core.set_text_insert_after(self.root, "plot", plot, after_tags=["title"])
             core.stamp_translated_marker(self.root)
 
-    def add_tags(self, names: List[str]) -> List[str]:
-        """Attach tags (creating them if needed) and mirror them as NFO
-        genres. Returns the names that were actually new."""
+    def add_tags(self, names: List[str], nfo: bool = True) -> List[str]:
+        """Attach tags (creating them if needed) and, unless nfo=False,
+        mirror them as NFO genres. Returns the names that were actually new."""
         added = []
         for name in names:
             new = False
@@ -498,18 +603,23 @@ class SceneContext:
                 new = True
             elif not tag_id and name.lower() not in self.tag_names:
                 new = True  # dry run: would be created and attached
-            if self.root is not None and core.add_genre(self.root, name, after_tags=core.GENRE_AFTER_TAGS):
+            if nfo and self.root is not None \
+                    and core.add_genre(self.root, name, after_tags=core.GENRE_AFTER_TAGS):
                 new = True
             if new:
                 added.append(name)
         return added
 
-    def remove_tag(self, name: str) -> None:
+    def remove_tag(self, name: str, nfo: bool = True) -> None:
         tag_id = self.run.tags.get(name)
         if tag_id and tag_id in self.tag_ids:
             self.tag_ids.remove(tag_id)
-        if self.root is not None:
+        if nfo and self.root is not None:
             core.remove_genre(self.root, name)
+
+    def has_tag(self, name: str) -> bool:
+        tag_id = self.run.tags.get(name)
+        return bool(tag_id) and tag_id in self.tag_ids
 
     # -- commit -----------------------------------------------------------
 
@@ -527,8 +637,8 @@ class SceneContext:
         """A substantive change (anything except marker/trigger tags)."""
         return bool(self.update or self.custom_partial or self.nfo_changed())
 
-    def finish_trigger_tag(self) -> None:
-        if self.cfg.remove_trigger_tag:
+    def finish_trigger_tag(self, keep: bool) -> None:
+        if self.cfg.remove_trigger_tag and not keep:
             tag_id = self.run.trigger_tag_id
             if tag_id in self.tag_ids:
                 self.tag_ids.remove(tag_id)
@@ -587,25 +697,27 @@ def pick_field(field: str, data: Dict[str, core.SourceData], protected: List[str
 
 
 def translate_genre_names(translator: core.BaseTranslator, genres_jp: List[str],
-                          label: str) -> List[str]:
+                          label: str) -> Tuple[List[str], int]:
+    """Translated, de-duplicated genre names plus how many failed."""
     wanted = [g.strip() for g in genres_jp if g and g.strip() and g.strip() not in core.GENRE_SKIP]
     translations = core.translate_genres(translator, wanted)
-    names = []
+    names, failed = [], 0
     for genre_jp in wanted:
         translated = translations.get(genre_jp)
         if translated is None:
+            failed += 1
             log.warning("%s: genre translation failed for %r -- skipping that genre.", label, genre_jp)
         elif translated not in names:
             names.append(translated)
-    return names
+    return names, failed
 
 
-def process_scene_scrape(ctx: SceneContext, run: "Run") -> core.ProcessResult:
+def process_scene_scrape(ctx: SceneContext, run: "Run") -> Tuple[core.ProcessResult, str]:
+    """Returns (result, description of what changed); nothing is committed here."""
     cfg = ctx.cfg
     code = ctx.code()
     if not code:
-        log.warning("%s: no studio code in Stash, NFO tagline or filename -- skipping.", ctx.label)
-        return core.ProcessResult("no_code", detail="no recognizable studio code")
+        return core.ProcessResult("no_code", detail="no recognizable studio code"), ""
 
     refreshed_by = ctx.refreshed_by()
     data: Dict[str, core.SourceData] = {}
@@ -636,13 +748,28 @@ def process_scene_scrape(ctx: SceneContext, run: "Run") -> core.ProcessResult:
         if stopped_at is not None:
             log.info("%s: already refreshed from %s -- nothing new (use the Rescrape task "
                      "to re-query).", ctx.label, stopped_at)
-            return core.ProcessResult("already_refreshed", code=code, outcomes=outcomes)
-        status = "api_error" if "error" in outcomes.values() else "no_match"
-        return core.ProcessResult(status, code=code, detail="; ".join(miss_details), outcomes=outcomes)
+            return core.ProcessResult("already_refreshed", code=code, outcomes=outcomes), ""
+        errored = "error" in outcomes.values()
+        ctx.check("source_error", errored)
+        ctx.check("not_found", not errored)
+        status = "api_error" if errored else "no_match"
+        return (core.ProcessResult(status, code=code, detail="; ".join(miss_details),
+                                   outcomes=outcomes), "")
 
+    ctx.check("source_error", False)
+    ctx.check("not_found", False)
     winner = next(iter(data.values()))
     protected = [s for s in core.SOURCE_PRIORITY[:core.SOURCE_PRIORITY.index(winner.source)]
                  if s in refreshed_by]
+    ctx.check("merged", bool(protected))
+    matched = core.normalize_scene_code(winner.matched_code or "")
+    ctx.check("alt_match", bool(matched) and core.code_match_key(matched) != core.code_match_key(code))
+    if "alt_match" in ctx.flags:
+        log.info("%s: %s filed this release under %s (asked for %s) -- tagging for a spot-check.",
+                 ctx.label, winner.source, matched, code)
+    if protected:
+        log.info("%s: %s only fills gaps -- %s refreshed this scene earlier.",
+                 ctx.label, winner.source, protected)
 
     js = data.get(core.SOURCE_JAVSTASH)
     if js and js.id:
@@ -678,8 +805,9 @@ def process_scene_scrape(ctx: SceneContext, run: "Run") -> core.ProcessResult:
 
     if run.translator:
         full_retranslate = cfg.retranslate or not ctx.was_translated()
+        failed = False
         if full_retranslate and title_jp:
-            translate_title(ctx, code, title_jp, run.translator)
+            failed |= not translate_title(ctx, code, title_jp, run.translator)
         if details_jp and (full_retranslate or plot_is_new):
             if plot_is_new and not full_retranslate:
                 log.info("%s: new description from %s -- translating it although the "
@@ -688,12 +816,16 @@ def process_scene_scrape(ctx: SceneContext, run: "Run") -> core.ProcessResult:
             if translated_plot:
                 ctx.set_translated_plot(translated_plot)
             else:
+                failed = True
                 log.warning("%s: description translation failed -- details left untouched.", ctx.label)
+        if (full_retranslate and title_jp) or (details_jp and (full_retranslate or plot_is_new)):
+            ctx.check("translation_failed", failed)
         if not full_retranslate:
             log.info("%s: already translated -- leaving the title%s alone; genres still refreshed.",
                      ctx.label, "" if plot_is_new else "/details")
         if winner.genres:
-            names = translate_genre_names(run.translator, winner.genres, ctx.label)
+            names, genre_failures = translate_genre_names(run.translator, winner.genres, ctx.label)
+            ctx.check("genres_incomplete", genre_failures > 0)
             added = ctx.add_tags(names)
             if added:
                 log.info("%s: adding genre tag(s) %s", ctx.label, added)
@@ -701,20 +833,16 @@ def process_scene_scrape(ctx: SceneContext, run: "Run") -> core.ProcessResult:
     if not ctx.data_changed():
         if any(sd.has_any_data() for sd in data.values()):
             log.info("%s: %s returned nothing the scene didn't already have.", ctx.label, sorted(data))
-            ctx.finish_trigger_tag()
-            ctx.commit("trigger tag only")
-            return core.ProcessResult("unchanged", code=code, outcomes=outcomes)
-        ctx.finish_trigger_tag()
-        ctx.commit("trigger tag only")
-        return core.ProcessResult("no_changes", code=code, outcomes=outcomes,
-                                  detail=f"matched on {sorted(data)} but returned no usable fields")
+            return core.ProcessResult("unchanged", code=code, outcomes=outcomes), "tags only"
+        return (core.ProcessResult("no_changes", code=code, outcomes=outcomes,
+                                   detail=f"matched on {sorted(data)} but returned no usable fields"),
+                "tags only")
 
     ctx.add_tags([core.REFRESHED_GENRES[s] for s in list(data) + refreshed_by])
-    ctx.remove_tag(core.FAILED_GENRE)
-    ctx.finish_trigger_tag()
     ids = ", ".join(f"{s}={sd.id}" for s, sd in data.items())
-    ctx.commit(f"from {sorted(data)} (code={code}, {ids})")
-    return core.ProcessResult("would_update" if cfg.dry_run else "updated", code=code, outcomes=outcomes)
+    return (core.ProcessResult("would_update" if cfg.dry_run else "updated", code=code,
+                               outcomes=outcomes),
+            f"from {sorted(data)} (code={code}, {ids})")
 
 
 def translate_title(ctx: SceneContext, code: str, title_jp: str,
@@ -734,51 +862,43 @@ def translate_title(ctx: SceneContext, code: str, title_jp: str,
     return True
 
 
-def process_scene_translate_only(ctx: SceneContext, run: "Run") -> core.ProcessResult:
+def process_scene_translate_only(ctx: SceneContext, run: "Run") -> Tuple[core.ProcessResult, str]:
     cfg = ctx.cfg
     if not cfg.retranslate and ctx.was_translated():
         log.info("%s: already translated -- skipping.", ctx.label)
-        ctx.finish_trigger_tag()
-        ctx.commit("trigger tag only")
-        return core.ProcessResult("already_translated")
+        return core.ProcessResult("already_translated"), "tags only"
 
     title_jp = ctx.existing_original_title()
     details_jp = ctx.existing_original_description()
+    ctx.check("no_source_text", not title_jp and not details_jp)
     if not title_jp and not details_jp:
         log.warning("%s: no Original Title / Original Description to translate -- skipping.", ctx.label)
-        return core.ProcessResult("no_source_text", detail="nothing to translate")
+        return core.ProcessResult("no_source_text", detail="nothing to translate"), ""
 
     code = ctx.code()
     if not code:
-        log.warning("%s: no studio code -- needed for the [Code] slot in the title.", ctx.label)
-        return core.ProcessResult("no_code", detail="no recognizable studio code")
+        return core.ProcessResult("no_code", detail="no recognizable studio code"), ""
 
-    changed = False
-    if title_jp and translate_title(ctx, code, title_jp, run.translator):
-        changed = True
+    changed = failed = False
+    if title_jp:
+        if translate_title(ctx, code, title_jp, run.translator):
+            changed = True
+        else:
+            failed = True
     if details_jp:
         translated_plot = run.translator.translate_ja_to_en(details_jp)
         if translated_plot:
             ctx.set_translated_plot(translated_plot)
             changed = True
         else:
+            failed = True
             log.warning("%s: description translation failed -- details left untouched.", ctx.label)
+    ctx.check("translation_failed", failed)
     if not changed:
-        return core.ProcessResult("no_changes", code=code,
-                                  detail="translation failed for all available source text")
-    ctx.finish_trigger_tag()
-    ctx.commit(f"re-translated (code={code})")
-    return core.ProcessResult("would_update" if cfg.dry_run else "updated", code=code)
-
-
-def mark_failed(ctx: SceneContext) -> bool:
-    """Tag a scene no source could match so failures are filterable. The
-    only thing written to such a scene; cleared by any later success."""
-    added = ctx.add_tags([core.FAILED_GENRE])
-    if not added:
-        return False
-    ctx.commit(f"tagged '{core.FAILED_GENRE}'")
-    return not ctx.cfg.dry_run
+        return (core.ProcessResult("no_changes", code=code,
+                                   detail="translation failed for all available source text"), "")
+    return (core.ProcessResult("would_update" if cfg.dry_run else "updated", code=code),
+            f"re-translated (code={code})")
 
 
 # ---------------------------------------------------------------------------
@@ -795,15 +915,51 @@ class Run:
         self.javstash_endpoint, api_key = javstash_endpoint_and_key(stash, cfg)
         self.tags = TagCache(stash, cfg.dry_run)
         self.trigger_tag_id = self.tags.get(cfg.trigger_tag)
-        self.translator = build_translator(cfg)
+        self.translator = build_translator(cfg) if cfg.mode != "reclassify" else None
         self.clients = build_clients(cfg, api_key) if cfg.mode == "scrape" else {}
 
-    def tagged_scenes(self) -> List[Dict[str, Any]]:
-        if not self.trigger_tag_id:
+    # -- tags -------------------------------------------------------------
+
+    def ensure_tag_tree(self) -> None:
+        """Create the outcome tags (with their action text) and nest every
+        plugin tag under PARENT_TAG; the two code failures also go under
+        the pre-existing 'Metadata Refresh Failed'."""
+        parent = self.tags.ensure(PARENT_TAG, TAG_DESCRIPTIONS[PARENT_TAG])
+        failed = self.tags.ensure(core.FAILED_GENRE, "", parent)
+        self.tags.add_parent(failed, parent)
+        for name in (MANUAL_TAG, *core.REFRESHED_GENRES.values()):
+            self.tags.add_parent(self.tags.get(name), parent)
+        for key, name in OUTCOME_TAGS.items():
+            under = failed if key in FAILED_CHILDREN else parent
+            tag_id = self.tags.ensure(name, TAG_DESCRIPTIONS[key], under)
+            self.tags.add_parent(tag_id, under)
+
+    def reconcile_tags(self, ctx: SceneContext, result: core.ProcessResult) -> None:
+        """Apply the outcome flags: add a tag whose condition held, remove
+        one whose condition was checked and found clear, keep the rest."""
+        for key, name in OUTCOME_TAGS.items():
+            if key in ctx.flags:
+                ctx.add_tags([name], nfo=False)
+            elif key in ctx.checked:
+                ctx.remove_tag(name, nfo=False)
+        # The umbrella failure tag (also an NFO genre, as the CLI wrote it).
+        code_failed = bool(ctx.flags & set(FAILED_CHILDREN))
+        if code_failed and self.cfg.mark_failed:
+            ctx.add_tags([core.FAILED_GENRE])
+        elif "not_found" in ctx.checked and not code_failed:
+            ctx.remove_tag(core.FAILED_GENRE)
+        keep = bool(ctx.flags & TRANSIENT_FLAGS) or result.status in TRANSIENT_STATUSES
+        ctx.finish_trigger_tag(keep=keep)
+
+    # -- scenes -----------------------------------------------------------
+
+    def tagged_scenes(self, tag_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        tag_id = tag_id or self.trigger_tag_id
+        if not tag_id:
             raise SystemExit(f"Trigger tag {self.cfg.trigger_tag!r} does not exist in Stash -- "
                              "create it and tag the scenes to process.")
         scenes = self.stash.find_scenes(
-            f={"tags": {"value": [self.trigger_tag_id], "modifier": "INCLUDES", "depth": 0}},
+            f={"tags": {"value": [tag_id], "modifier": "INCLUDES", "depth": 0}},
             fragment=SCENE_FRAGMENT,
         ) or []
         scenes.sort(key=lambda s: str(scene_file_path(s) or ""))
@@ -814,16 +970,21 @@ class Run:
         if ctx.path is None:
             log.warning("%s: has no file -- skipping.", ctx.label)
             return core.ProcessResult("no_file")
+        if ctx.has_tag(MANUAL_TAG):
+            log.info("%s: tagged %r -- leaving it alone.", ctx.label, MANUAL_TAG)
+            ctx.finish_trigger_tag(keep=False)
+            ctx.commit("manual, trigger tag only")
+            return core.ProcessResult("manual")
         error = ctx.load_nfo()
         if error:
-            status = error.split(":", 1)[0]
-            return core.ProcessResult(status, detail=error)
-        if self.cfg.mode == "translate_only":
-            return process_scene_translate_only(ctx, self)
-        result = process_scene_scrape(ctx, self)
-        if self.cfg.mark_failed and result.status in core.NOT_FOUND_STATUSES:
-            if mark_failed(ctx):
-                self.counts["marked_failed"] = self.counts.get("marked_failed", 0) + 1
+            result = core.ProcessResult(error.split(":", 1)[0], detail=error)
+            what = "tags only"
+        elif self.cfg.mode == "translate_only":
+            result, what = process_scene_translate_only(ctx, self)
+        else:
+            result, what = process_scene_scrape(ctx, self)
+        self.reconcile_tags(ctx, result)
+        ctx.commit(what or "tags only")
         return result
 
     def main(self) -> None:
@@ -838,6 +999,8 @@ class Run:
                  self.cfg.mode, " (dry run)" if self.cfg.dry_run else "", self.cfg.sources,
                  translate_desc,
                  "on" if self.cfg.update_stash else "off", "on" if self.cfg.write_nfo else "off")
+        if scenes and self.cfg.update_stash:
+            self.ensure_tag_tree()
         for i, scene in enumerate(scenes):
             slog.progress(i / len(scenes))
             try:
@@ -854,6 +1017,104 @@ class Run:
             for source, outcome in (result.outcomes or {}).items():
                 key = f"{source}_{outcome}"
                 self.counts[key] = self.counts.get(key, 0) + 1
+        slog.progress(1.0)
+        summary = ", ".join(f"{k}={v}" for k, v in sorted(self.counts.items())) or "nothing to do"
+        log.info("done: %s", summary)
+
+    # -- "Reclassify failures" task ---------------------------------------
+
+    LOG_LINE_RE = re.compile(r'^time="([^"]+)" level=\w+ msg="\[Plugin / [^\]]+\] scene (\d+) \(([^)]*)\): (.*)"$')
+
+    def read_log_outcomes(self) -> Dict[str, str]:
+        """Latest per-scene outcome recoverable from the Stash log: the
+        lines of each scene's most recent run, classified."""
+        log_file = None
+        try:
+            log_file = ((self.stash.get_configuration() or {}).get("general") or {}).get("logFile")
+        except Exception:
+            pass
+        if not log_file or not Path(log_file).is_file():
+            log.warning("Stash log file not found (%r) -- classifying from local data only.", log_file)
+            return {}
+        lines: Dict[str, List[Tuple[str, str]]] = {}
+        with open(log_file, encoding="utf-8", errors="replace") as f:
+            for raw in f:
+                m = self.LOG_LINE_RE.match(raw.rstrip("\n"))
+                if m:
+                    lines.setdefault(m.group(2), []).append((m.group(1), m.group(4)))
+        # Only lines a scrape run writes count; a later re-translate run
+        # says nothing about whether the sources know the code.
+        scrape_patterns = ("-- from [", "already refreshed from", "lookup failed",
+                           "no studio code in Stash", " match for ")
+
+        def stamp_of(s: str) -> float:
+            try:
+                return datetime.strptime(s, "%Y-%m-%d %H:%M:%S").timestamp()
+            except ValueError:
+                return 0.0
+
+        outcomes: Dict[str, str] = {}
+        for scene_id, entries in lines.items():
+            scrape_lines = [(stamp_of(s), text) for s, text in entries
+                            if any(p in text for p in scrape_patterns)]
+            if not scrape_lines:
+                continue
+            newest = scrape_lines[-1][0]
+            block = "\n".join(text for ts, text in scrape_lines if ts >= newest - 600)
+            if "-- from [" in block or "already refreshed from" in block:
+                outcomes[scene_id] = "ok"
+            elif "lookup failed" in block:
+                outcomes[scene_id] = "source_error"
+            elif "no studio code in Stash" in block:
+                outcomes[scene_id] = "no_code"
+            else:
+                outcomes[scene_id] = "not_found"
+        log.info("read %d scene(s) with outcomes from %s", len(outcomes), log_file)
+        return outcomes
+
+    def reclassify(self) -> None:
+        failed_id = self.tags.get(core.FAILED_GENRE)
+        if not failed_id:
+            raise SystemExit(f"Tag {core.FAILED_GENRE!r} does not exist -- nothing to reclassify.")
+        scenes = self.tagged_scenes(failed_id)
+        log.info("%s v%s: reclassifying %d scene(s) tagged %r%s", PLUGIN_ID, PLUGIN_VERSION,
+                 len(scenes), core.FAILED_GENRE, " (dry run)" if self.cfg.dry_run else "")
+        self.ensure_tag_tree()
+        from_log = self.read_log_outcomes()
+        for i, scene in enumerate(scenes):
+            slog.progress(i / len(scenes))
+            ctx = SceneContext(scene, self.cfg, self)
+            try:
+                error = ctx.load_nfo() if ctx.path else None
+                outcome = from_log.get(str(scene["id"]))
+                # Local evidence beats an old log line for the code itself.
+                if ctx.path and ctx.code() is None:
+                    outcome = "no_code"
+                elif outcome == "no_code":
+                    outcome = "not_found"   # has a code now; the sources still missed it
+                if outcome == "no_code":
+                    ctx.add_tags([OUTCOME_TAGS["no_code"]], nfo=False)
+                    ctx.remove_tag(OUTCOME_TAGS["not_found"], nfo=False)
+                elif outcome == "not_found":
+                    ctx.add_tags([OUTCOME_TAGS["not_found"]], nfo=False)
+                elif outcome == "source_error":
+                    ctx.add_tags([OUTCOME_TAGS["source_error"]], nfo=False)
+                    ctx.remove_tag(core.FAILED_GENRE)
+                elif outcome == "ok":
+                    ctx.remove_tag(core.FAILED_GENRE)   # a later run succeeded; stale tag
+                    outcome = "succeeded_later"
+                else:
+                    outcome = "unclassified"
+                if error:
+                    ctx.add_tags([OUTCOME_TAGS["nfo_error"]], nfo=False)
+                ctx.commit(f"reclassified as {outcome}")
+            except NfoWriteError as exc:
+                log.error("%s: NFO write failed: %s", ctx.label, exc)
+                outcome = "nfo_write_error"
+            except Exception as exc:
+                log.error("%s: unexpected error: %s\n%s", ctx.label, exc, traceback.format_exc())
+                outcome = "error"
+            self.counts[outcome] = self.counts.get(outcome, 0) + 1
         slog.progress(1.0)
         summary = ", ".join(f"{k}={v}" for k, v in sorted(self.counts.items())) or "nothing to do"
         log.info("done: %s", summary)
@@ -1024,6 +1285,8 @@ def main() -> None:
         cfg.validate()
         if cfg.mode == "check":
             check_settings(stash, cfg)
+        elif cfg.mode == "reclassify":
+            Run(stash, cfg).reclassify()
         else:
             Run(stash, cfg).main()
     except SystemExit as exc:

@@ -6,7 +6,7 @@ description: >
   genres as tags, and the same data mirrored into the .nfo sidecar next to
   the video file.
 url: https://github.com/org0ne/stash-plugins
-version: 1.2.0
+version: 1.3.0
 
 exec:
   - python
@@ -54,6 +54,20 @@ tasks:
     defaultArgs:
       mode: translate_only
       retranslate: true
+      dry_run: true
+  - name: Reclassify failures
+    description: >
+      One-time cleanup for scenes tagged "Metadata Refresh Failed" before
+      the outcome tags existed: reads each scene's last outcome from the
+      Stash log and adds "Refresh: No Studio Code", "Refresh: Not Found" or
+      "Refresh: Source Error" (the last one also drops the Failed tag).
+      No lookups, no translation.
+    defaultArgs:
+      mode: reclassify
+  - name: Reclassify failures (dry run)
+    description: Same as above, but only logs what would change.
+    defaultArgs:
+      mode: reclassify
       dry_run: true
 
 settings:

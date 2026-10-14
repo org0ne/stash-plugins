@@ -48,6 +48,7 @@ tasks under Settings → Tasks → Plugin Tasks:
 | Rescrape tagged scenes | Query the sources even for already-refreshed scenes. Existing translations are kept unless the description changed. |
 | Re-translate tagged scenes | No lookups. Re-translate title and details from the existing `Original Title` / `Original Description` (or the NFO). Genres untouched. |
 | Re-translate tagged scenes (dry run) | Same, but only logs. |
+| Reclassify failures | One-time: sort scenes tagged `Metadata Refresh Failed` before the outcome tags existed into No Studio Code / Not Found / Source Error, from the Stash log. |
 
 Progress and per-scene outcomes go to the Stash log (Settings → Logs,
 level Info or lower). Every run starts with a header line stating the
@@ -74,6 +75,37 @@ logged at Error level.
   keep their title and details; a *new* description is still translated.
 - **Failures**: a scene no source could match gets the `Metadata Refresh
   Failed` tag (and NFO genre), cleared by any later success.
+- **Manual override**: a scene tagged `Metadata Refreshed Manually` is
+  never touched.
+
+### Outcome tags
+
+Every run leaves its outcome on the scene as tags, all nested under a
+`Metadata Refresh` parent so one filter catches them. Each tag's name says
+what to do about it; the same text is stored as the tag's description.
+
+| Tag | Set when | What you do |
+| --- | --- | --- |
+| Refresh: No Studio Code | no code in Stash, tagline or filename | Enter the Studio Code, re-tag |
+| Refresh: Not Found | every source missed the code | Check the code by hand, or tag `Metadata Refreshed Manually` |
+| Refresh: Source Error | a source returned errors (outage, rate limit) | Nothing; the trigger tag stays and the next run retries |
+| Refresh: Code Mismatch | Studio Code disagrees with the filename | Decide which is right, fix, re-tag |
+| Refresh: Alternate Match | a source matched another form of the code | Spot-check it is the same release |
+| Refresh: Merged | a lower source only filled gaps on a scene a higher one owned | Spot-check the mixed data |
+| Refresh: No Original Text | re-translate found no Japanese text | Run Refresh, or fill the custom fields |
+| Refresh: Translation Failed | title/description translation returned nothing | Re-run; nothing was overwritten |
+| Refresh: Genres Incomplete | some genres were skipped | Rescrape later |
+| Refresh: No NFO | no sidecar next to the file | Generate one if you want it |
+| Refresh: NFO Error | sidecar unreadable, invalid or not writable | Fix the file or the share |
+
+A tag is removed automatically the next time its condition is checked and
+found clear. Source Error, Translation Failed, Genres Incomplete and NFO
+Error keep the trigger tag on the scene so a plain re-run retries it; the
+others drop it (when "Remove trigger tag when done" is on) so the queue
+drains to scenes that need a person. `Metadata Refresh Failed` stays as
+the umbrella parent of No Studio Code and Not Found, and is no longer
+applied on source errors. The one-time **Reclassify failures** task sorts
+scenes tagged Failed before these tags existed, using the Stash log.
 
 When a lower-priority source wins a scene a higher one refreshed earlier,
 the existing data is protected: the winner only fills missing fields and

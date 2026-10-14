@@ -138,6 +138,8 @@ query SearchScene($term: String!, $limit: Int) {
 UNCENSORED_CODE_PATTERNS: Dict[str, "re.Pattern[str]"] = {
     "1pon": re.compile(r"\d{6}_\d{2,4}-1pon(?![A-Za-z0-9])", re.IGNORECASE),
     "carib": re.compile(r"\d{6}-\d{2,4}-carib(?![A-Za-z0-9])", re.IGNORECASE),
+    # Caribbeancom Premium files come with either separator.
+    "caribpr": re.compile(r"\d{6}[-_]\d{2,4}-caribpr(?![A-Za-z0-9])", re.IGNORECASE),
 }
 
 log = logging.getLogger("jav-nfo-refresh")
@@ -405,6 +407,7 @@ class SourceData(NamedTuple):
     director: Optional[str]
     urls: List[str]
     genres: List[str]                # raw Japanese (javstash tags / libredmm + jav321 genres)
+    matched_code: Optional[str] = None  # the code the source filed the release under
 
     def has_any_data(self) -> bool:
         return any([self.title, self.details, self.release_date,
@@ -564,6 +567,7 @@ def fetch_javstash(client: JavstashClient, code: str,
         director=(scene.get("director") or "").strip() or None,
         urls=[u.get("url") for u in (scene.get("urls") or []) if u.get("url")],
         genres=genres,
+        matched_code=(scene.get("code") or "").strip() or None,
     ), None
 
 
@@ -760,6 +764,7 @@ def fetch_libredmm(client: LibredmmClient, code: str,
         director=", ".join(d.strip() for d in (movie.get("directors") or []) if d and d.strip()) or None,
         urls=urls,
         genres=[g for g in (movie.get("genres") or []) if g],
+        matched_code=(movie.get("normalized_id") or "").strip() or None,
     ), None
 
 
@@ -1002,6 +1007,7 @@ def fetch_jav321(client: Jav321Client, code: str,
         director=info.get("director") or None,
         urls=[client.video_page_url(video_id)],
         genres=[g for g in info.get("genres") or [] if g],
+        matched_code=(info.get("code") or "").strip() or None,
     ), None
 
 
