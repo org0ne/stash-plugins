@@ -1070,7 +1070,11 @@ class DeepTranslatorBackend(BaseTranslator):
     a single file's title + plot + genres can easily burst past, so calls
     are spaced by MIN_INTERVAL."""
 
-    MIN_INTERVAL = 0.3  # seconds
+    MIN_INTERVAL = 0.5  # seconds
+    # Google's free endpoint also throttles by volume, not just rate: on a
+    # "too many requests" answer, wait and retry a few times before giving
+    # the field up.
+    BACKOFF_SECONDS = (15, 45, 90)
 
     def __init__(self):
         self._last_call: Optional[float] = None
@@ -1089,14 +1093,22 @@ class DeepTranslatorBackend(BaseTranslator):
         self._translator = GoogleTranslator(source="ja", target="en")
 
     def _translate_single(self, text: str) -> str:
-        if self._last_call is not None:
-            remaining = self.MIN_INTERVAL - (time.monotonic() - self._last_call)
-            if remaining > 0:
-                time.sleep(remaining)
-        try:
-            return self._translator.translate(text)
-        finally:
-            self._last_call = time.monotonic()
+        for attempt, backoff in enumerate((*self.BACKOFF_SECONDS, None)):
+            if self._last_call is not None:
+                remaining = self.MIN_INTERVAL - (time.monotonic() - self._last_call)
+                if remaining > 0:
+                    time.sleep(remaining)
+            try:
+                return self._translator.translate(text)
+            except Exception as exc:
+                if backoff is None or "too many requests" not in str(exc).lower():
+                    raise
+                log.warning("deep-translator rate limited (attempt %d/%d) -- waiting %ds.",
+                            attempt + 1, len(self.BACKOFF_SECONDS) + 1, backoff)
+                time.sleep(backoff)
+            finally:
+                self._last_call = time.monotonic()
+        raise RuntimeError("unreachable")
 
 
 class CloudTranslationBackend(BaseTranslator):
