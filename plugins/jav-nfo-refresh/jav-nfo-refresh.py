@@ -38,7 +38,7 @@ from stashapi.stashapp import StashInterface
 import jav_nfo_core as core
 
 PLUGIN_ID = "jav-nfo-refresh"
-PLUGIN_VERSION = "1.3.2"
+PLUGIN_VERSION = "1.4.0"
 
 DEFAULT_TRIGGER_TAG = "JAV NFO Refresh"
 DEFAULT_ORIGINAL_TITLE_FIELD = "Original Title"
@@ -117,6 +117,7 @@ TRANSLATION_ENGINES = {
 
 SCENE_FRAGMENT = """
     id title code details date director urls custom_fields
+    studio { name }
     tags { id name }
     performers { name }
     stash_ids { endpoint stash_id }
@@ -189,6 +190,8 @@ class Config:
         self.original_title_field = text("originalTitleField", DEFAULT_ORIGINAL_TITLE_FIELD)
         self.original_description_field = text("originalDescriptionField",
                                                DEFAULT_ORIGINAL_DESCRIPTION_FIELD)
+        self.nfo_sync_skip_prefixes = [s.strip().lower() for s in
+                                       text("nfoSyncSkipTagPrefixes").split(",") if s.strip()]
 
         self.mode = (args.get("mode") or "scrape").strip().lower()
         self.dry_run = bool(args.get("dry_run"))
@@ -201,7 +204,7 @@ class Config:
         self.no_backup = not self.nfo_backup
 
     def validate(self) -> None:
-        if self.mode not in ("scrape", "translate_only", "check", "reclassify"):
+        if self.mode not in ("scrape", "translate_only", "check", "reclassify", "nfo_sync"):
             raise SystemExit(f"Unknown task mode {self.mode!r}.")
         if not self.update_stash and not self.write_nfo:
             raise SystemExit("Both 'Disable Stash updates' and 'Disable NFO writes' are "
@@ -212,6 +215,8 @@ class Config:
         if self.mode == "translate_only" and not self.translate:
             raise SystemExit("The re-translate task needs translation, but 'Disable "
                              "translation' is on.")
+        if self.mode == "nfo_sync" and not self.write_nfo:
+            raise SystemExit("The NFO sync task writes sidecars, but 'Disable NFO writes' is on.")
 
 
 # ---------------------------------------------------------------------------
@@ -603,6 +608,31 @@ class SceneContext:
             core.set_text_insert_after(self.root, "plot", plot, after_tags=["title"])
             core.stamp_translated_marker(self.root)
 
+    def set_nfo_text(self, tag: str, value: Optional[str], after_tags: List[str]) -> None:
+        """NFO-only write of a plain text element; empty values never blank
+        out what the file already has."""
+        if self.root is not None and value and value.strip():
+            core.set_text_insert_after(self.root, tag, value.strip(), after_tags=after_tags)
+
+    def add_nfo_actors(self, names: List[str]) -> List[str]:
+        """Append <actor> entries for performers the NFO doesn't list yet."""
+        if self.root is None:
+            return []
+        have = {n.lower() for n in core.get_actor_names(self.root)}
+        added = []
+        for name in names:
+            if not name or name.lower() in have:
+                continue
+            actor = ET.Element("actor")
+            ET.SubElement(actor, "name").text = name
+            ET.SubElement(actor, "type").text = "Actor"
+            existing = self.root.findall("actor")
+            idx = list(self.root).index(existing[-1]) + 1 if existing else len(self.root)
+            self.root.insert(idx, actor)
+            have.add(name.lower())
+            added.append(name)
+        return added
+
     def add_tags(self, names: List[str], nfo: bool = True) -> List[str]:
         """Attach tags (creating them if needed) and, unless nfo=False,
         mirror them as NFO genres. Returns the names that were actually new."""
@@ -916,6 +946,73 @@ def process_scene_translate_only(ctx: SceneContext, run: "Run") -> Tuple[core.Pr
             f"re-translated (code={code})")
 
 
+def sync_stash_to_nfo(ctx: SceneContext, run: "Run") -> Tuple[core.ProcessResult, str]:
+    """Stash is the source of truth for a manually curated scene: copy its
+    metadata into the sidecar. Adds, never removes (genres, actors, URLs
+    are merged); empty Stash fields leave the NFO alone."""
+    if ctx.root is None:
+        log.warning("%s: no .nfo sidecar to sync into.", ctx.label)
+        return core.ProcessResult("no_nfo"), "tags only"
+    sc = ctx.scene
+    custom = ctx.custom
+    scalars = ("title", "plot", "originaltitle", "original_plot", "tagline", "premiered",
+               "releasedate", "director", "studio", "stashid")
+    before = {tag: ctx.nfo_text(tag) for tag in scalars}
+    before_urls = [el.text for el in ctx.root.findall("URL") if el.text]
+    ctx.set_nfo_text("title", sc.get("title"), after_tags=[])
+    ctx.set_nfo_text("plot", sc.get("details"), after_tags=["title"])
+    ctx.set_nfo_text("originaltitle", custom.get(ctx.cfg.original_title_field), after_tags=["title"])
+    ctx.set_nfo_text("original_plot", custom.get(ctx.cfg.original_description_field),
+                     after_tags=["plot", "originaltitle"])
+    ctx.set_nfo_text("tagline", sc.get("code"), after_tags=["runtime", "director", "year", "plot"])
+    if sc.get("date"):
+        ctx.set_nfo_text("premiered", sc["date"], after_tags=["original_plot", "plot", "originaltitle"])
+        ctx.set_nfo_text("releasedate", sc["date"], after_tags=["premiered"])
+    ctx.set_nfo_text("director", sc.get("director"), after_tags=["releasedate", "premiered"])
+    ctx.set_nfo_text("studio", (sc.get("studio") or {}).get("name"), after_tags=["genre", "URL", "tagline"])
+    for sid in sc.get("stash_ids") or []:
+        if sid.get("endpoint") == run.javstash_endpoint and sid.get("stash_id"):
+            core.set_attributed_tag_insert_after(
+                ctx.root, "stashid", {"endpoint": core.JAVSTASH_ENDPOINT_NAME}, sid["stash_id"],
+                after_tags=["tagline", "id", "datasource"])
+    urls = list(sc.get("urls") or [])
+    if urls:
+        have = [el.text for el in ctx.root.findall("URL") if el.text]
+        merged = have + [u for u in urls if u not in have]
+        if merged != have:
+            core.set_repeated_tag(ctx.root, "URL", merged,
+                                  after_tags=["stashid", "tagline", "id", "datasource"])
+    skip = {ctx.cfg.trigger_tag.lower(), PARENT_TAG.lower(), SOURCE_PARENT_TAG.lower(),
+            core.FAILED_GENRE.lower()} | {n.lower() for n in OUTCOME_TAGS.values()}
+    genres = []
+    for tag in sc.get("tags") or []:
+        name = (tag.get("name") or "").strip()
+        low = name.lower()
+        if not name or low in skip or any(low.startswith(p) for p in ctx.cfg.nfo_sync_skip_prefixes):
+            continue
+        if core.add_genre(ctx.root, name, after_tags=core.GENRE_AFTER_TAGS):
+            genres.append(name)
+    actors = ctx.add_nfo_actors([(p.get("name") or "").strip() for p in sc.get("performers") or []])
+    core.remove_genre(ctx.root, core.FAILED_GENRE)
+    changed = [tag for tag in scalars if ctx.nfo_text(tag) != before[tag]]
+    if [el.text for el in ctx.root.findall("URL") if el.text] != before_urls:
+        changed.append("URL")
+    if genres:
+        changed.append(f"genre+{len(genres)}")
+        log.info("%s: adding NFO genre(s) %s", ctx.label, genres)
+    if actors:
+        changed.append(f"actor+{len(actors)}")
+        log.info("%s: adding NFO actor(s) %s", ctx.label, actors)
+    if not changed or not ctx.nfo_changed():
+        # `changed` empty but the tree differs = whitespace normalization
+        # only; not worth a write.
+        log.info("%s: NFO already matches Stash.", ctx.label)
+        ctx.root = None   # nothing to write for this scene
+        return core.ProcessResult("unchanged"), "tags only"
+    return (core.ProcessResult("would_update" if ctx.cfg.dry_run else "updated"),
+            "synced Stash -> NFO: " + ", ".join(changed))
+
+
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
@@ -930,7 +1027,7 @@ class Run:
         self.javstash_endpoint, api_key = javstash_endpoint_and_key(stash, cfg)
         self.tags = TagCache(stash, cfg.dry_run)
         self.trigger_tag_id = self.tags.get(cfg.trigger_tag)
-        self.translator = build_translator(cfg) if cfg.mode != "reclassify" else None
+        self.translator = build_translator(cfg) if cfg.mode in ("scrape", "translate_only") else None
         self.clients = build_clients(cfg, api_key) if cfg.mode == "scrape" else {}
 
     # -- tags -------------------------------------------------------------
@@ -986,7 +1083,8 @@ class Run:
         if ctx.path is None:
             log.warning("%s: has no file -- skipping.", ctx.label)
             return core.ProcessResult("no_file")
-        if ctx.has_tag(MANUAL_TAG):
+        manual = ctx.has_tag(MANUAL_TAG)
+        if manual and not self.cfg.write_nfo:
             log.info("%s: tagged %r -- leaving it alone.", ctx.label, MANUAL_TAG)
             ctx.finish_trigger_tag(keep=False)
             ctx.commit("manual, trigger tag only")
@@ -995,6 +1093,11 @@ class Run:
         if error:
             result = core.ProcessResult(error.split(":", 1)[0], detail=error)
             what = "tags only"
+        elif manual or self.cfg.mode == "nfo_sync":
+            if self.cfg.mode != "nfo_sync":
+                log.info("%s: tagged %r -- syncing Stash into the NFO instead of scraping.",
+                         ctx.label, MANUAL_TAG)
+            result, what = sync_stash_to_nfo(ctx, self)
         elif self.cfg.mode == "translate_only":
             result, what = process_scene_translate_only(ctx, self)
         else:
@@ -1004,14 +1107,24 @@ class Run:
         return result
 
     def main(self) -> None:
-        scenes = self.tagged_scenes()
+        if self.cfg.mode == "nfo_sync":
+            manual_id = self.tags.get(MANUAL_TAG)
+            if not manual_id:
+                raise SystemExit(f"Tag {MANUAL_TAG!r} does not exist -- nothing to sync.")
+            scenes = self.tagged_scenes(manual_id)
+            # The sync never touches the trigger tag: these scenes were
+            # selected by the manual tag, not queued.
+            self.cfg.remove_trigger_tag = False
+        else:
+            scenes = self.tagged_scenes()
         translate_desc = "off"
         if self.translator:
             translate_desc = f"{self.cfg.translation_engine} via {type(self.translator).__name__}"
             if hasattr(self.translator, "model_path"):
                 translate_desc += f" ({self.translator.model_path})"
         log.info("%s v%s: %d scene(s) tagged %r; mode=%s%s; sources=%s; translate=%s; "
-                 "stash=%s; nfo=%s", PLUGIN_ID, PLUGIN_VERSION, len(scenes), self.cfg.trigger_tag,
+                 "stash=%s; nfo=%s", PLUGIN_ID, PLUGIN_VERSION, len(scenes),
+                 MANUAL_TAG if self.cfg.mode == "nfo_sync" else self.cfg.trigger_tag,
                  self.cfg.mode, " (dry run)" if self.cfg.dry_run else "", self.cfg.sources,
                  translate_desc,
                  "on" if self.cfg.update_stash else "off", "on" if self.cfg.write_nfo else "off")
@@ -1288,7 +1401,7 @@ KNOWN_SETTINGS = {
     "translationEngine", "cloudApiKey", "cloudProjectId", "cloudRegion",
     "cloudCredentialsFile", "plainTitle", "disableStashUpdate", "disableNfoWrite",
     "disableNfoBackup", "disableFailedTag", "originalTitleField",
-    "originalDescriptionField",
+    "originalDescriptionField", "nfoSyncSkipTagPrefixes",
 }
 
 

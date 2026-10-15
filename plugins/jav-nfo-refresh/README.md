@@ -48,6 +48,7 @@ tasks under Settings → Tasks → Plugin Tasks:
 | Rescrape tagged scenes | Query the sources even for already-refreshed scenes. Existing translations are kept unless the description changed. |
 | Re-translate tagged scenes | No lookups. Re-translate title and details from the existing `Original Title` / `Original Description` (or the NFO). Genres untouched. |
 | Re-translate tagged scenes (dry run) | Same, but only logs. |
+| Sync manual scenes to NFO | Copy Stash's metadata into the sidecar of every scene tagged `Metadata Refreshed Manually`. No lookups. |
 | Reclassify failures | One-time: sort scenes tagged `Metadata Refresh Failed` before the outcome tags existed into No Studio Code / Not Found / Source Error, from the Stash log. |
 
 Progress and per-scene outcomes go to the Stash log (Settings → Logs,
@@ -76,7 +77,14 @@ logged at Error level.
 - **Failures**: a scene no source could match gets the `Metadata Refresh
   Failed` tag (and NFO genre), cleared by any later success.
 - **Manual override**: a scene tagged `Metadata Refreshed Manually` is
-  never touched.
+  never scraped. Stash is its source of truth: the **Sync manual scenes to
+  NFO** task (and a normal Refresh run, when such a scene carries the
+  trigger tag) copies Stash's title, details, Original Title / Description,
+  code (as `tagline`), date, director, studio, URLs, javstash stash ID,
+  performers (as `actor`) and tags (as `genre`) into the sidecar. It adds
+  and overwrites, never removes; empty Stash fields leave the NFO alone;
+  the plugin's own workflow tags are not written, and the "NFO sync - tag
+  prefixes to skip" setting excludes others (e.g. `Subtitled:`).
 
 ### Outcome tags
 

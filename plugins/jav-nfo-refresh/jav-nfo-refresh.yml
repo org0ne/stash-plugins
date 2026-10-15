@@ -6,7 +6,7 @@ description: >
   genres as tags, and the same data mirrored into the .nfo sidecar next to
   the video file.
 url: https://github.com/org0ne/stash-plugins
-version: 1.3.2
+version: 1.4.0
 
 exec:
   - python
@@ -54,6 +54,19 @@ tasks:
     defaultArgs:
       mode: translate_only
       retranslate: true
+      dry_run: true
+  - name: Sync manual scenes to NFO
+    description: >
+      For every scene tagged "Metadata Refreshed Manually": copy Stash's
+      metadata into the .nfo sidecar (title, details, Original Title /
+      Description, code, date, director, studio, URLs, stash ID, performers,
+      tags as genres). Adds and overwrites, never removes. No lookups.
+    defaultArgs:
+      mode: nfo_sync
+  - name: Sync manual scenes to NFO (dry run)
+    description: Same as above, but only logs what would change.
+    defaultArgs:
+      mode: nfo_sync
       dry_run: true
   - name: Reclassify failures
     description: >
@@ -180,4 +193,12 @@ settings:
   originalDescriptionField:
     displayName: Original description custom field
     description: Custom field that holds the Japanese description. Default "Original Description".
+    type: STRING
+  nfoSyncSkipTagPrefixes:
+    displayName: NFO sync - tag prefixes to skip
+    description: >
+      Comma-separated prefixes of Stash tags that should NOT be written to
+      the NFO as genres when syncing a manually refreshed scene, e.g.
+      "Subtitled:, Transcription:". The plugin's own workflow tags are
+      always skipped.
     type: STRING
