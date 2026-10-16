@@ -342,6 +342,8 @@
     playbackRate: 1.0,
     stashSrc: null,
     stashType: null,
+    stashSource: null,   // video.js source object of the Stash source (carries Stash's offset/duration flags)
+    offsetSource: false, // Stash plays this scene as a transcode with its offset middleware (no direct stream)
     cancelSwitch: false,
     // bridge mode
     sessionToken: null,
@@ -482,6 +484,8 @@
     state.source = "stash";
     state.stashSrc = null;
     state.stashType = null;
+    state.stashSource = null;
+    state.offsetSource = false;
     setButtonLabel("JASNA: OFF");
     log(`Scene ${sceneId}`);
 
@@ -698,6 +702,61 @@
     }
     state.stashSrc = src;
     state.stashType = type;
+    // Stash marks every non-direct (transcoded) source with offset: true and
+    // its real duration; its videojs middleware (ScenePlayer/live.ts) then
+    // remaps time for that source. See switchPlayerToJasna.
+    const srcObj = typeof player.currentSource === "function" ? player.currentSource() : null;
+    state.stashSource = srcObj && srcObj.src && !isJasnaRouteSrc(srcObj.src) ? srcObj : null;
+    state.offsetSource = !!(state.stashSource && state.stashSource.offset && state.stashSource.duration);
+    if (state.offsetSource) log("Stash source is a transcode (offset middleware active); switching via player.src()");
+  }
+
+  function waitFor(pred, timeoutMs) {
+    return new Promise((resolve) => {
+      const deadline = Date.now() + timeoutMs;
+      const tick = () => {
+        let ok = false;
+        try { ok = !!pred(); } catch (e) { /* keep waiting */ }
+        if (ok) return resolve(true);
+        if (Date.now() >= deadline) return resolve(false);
+        setTimeout(tick, 20);
+      };
+      tick();
+    });
+  }
+
+  function stripQuery(u) {
+    return typeof u === "string" ? u.split("?")[0] : "";
+  }
+
+  // Stash's offset middleware (ScenePlayer/live.ts, registered with
+  // videojs.use("*")) is what makes transcoded sources seekable: for a source
+  // flagged offset+duration it reports currentTime() as <offset of the last
+  // start= reload> + <element time>, reports the file's duration, and turns a
+  // seek outside the buffer into a reload of the Stash transcode URL with a
+  // new start= parameter. Its state only changes through player.src(). The
+  // raw-element swap below never goes through player.src(), so on such a
+  // scene the middleware kept the offset of the viewer's last Stash-side seek
+  // and added it to Jasna's absolute timeline: the scrubber ran past the end
+  // and pinned right (seen 2026-10-16: heartbeat time == file duration), and
+  // a scrubber seek while ON handed the element back to the Stash transcode.
+  // Direct-play sources have no offset flag and are unaffected.
+  //
+  // Fix: hand the middleware a plain source first. player.src() applies it
+  // through the middleware chain on a 1ms timer, so wait until the element
+  // actually carries the URL before hls.js replaces it with its MediaSource;
+  // the element's own load of a playlist as video/mp4 fails, which the
+  // suppression window already hides.
+  async function neutralizeOffsetMiddleware(player, video, manifestUrl) {
+    try {
+      player.src({ src: manifestUrl, type: "video/mp4" });
+    } catch (e) {
+      log(`WARNING: player.src() for the Jasna hand-off threw: ${e.message}`);
+      return false;
+    }
+    const applied = await waitFor(() => stripQuery(video.currentSrc || video.src) === stripQuery(manifestUrl), 2000);
+    log(applied ? "Offset middleware reset for the Jasna stream" : "WARNING: player.src() did not reach the element in 2s; continuing");
+    return applied;
   }
 
   // hls.js instance for Jasna playback - videojs's own source-handler
@@ -864,6 +923,10 @@
   }
 
   function restoreStashSource(player, time, wasPlaying) {
+    if (state.offsetSource && state.stashSource) {
+      restoreStashSourceViaPlayer(player, time, wasPlaying);
+      return;
+    }
     log("Restoring Stash source");
     destroyHls();
     setSourceSelectorGuard(player, false);
@@ -890,15 +953,53 @@
     video.load();
   }
 
+  // Transcoded (offset) sources go back through player.src() with Stash's
+  // own source object, so the offset middleware re-arms, and the seek goes
+  // through player.currentTime(): the middleware turns it into the start=
+  // reload Stash itself would do. The middleware pauses or plays on canplay
+  // according to the tech's state when the seek was made, so play/pause is
+  // applied after that.
+  async function restoreStashSourceViaPlayer(player, time, wasPlaying) {
+    log("Restoring Stash source via player.src() (transcode)");
+    destroyHls();
+    setSourceSelectorGuard(player, false);
+    const video = player.el().querySelector("video");
+    endJasnaSuppression();
+    const stopSuppress = suppressSwitchError(player, video);
+    const srcObj = state.stashSource;
+    try {
+      player.src(srcObj);
+    } catch (e) {
+      log(`WARNING: player.src() restore threw: ${e.message}; falling back to the raw element`);
+      stopSuppress();
+      state.offsetSource = false;
+      restoreStashSource(player, time, wasPlaying);
+      return;
+    }
+    const applied = await waitFor(() => stripQuery(video.currentSrc || video.src) === stripQuery(srcObj.src), 2000);
+    if (!applied) log("WARNING: Stash source did not reach the element in 2s; seeking anyway");
+    const onCanPlay = () => {
+      clearPlayerError(player);
+      video.volume = state.volume;
+      video.playbackRate = state.playbackRate;
+      if (wasPlaying) player.play(); else player.pause();
+      setTimeout(stopSuppress, 1500);
+    };
+    player.one("canplay", onCanPlay);
+    player.currentTime(time);
+  }
+
   // Jasna always serves the manifest starting at segment 0, so the
   // player must seek to the target time itself; Jasna generates
   // whichever segment that seek lands on, on demand.
-  function switchPlayerToJasna(player, time, wasPlaying, manifestUrl) {
+  async function switchPlayerToJasna(player, time, wasPlaying, manifestUrl) {
     const video = player.el().querySelector("video");
     destroyHls();
     setSourceSelectorGuard(player, true);
     endJasnaSuppression();
     jasnaSuppressStop = suppressSwitchError(player, video); // until restoreStashSource
+
+    if (state.offsetSource) await neutralizeOffsetMiddleware(player, video, manifestUrl);
 
     const onReady = () => {
       clearPlayerError(player);
@@ -920,8 +1021,11 @@
       hls.attachMedia(video);
       hlsInstance = hls;
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = manifestUrl;
-      video.addEventListener("loadedmetadata", onReady, { once: true });
+      // After neutralizeOffsetMiddleware the element may already carry the
+      // manifest URL (video.js set it); assigning it again would reload.
+      if (stripQuery(video.currentSrc || video.src) !== stripQuery(manifestUrl)) video.src = manifestUrl;
+      if (video.readyState >= 1) onReady();
+      else video.addEventListener("loadedmetadata", onReady, { once: true });
     } else {
       throw new Error("HLS is not supported in this browser");
     }
@@ -987,7 +1091,8 @@
       const elapsed = ((performance.now() - reqStart) / 1000).toFixed(2);
       log(`Stream ready after ${elapsed} sec`);
 
-      switchPlayerToJasna(player, time, wasPlaying, manifestUrl);
+      await switchPlayerToJasna(player, time, wasPlaying, manifestUrl);
+      if (state.cancelSwitch) return await cancelled();
       state.source = "jasna";
       startHeartbeat(player);
       setButtonLabel("JASNA: ON");

@@ -51,7 +51,8 @@ reverse-proxied under the Stash domain the plugin **auto-detects** it at
 ## Requirements
 
 - [stash-jasna-bridge](https://github.com/org0ne/stash-jasna-bridge) running
-  beside Jasna (Jasna 0.10.x with an NVIDIA GPU). Set it up first.
+  beside Jasna (Jasna 0.10.x or 0.11.x with an NVIDIA GPU; the bridge handles
+  the differences between the two). Set it up first.
 - Stash v0.31.x (tested on a v0.31.1 release and a develop build).
 - Works on HTTP and HTTPS Stash alike: the bridge is served on the Stash
   origin, so there is no mixed-content problem.
@@ -141,6 +142,13 @@ self-signed proxy cert is fine.
 
 - One Jasna session at a time (a single GPU pipeline); the bridge coordinates
   ownership and takeover between viewers.
+- Scenes Stash cannot direct-play (AVI, WMV, anything without a "Direct
+  stream" entry) are served as transcodes, and Stash's player keeps its own
+  clock for those (a time offset plus start= reloads on seek). The plugin
+  hands such sources through `player.src()` in both directions so that clock
+  is reset for the Jasna stream and re-armed on the way back; direct-play
+  scenes keep the plain element swap. Without this the scrubber ran past the
+  end and pinned right, and a seek while ON fell back to the transcode.
 - hls.js 1.7.2 is bundled (no CDN, no `script-src` exception).
 - On a stall, the plugin rides out hls.js's retries and shows RECOVERING
   while the bridge restarts Jasna on the same token; see the bridge README.
