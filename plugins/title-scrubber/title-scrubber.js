@@ -19,7 +19,7 @@
    * ============================ */
   const TITLE_FILTER_WORDS = [
     '4k', 'HD', 'FHD', 'javplayer', 'decensored', 'uncensored',
-    'censored', 'leaked', 'subtitled', 'Lada',
+    'censored', 'leaked', 'subtitled', 'Lada', 'LTX',
   ];
 
   // Build a single regex from the filter list.
