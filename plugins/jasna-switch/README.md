@@ -40,6 +40,9 @@ reverse-proxied under the Stash domain the plugin **auto-detects** it at
   rendering the first segment.
 - `JASNA: BUSY` / `JASNA: TAKE OVER?` - another viewer owns Jasna; once that
   owner has stopped watching, one more click pre-empts them.
+- `JASNA: BATCH` - the bridge is running an offline restoration queued by the
+  [jasna-batch](../jasna-batch) plugin; the GPU is free again when that job
+  ends (the bridge log and `/jasna/health` say which scene and how long).
 - `JASNA: RECOVERING... n` - a stream stall; the plugin is re-loading and the
   bridge is restarting Jasna behind it. Resolves to ON, or to LOST.
 - `JASNA: LOST` - the bridge released the session (idle, pre-empted, or

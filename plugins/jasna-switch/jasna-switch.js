@@ -385,7 +385,7 @@
     if (/TAKE OVER/.test(text)) return "takeover";
     if (/\bON\b/.test(text)) return "on";
     if (/PREPARING|STARTING|RECOVERING/.test(text)) return "preparing";
-    if (/BUSY|LOST|ERROR|NO BRIDGE/.test(text)) return "warn";
+    if (/BUSY|BATCH|LOST|ERROR|NO BRIDGE/.test(text)) return "warn";
     return "off";
   }
 
@@ -1103,6 +1103,17 @@
         if (state.sessionToken) endBridgeSession("error");
         restoreStashSource(player, state.currentTime, state.playing);
         state.source = "stash";
+        if (err.info.reason === "batch") {
+          // The bridge is running an offline restoration (jasna-batch
+          // plugin) on the GPU; nothing to take over, it ends when the
+          // job does.
+          const job = err.info.job || {};
+          log(`Jasna is busy with batch job ${job.id || "?"} (scene ${job.scene_id || "?"}, preset ${job.preset || "?"}` +
+              (job.running_s ? `, running ${Math.round(job.running_s / 60)} min` : "") + ")");
+          setButtonLabel("JASNA: BATCH");
+          setTimeout(() => setButtonLabel("JASNA: OFF"), 5000);
+          return;
+        }
         if (err.info.takeover_available) {
           // The owner is idle; let the next click pre-empt it. Bound the
           // offer so a stale "TAKE OVER?" label can't sit there forever.

@@ -1,0 +1,129 @@
+name: Jasna Batch
+description: >
+  Tag a scene "Jasna: <preset>" to queue its file for an offline Jasna
+  restoration on stash-jasna-bridge. When the job finishes, the source
+  folder's sidecars, subtitles and artwork are copied next to the restored
+  file under its new name, the .nfo gets a title marker and extra genres,
+  and the new folder is scanned, so nfoSceneParser fills the new scene from
+  the finished NFO as it is created. Status tags on the original scene
+  follow the job.
+url: https://github.com/org0ne/stash-plugins
+version: 0.1.0
+
+exec:
+  - python
+  - "{pluginDir}/jasna-batch.py"
+interface: raw
+
+hooks:
+  - name: Queue on tag
+    description: >
+      Runs after every scene update. If the scene carries a "Jasna: <preset>"
+      tag, the job is submitted to the bridge, the trigger tag is removed and
+      "Jasna: Queued" added. Any other update is a no-op.
+    triggeredBy:
+      - Scene.Update.Post
+
+tasks:
+  - name: Check settings
+    description: >
+      Log every effective setting, ask the bridge whether it can run jobs
+      (binary, models, activation, scratch space, GPU), verify the target
+      root, the library path and that an NFO parser is hooked on scene
+      creation, and create the plugin's tags (parent, one trigger tag per
+      preset, the status tags).
+    defaultArgs:
+      mode: check
+  - name: Queue tagged scenes
+    description: >
+      Submit every scene carrying a "Jasna: <preset>" tag (for scenes tagged
+      while the bridge was down, or before the hook existed). Same as the
+      hook, for all tagged scenes at once.
+    defaultArgs:
+      mode: queue
+  - name: Queue tagged scenes (dry run)
+    description: Log what would be queued and where the output would go. Nothing is submitted.
+    defaultArgs:
+      mode: queue
+      dry_run: true
+  - name: Sync jobs
+    description: >
+      Match the status tags to the bridge's jobs and ingest every finished
+      one: copy sidecars, write the edited NFO and the command sidecar, then
+      scan the new folder (nfoSceneParser fills the new scene on creation).
+      The bridge runs this task itself after every job state change; run it
+      by hand to retry an ingestion after fixing its cause.
+    defaultArgs:
+      mode: sync
+  - name: Sync jobs (dry run)
+    description: Log what Sync would do (tags, files to copy). Nothing is written or acknowledged.
+    defaultArgs:
+      mode: sync
+      dry_run: true
+
+settings:
+  bridgeUrl:
+    displayName: Bridge URL
+    description: >
+      stash-jasna-bridge as reachable from the Stash server (this plugin
+      runs on the server, so the browser's /jasna route does not apply).
+      Default http://127.0.0.1:8770/jasna.
+    type: STRING
+  bridgeToken:
+    displayName: Bridge token
+    description: Only for the bridge's auth.mode = token (sent as Authorization Bearer).
+    type: STRING
+  presets:
+    displayName: Presets
+    description: >
+      Jasna command lines, one per preset, as "name = flags # comment",
+      separated by ";". Each preset gets a "Jasna: name" trigger tag, and
+      its name goes into the output file name ({code}_{name}_jasna.mp4).
+      Example: LTX = --restoration-model-name ltx --codec hevc --cq 24 # standard LTX;
+      LTX hq = --restoration-model-name ltx-8step --codec av1. Do not pass
+      --input/--output: the bridge sets those.
+    type: STRING
+  targetRoot:
+    displayName: Target root
+    description: >
+      Folder the restored scenes go under, e.g. /storage/pool/.pr0n/Sorted/LTX.
+      Must be (under) a Stash library path, writable from the Stash server,
+      and visible to the bridge host under the same path (or via its
+      [[paths.map]]). Each job lands in {targetRoot}/{source folder name with
+      the marker inserted}/.
+    type: STRING
+  titleMarker:
+    displayName: Title marker
+    description: >
+      Inserted after the first " - " of the NFO <title> and of the new folder
+      name ("Performer - Title" -> "Performer - [LTX] Title"); prefixed when
+      there is no " - ". Default "[LTX]".
+    type: STRING
+  extraGenres:
+    displayName: Extra genres
+    description: >
+      Comma-separated <genre> entries added to the NFO (after its last genre),
+      which nfoSceneParser turns into tags. Default "LTX, Jasna".
+    type: STRING
+  cleanHtml:
+    displayName: Clean HTML in NFO text
+    description: >
+      Also unescape HTML entities and strip <br>/<p>/other tags from plot,
+      outline, tagline, title, originaltitle and actor names (clean_nfo's
+      --clean-html). Off by default.
+    type: BOOLEAN
+  ignorePatterns:
+    displayName: Sidecars to ignore
+    description: >
+      Comma-separated glob patterns of files in the source folder that are
+      not copied. Default "*.bak, .lada_*". Video files are never copied;
+      sidecars of other parts in a multi-file folder are skipped
+      automatically.
+    type: STRING
+  stopAfter:
+    displayName: Stop after
+    description: >
+      Leave empty for the full chain. "prepare" stops after the folder is
+      prepared and skips the scan, to check the files by hand first (scan
+      the folder yourself afterwards).
+    type: STRING
