@@ -63,8 +63,8 @@ DEFAULT_GENRES = "LTX, Jasna"
 DEFAULT_IGNORE = "*.bak, .lada_*"
 PENDING_SCAN = "pending-scan"   # ingest()'s answer while the scan it queued has not run yet
 SCENE_FRAGMENT = "id title tags { id name } files { id path }"
-KNOWN_SETTINGS = {"bridgeUrl", "bridgeToken", "presets", "targetRoot", "titleMarker", "extraGenres",
-                  "cleanHtml", "ignorePatterns", "stopAfter"}
+KNOWN_SETTINGS = {"bridgeUrl", "bridgeToken", "queuePageUrl", "presets", "targetRoot", "titleMarker",
+                  "extraGenres", "cleanHtml", "ignorePatterns", "stopAfter"}
 
 
 class Config:
@@ -76,6 +76,7 @@ class Config:
         self.raw = dict(settings)
         self.bridge_url = text("bridgeUrl", DEFAULT_BRIDGE_URL).rstrip("/")
         self.bridge_token = text("bridgeToken")
+        self.queue_page_url = text("queuePageUrl")
         self.presets, self.preset_problems = core.parse_presets(text("presets"))
         self.target_root = text("targetRoot").rstrip("/")
         self.marker = text("titleMarker", DEFAULT_MARKER)
@@ -558,6 +559,8 @@ class Run:
         log.info("Bridge")
         line("Bridge URL", cfg.bridge_url, "bridgeUrl")
         line("Bridge token", "set" if cfg.bridge_token else "none", "bridgeToken")
+        line("Queue page", cfg.queue_page_url or "<stash-origin>/jasna/queue", "queuePageUrl",
+             "linked under this setting on Settings > Plugins")
         batch_info: dict = {}
         try:
             health = self.bridge.health()

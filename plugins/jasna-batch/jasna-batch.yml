@@ -15,6 +15,11 @@ exec:
   - "{pluginDir}/jasna-batch.py"
 interface: raw
 
+ui:
+  javascript:
+    # Puts the link to the bridge's queue page into the "Queue page" setting below.
+    - jasna-batch-ui.js
+
 hooks:
   - name: Queue on tag
     description: >
@@ -72,6 +77,15 @@ settings:
   bridgeToken:
     displayName: Bridge token
     description: Only for the bridge's auth.mode = token (sent as Authorization Bearer).
+    type: STRING
+  queuePageUrl:
+    displayName: Queue page
+    description: >
+      The bridge serves the queue as a page for a phone or desktop browser
+      (running job, queued jobs, finished ones with their logs). The link
+      appears here. Leave empty for the usual reverse-proxied bridge at
+      <stash-origin>/jasna/queue; set it only for a bridge on another
+      origin, e.g. http://host:8770/jasna/queue.
     type: STRING
   presets:
     displayName: Presets

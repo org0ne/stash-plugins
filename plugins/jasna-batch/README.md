@@ -93,6 +93,17 @@ became. Long jobs are normal (an LTX preset can take hours per film); the
 bridge's `journalctl --user -u stash-jasna-bridge` and `/jasna/health`
 show progress.
 
+## Watching the queue
+
+The bridge serves the queue as a page for a phone or desktop browser at
+`<bridge>/queue` (with the usual reverse-proxied bridge:
+`https://<your stash>/jasna/queue`): the running job with its elapsed
+time, the queued jobs in order with a Remove button, and the last finished
+ones with duration, size, error and a link to Jasna's log. Scenes are named
+with their Stash titles and link to the scene. The link is shown under the
+**Queue page** setting on Settings > Plugins; set that setting only when
+the bridge is on another origin.
+
 ## Tasks
 
 - **Check settings** - everything above, writes only tags.
