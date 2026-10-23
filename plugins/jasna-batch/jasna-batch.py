@@ -39,7 +39,7 @@ from stashapi.stashapp import StashInterface
 import jasna_batch_core as core
 
 PLUGIN_ID = "jasna-batch"
-PLUGIN_VERSION = "0.1.2"
+PLUGIN_VERSION = "0.1.3"
 
 PARENT_TAG = "Jasna Batch"
 STATUS_TAGS = {
@@ -172,8 +172,9 @@ class Bridge:
     def job(self, job_id: str) -> dict:
         return self.call("GET", f"/jobs/{job_id}")["job"]
 
-    def ack(self, job_id: str) -> None:
-        self.call("POST", f"/jobs/{job_id}/ack")
+    def ack(self, job_id: str, scene_id: Optional[str] = None) -> None:
+        # scene_id = the Stash scene made from the output; the queue page links the done job to it
+        self.call("POST", f"/jobs/{job_id}/ack", {"scene_id": str(scene_id)} if scene_id else None)
 
     def log_tail(self, job_id: str, lines: int = 15) -> str:
         try:
@@ -448,13 +449,13 @@ class Run:
             return  # the follow-up Sync behind the scan finishes this job
         self.counts["ingested"] += 1
         self.set_status(scene, "done", note=f"new scene {new_id}" if new_id else "prepared")
-        self.ack(job)
+        self.ack(job, new_id)
 
-    def ack(self, job: dict) -> None:
+    def ack(self, job: dict, new_scene_id: Optional[str] = None) -> None:
         if self.cfg.dry_run:
             return
         try:
-            self.bridge.ack(job["id"])
+            self.bridge.ack(job["id"], new_scene_id)
         except BridgeError as err:
             log.warning(f"job {job['id']}: could not acknowledge on the bridge: {err}")
 
