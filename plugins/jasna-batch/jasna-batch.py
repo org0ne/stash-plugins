@@ -39,7 +39,7 @@ from stashapi.stashapp import StashInterface
 import jasna_batch_core as core
 
 PLUGIN_ID = "jasna-batch"
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "0.1.2"
 
 PARENT_TAG = "Jasna Batch"
 STATUS_TAGS = {
@@ -61,10 +61,16 @@ DEFAULT_BRIDGE_URL = "http://127.0.0.1:8770/jasna"
 DEFAULT_MARKER = "[LTX]"
 DEFAULT_GENRES = "LTX, Jasna"
 DEFAULT_IGNORE = "*.bak, .lada_*"
+DEFAULT_SCAN_GENERATE = "sprites"
+# Names accepted in the scanGenerate setting -> ScanMetadataInput flags.
+SCAN_GENERATORS = {"covers": "scanGenerateCovers", "previews": "scanGeneratePreviews",
+                   "imagepreviews": "scanGenerateImagePreviews", "sprites": "scanGenerateSprites",
+                   "phashes": "scanGeneratePhashes", "thumbnails": "scanGenerateThumbnails",
+                   "clippreviews": "scanGenerateClipPreviews"}
 PENDING_SCAN = "pending-scan"   # ingest()'s answer while the scan it queued has not run yet
 SCENE_FRAGMENT = "id title tags { id name } files { id path }"
 KNOWN_SETTINGS = {"bridgeUrl", "bridgeToken", "queuePageUrl", "presets", "targetRoot", "titleMarker",
-                  "extraGenres", "cleanHtml", "ignorePatterns", "stopAfter"}
+                  "extraGenres", "cleanHtml", "ignorePatterns", "stopAfter", "scanGenerate"}
 
 
 class Config:
@@ -84,13 +90,20 @@ class Config:
         self.clean_html = bool(settings.get("cleanHtml"))
         self.ignore_patterns = [p.strip() for p in text("ignorePatterns", DEFAULT_IGNORE).split(",") if p.strip()]
         self.stop_after = text("stopAfter").lower()   # "" or "prepare"
+        # Generators forced ON for this plugin's scans, on top of Stash's own
+        # scan defaults (Settings > Tasks > Scan). "none" = the defaults only.
+        wanted = [w.strip().lower().replace(" ", "").replace("_", "") for w in text("scanGenerate", DEFAULT_SCAN_GENERATE).split(",")]
+        self.scan_generate = [w for w in wanted if w in SCAN_GENERATORS]
+        self.scan_generate_unknown = [w for w in wanted if w and w not in SCAN_GENERATORS and w != "none"]
         self.mode = (args.get("mode") or "").strip().lower()
         self.dry_run = bool(args.get("dry_run"))
         self.job_id = str(args.get("job_id") or "").strip()
         self.event = str(args.get("event") or "").strip()
         # Set by the follow-up Sync this plugin queues behind a scan: the
-        # scan for cfg.job_id has run by the time this one executes.
-        self.after_scan = bool(args.get("after_scan"))
+        # scan for cfg.job_id has run by the time this one executes. Sent as
+        # the int 1, not True: stashapi's run_plugin_task tests int before
+        # bool and would send a bool as an Int, which Stash rejects (422).
+        self.after_scan = str(args.get("after_scan") or "").strip().lower() in ("1", "true", "yes")
 
     def preset(self, name: str) -> Optional[core.Preset]:
         for p in self.presets:
@@ -522,13 +535,30 @@ class Run:
             raise IngestError(f"Stash did not create a scene for {plan.video} after the scan (is "
                               f"{self.cfg.target_root} one of the library paths, and is .mp4 not excluded?)")
         try:
-            scan_job = self.stash.metadata_scan([plan.dest_dir])
+            flags = self.scan_flags()
+            scan_job = self.stash.metadata_scan([plan.dest_dir], flags)
             self.stash.run_plugin_task(PLUGIN_ID, "Sync jobs", {"job_id": job["id"], "event": "scanned",
-                                                                 "after_scan": True})
+                                                                 "after_scan": 1})
         except Exception as err:
             raise IngestError(f"could not queue the scan of {plan.dest_dir}: {err}")
-        log.info(f"  scan queued (Stash job {scan_job}); the Sync behind it marks the scene Done")
+        on = sorted(k.replace("scanGenerate", "").lower() for k, v in flags.items() if v is True)
+        log.info(f"  scan queued (Stash job {scan_job}, generating {', '.join(on) or 'nothing'}); "
+                 f"the Sync behind it marks the scene Done")
         return PENDING_SCAN
+
+    def scan_flags(self) -> dict:
+        """Stash's own scan defaults with the scanGenerate setting's
+        generators forced on. The library passes the defaults when given no
+        flags, but those leave sprites off on a stock Stash, and a restored
+        film without a scrubber is the first thing one notices."""
+        flags = {}
+        try:
+            flags = dict((self.stash.get_configuration_defaults("scan { ...ScanMetadataOptions }") or {}).get("scan") or {})
+        except Exception as err:
+            log.warning(f"  could not read Stash's scan defaults ({err}); scanning with the plugin's generators only")
+        for name in self.cfg.scan_generate:
+            flags[SCAN_GENERATORS[name]] = True
+        return flags
 
     def find_scene_by_path(self, path: str) -> Optional[dict]:
         found = self.stash.find_scenes(
@@ -622,6 +652,15 @@ class Run:
         line("Extra genres", ", ".join(cfg.genres), "extraGenres")
         line("Clean HTML in NFO", cfg.clean_html, "cleanHtml")
         line("Ignore patterns", ", ".join(cfg.ignore_patterns), "ignorePatterns")
+        try:
+            on = sorted(k.replace("scanGenerate", "").lower() for k, v in self.scan_flags().items() if v is True)
+            line("Scan generates", ", ".join(on) or "nothing", "scanGenerate",
+                 f"Stash's scan defaults + forced on: {', '.join(cfg.scan_generate) or 'none'}")
+        except Exception as err:
+            line("Scan generates", f"could not resolve ({err})", "scanGenerate")
+        if cfg.scan_generate_unknown:
+            problems.append(f"scanGenerate names not understood: {cfg.scan_generate_unknown}; "
+                            f"known: {', '.join(SCAN_GENERATORS)}")
         line("Stop after", cfg.stop_after or "(full chain)", "stopAfter")
 
         log.info("Ingestion")

@@ -80,7 +80,9 @@ and preset `LTX` under target root `/lib/LTX`:
 
    Leave **Bridge URL** empty for a bridge on the Stash host at its default
    port; this plugin runs on the server, so the browser's `/jasna` route
-   does not apply.
+   does not apply. The scan of each new folder uses Stash's own scan
+   defaults plus whatever **Generate on scan** names (default `sprites`,
+   the scene scrubber, which a stock Stash leaves off during scans).
 4. Run the **Check settings** task (Settings > Tasks). It asks the bridge
    whether it can run a job (binary, models, activation, scratch space,
    GPU), verifies the target root, the library path and that an NFO parser

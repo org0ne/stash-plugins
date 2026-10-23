@@ -8,7 +8,7 @@ description: >
   the finished NFO as it is created. Status tags on the original scene
   follow the job.
 url: https://github.com/org0ne/stash-plugins
-version: 0.1.0
+version: 0.1.2
 
 exec:
   - python
@@ -133,6 +133,15 @@ settings:
       not copied. Default "*.bak, .lada_*". Video files are never copied;
       sidecars of other parts in a multi-file folder are skipped
       automatically.
+    type: STRING
+  scanGenerate:
+    displayName: Generate on scan
+    description: >
+      Generators switched ON for this plugin's scans, on top of Stash's own
+      scan defaults (Settings > Tasks > Scan): covers, previews,
+      imagePreviews, sprites, phashes, thumbnails, clipPreviews, comma
+      separated. Default "sprites" (the scene scrubber), which a stock Stash
+      leaves off during scans. "none" uses the defaults only.
     type: STRING
   stopAfter:
     displayName: Stop after
