@@ -1,0 +1,105 @@
+name: Subtitle Tagger
+description: >-
+  Tags scenes with the Whisper models used to transcribe and translate them,
+  read from sidecar *-whisper-command.txt files.
+version: 1.1.0
+url: https://github.com/org0ne/stash-plugins/tree/main/plugins/subtitle_tagger
+exec:
+  - python3
+  - "{pluginDir}/subtitle_tagger_plugin.py"
+interface: raw
+
+settings:
+  folderPath:
+    displayName: Folder Path
+    description: >-
+      Library folder used by the "Tag Folder" task. Must be a path as Stash
+      sees it, e.g. /data/media/anime. Scenes under this path are processed.
+    type: STRING
+  enableScanHook:
+    displayName: Tag On Scan
+    description: >-
+      Tick to tag each new scene automatically as it is scanned in. Off by
+      default - Stash boolean settings start unticked, and on a large initial
+      import the per-scene hook adds real overhead, so running "Tag All Scenes"
+      once afterwards is usually faster. Leave off to tag only via the tasks.
+    type: BOOLEAN
+  sceneBatch:
+    displayName: Scenes Per Request
+    description: >-
+      How many scenes each bulk tag update covers. Stash pays a fixed cost per
+      request, so larger is faster; 200 is the default and 500 is usually fine.
+      Lower it only if you see request timeouts in the log. Blank uses 200.
+    type: NUMBER
+  removeStaleTags:
+    displayName: Remove Stale Tags
+    description: >-
+      Also remove "Transcription:" and "Subtitled:" tags that the scene's
+      current sidecar no longer names - for example after re-running whisper
+      with a different model. Only tags with those two prefixes are ever
+      removed; every other tag on the scene is left alone. Scenes with no
+      readable sidecar, or whose sidecar names no model at all, are skipped.
+    type: BOOLEAN
+  noCreateTags:
+    displayName: Do Not Create Tags
+    description: >-
+      Only apply tags that already exist. Prevents a typo in a whisper command
+      from permanently creating a junk tag.
+    type: BOOLEAN
+  dryRun:
+    displayName: Dry Run
+    description: >-
+      Log what would be tagged without modifying any scene. Applies to both the
+      scan hook and the manual tasks.
+    type: BOOLEAN
+
+hooks:
+  - name: Tag Scanned Scene
+    description: Applies model tags to each scene as it is scanned in.
+    triggeredBy:
+      - Scene.Create.Post
+
+tasks:
+  - name: Tag Scene
+    description: >-
+      Tag one scene, given as a scene_id argument. Meant to be queued by
+      another plugin (the WhisperJAV Fleet plugin runs it after its rescan)
+      rather than from this menu, which cannot pass arguments.
+    defaultArgs:
+      mode: scene
+  - name: Tag All Scenes
+    description: Scan the entire library and apply model tags where a sidecar exists.
+    defaultArgs:
+      mode: all
+  - name: Tag Folder
+    description: >-
+      Apply model tags to scenes under the folder configured in the
+      "Folder Path" setting above.
+    defaultArgs:
+      mode: folder
+  - name: Retag All Scenes (Remove Stale)
+    description: >-
+      Reconcile every scene against its sidecar: add missing model tags and
+      remove ones the sidecar no longer names. Use after re-running whisper.
+    defaultArgs:
+      mode: all
+      removeStale: true
+  - name: Retag Folder (Remove Stale)
+    description: >-
+      As above, limited to scenes under the configured "Folder Path".
+    defaultArgs:
+      mode: folder
+      removeStale: true
+  - name: Dry Run - All Scenes
+    description: Report what "Tag All Scenes" would do, without changing anything.
+    defaultArgs:
+      mode: all
+      dryRun: true
+  - name: Dry Run - Remove Stale
+    description: >-
+      Report which tags would be added and removed by the retag tasks, without
+      changing anything. Run this before pruning for real.
+    defaultArgs:
+      mode: all
+      removeStale: true
+      dryRun: true
