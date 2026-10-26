@@ -378,13 +378,19 @@ def _fmt_duration(seconds: Optional[float]) -> str:
 
 
 def _audio_line(job: dict) -> str:
-    r = job.get("audio_result")
-    if r:
-        return (f"{r.get('from')} -> {r.get('to')} {r.get('bitrate')} ({r.get('channels')}ch), "
+    """The sidecar's Audio line from the bridge's audio_result: what the
+    output fix-up did to the audio, and whether the edit list was rewritten."""
+    r = job.get("audio_result") or {}
+    if r.get("from"):
+        text = (f"{r.get('from')} -> {r.get('to')} {r.get('bitrate')} ({r.get('channels')}ch), "
                 f"re-encoded by the bridge with ffmpeg after Jasna ({r.get('seconds')} s)")
-    if job.get("audio"):
-        return f"as Jasna wrote it (already {job['audio']}, or see Notes)"
-    return "as Jasna wrote it (copied from the source)"
+    elif job.get("audio"):
+        text = f"as Jasna wrote it (already {job['audio']}, or see Notes)"
+    else:
+        text = "as Jasna wrote it (copied from the source)"
+    if r.get("edit_list"):
+        text += "; edit list rewritten by the bridge (stream-copy remux)"
+    return text
 
 
 def command_sidecar(job: dict, preset: Optional[Preset], plugin_version: str) -> str:

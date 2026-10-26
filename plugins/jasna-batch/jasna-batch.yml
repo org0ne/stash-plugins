@@ -8,7 +8,7 @@ description: >
   the finished NFO as it is created. Status tags on the original scene
   follow the job.
 url: https://github.com/org0ne/stash-plugins
-version: 0.1.4
+version: 0.1.5
 
 exec:
   - python
