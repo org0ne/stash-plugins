@@ -83,6 +83,10 @@ and preset `LTX` under target root `/lib/LTX`:
    does not apply. The scan of each new folder uses Stash's own scan
    defaults plus whatever **Generate on scan** names (default `sprites`,
    the scene scrubber, which a stock Stash leaves off during scans).
+   **Audio codec** (default `aac`) makes the bridge re-encode any non-AAC
+   audio after Jasna finishes: Jasna copies the source's audio stream, so
+   an MP3 or AC3 source would otherwise become an MP4 Stash plays without
+   sound. The command sidecar says what was done.
 4. Run the **Check settings** task (Settings > Tasks). It asks the bridge
    whether it can run a job (binary, models, activation, scratch space,
    GPU), verifies the target root, the library path and that an NFO parser

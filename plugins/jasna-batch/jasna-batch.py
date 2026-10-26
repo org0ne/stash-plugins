@@ -39,7 +39,7 @@ from stashapi.stashapp import StashInterface
 import jasna_batch_core as core
 
 PLUGIN_ID = "jasna-batch"
-PLUGIN_VERSION = "0.1.3"
+PLUGIN_VERSION = "0.1.4"
 
 PARENT_TAG = "Jasna Batch"
 STATUS_TAGS = {
@@ -62,6 +62,7 @@ DEFAULT_MARKER = "[LTX]"
 DEFAULT_GENRES = "LTX, Jasna"
 DEFAULT_IGNORE = "*.bak, .lada_*"
 DEFAULT_SCAN_GENERATE = "sprites"
+DEFAULT_AUDIO = "aac"
 # Names accepted in the scanGenerate setting -> ScanMetadataInput flags.
 SCAN_GENERATORS = {"covers": "scanGenerateCovers", "previews": "scanGeneratePreviews",
                    "imagepreviews": "scanGenerateImagePreviews", "sprites": "scanGenerateSprites",
@@ -70,7 +71,7 @@ SCAN_GENERATORS = {"covers": "scanGenerateCovers", "previews": "scanGeneratePrev
 PENDING_SCAN = "pending-scan"   # ingest()'s answer while the scan it queued has not run yet
 SCENE_FRAGMENT = "id title tags { id name } files { id path }"
 KNOWN_SETTINGS = {"bridgeUrl", "bridgeToken", "queuePageUrl", "presets", "targetRoot", "titleMarker",
-                  "extraGenres", "cleanHtml", "ignorePatterns", "stopAfter", "scanGenerate"}
+                  "extraGenres", "cleanHtml", "ignorePatterns", "stopAfter", "scanGenerate", "audioCodec"}
 
 
 class Config:
@@ -90,6 +91,11 @@ class Config:
         self.clean_html = bool(settings.get("cleanHtml"))
         self.ignore_patterns = [p.strip() for p in text("ignorePatterns", DEFAULT_IGNORE).split(",") if p.strip()]
         self.stop_after = text("stopAfter").lower()   # "" or "prepare"
+        # Jasna copies the source's audio stream; the bridge re-encodes any
+        # other codec to this one after Jasna finishes. "copy" leaves it.
+        self.audio_codec = text("audioCodec", DEFAULT_AUDIO).lower()
+        if self.audio_codec in ("copy", "none", "off", "keep"):
+            self.audio_codec = ""
         # Generators forced ON for this plugin's scans, on top of Stash's own
         # scan defaults (Settings > Tasks > Scan). "none" = the defaults only.
         wanted = [w.strip().lower().replace(" ", "").replace("_", "") for w in text("scanGenerate", DEFAULT_SCAN_GENERATE).split(",")]
@@ -160,10 +166,10 @@ class Bridge:
     def health(self) -> dict:
         return self.call("GET", "/health")
 
-    def submit(self, scene_id: str, file_path: str, output_path: str, preset: core.Preset) -> dict:
+    def submit(self, scene_id: str, file_path: str, output_path: str, preset: core.Preset, audio: str = "") -> dict:
         return self.call("POST", "/jobs", {"scene_id": str(scene_id), "file_path": file_path,
                                            "output_path": output_path, "preset": preset.name,
-                                           "flags": preset.flags})
+                                           "flags": preset.flags, "audio": audio})
 
     def jobs(self, unacknowledged: bool = True) -> List[dict]:
         q = "?unacknowledged=1" if unacknowledged else ""
@@ -321,7 +327,7 @@ class Run:
             self.counts["queued"] += 1
             return
         try:
-            result = self.bridge.submit(scene["id"], source, plan.video, preset)
+            result = self.bridge.submit(scene["id"], source, plan.video, preset, self.cfg.audio_codec)
         except BridgeError as err:
             if err.status == 409 and err.body.get("job"):
                 log.info(f"{label}: already queued on the bridge as job {err.body['job'].get('id')}")
@@ -653,6 +659,8 @@ class Run:
         line("Extra genres", ", ".join(cfg.genres), "extraGenres")
         line("Clean HTML in NFO", cfg.clean_html, "cleanHtml")
         line("Ignore patterns", ", ".join(cfg.ignore_patterns), "ignorePatterns")
+        line("Audio codec", cfg.audio_codec or "copy (as Jasna wrote it)", "audioCodec",
+             "non-matching audio is re-encoded by the bridge after Jasna" if cfg.audio_codec else "")
         try:
             on = sorted(k.replace("scanGenerate", "").lower() for k, v in self.scan_flags().items() if v is True)
             line("Scan generates", ", ".join(on) or "nothing", "scanGenerate",

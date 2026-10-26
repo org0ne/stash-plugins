@@ -8,7 +8,7 @@ description: >
   the finished NFO as it is created. Status tags on the original scene
   follow the job.
 url: https://github.com/org0ne/stash-plugins
-version: 0.1.3
+version: 0.1.4
 
 exec:
   - python
@@ -133,6 +133,15 @@ settings:
       not copied. Default "*.bak, .lada_*". Video files are never copied;
       sidecars of other parts in a multi-file folder are skipped
       automatically.
+    type: STRING
+  audioCodec:
+    displayName: Audio codec
+    description: >
+      Jasna copies the source's audio stream, so an MP3 or AC3 source comes
+      out as an MP4 with MP3 or AC3 audio, which browsers (and Stash's
+      player) will not play. "aac" (default) has the bridge re-encode any
+      non-AAC audio to AAC after Jasna finishes, video untouched; "copy"
+      leaves the audio as Jasna wrote it.
     type: STRING
   scanGenerate:
     displayName: Generate on scan

@@ -377,6 +377,16 @@ def _fmt_duration(seconds: Optional[float]) -> str:
     return f"{h}h {m:02d}m {s:02d}s" if h else f"{m}m {s:02d}s"
 
 
+def _audio_line(job: dict) -> str:
+    r = job.get("audio_result")
+    if r:
+        return (f"{r.get('from')} -> {r.get('to')} {r.get('bitrate')} ({r.get('channels')}ch), "
+                f"re-encoded by the bridge with ffmpeg after Jasna ({r.get('seconds')} s)")
+    if job.get("audio"):
+        return f"as Jasna wrote it (already {job['audio']}, or see Notes)"
+    return "as Jasna wrote it (copied from the source)"
+
+
 def command_sidecar(job: dict, preset: Optional[Preset], plugin_version: str) -> str:
     """Text written next to the restored file: what ran, how long it took,
     where it came from. Modeled on the -whisper-command.txt sidecars."""
@@ -390,6 +400,7 @@ def command_sidecar(job: dict, preset: Optional[Preset], plugin_version: str) ->
         f"Source size      : {(job.get('source_bytes') or 0) / 1e9:.2f} GB",
         f"Output file      : {job.get('stash_output')}",
         f"Output size      : {(job.get('output_bytes') or 0) / 1e9:.2f} GB",
+        "Audio            : " + _audio_line(job),
         f"Queued           : {_fmt_time(job.get('created'))}",
         f"Started          : {_fmt_time(job.get('started'))}",
         f"Finished         : {_fmt_time(job.get('finished'))}",
