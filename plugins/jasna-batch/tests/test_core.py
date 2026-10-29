@@ -86,6 +86,24 @@ class Naming(unittest.TestCase):
         self.assertEqual(plan2.new_stem, "MIGD-100-pt2_LTX_jasna")
 
 
+class OutputNames(unittest.TestCase):
+    def test_round_trip(self):
+        for stem, preset in [("MIGD-100", "LTX"), ("ABC-1_part2", "LTX hq"), ("x", "v1.2+fast")]:
+            name = core.output_stem(stem, preset) + core.OUTPUT_EXT
+            self.assertEqual(core.parse_output_name("/root/dir/" + name), (stem, core.preset_slug(preset)))
+
+    def test_other_files(self):
+        for name in ["MIGD-100.mkv", "MIGD-100_LTX_jasna.nfo", "MIGD-100_LTX_jasna-jasna-command.txt",
+                     "MIGD-100_jasna.mp4", "_LTX_jasna.mp4", "fanart.jpg", "MIGD-100_LTX_jasna.mp4.bak"]:
+            self.assertIsNone(core.parse_output_name(name), name)
+
+    def test_preset_with_underscore_needs_the_preset_list(self):
+        name = core.output_stem("MIGD-100", "LTX_hq") + ".mp4"
+        self.assertEqual(core.parse_output_name(name, ["LTX", "LTX_hq"]), ("MIGD-100", "LTX_hq"))
+        self.assertEqual(core.parse_output_name(name), ("MIGD-100_LTX", "hq"))   # best guess without it
+        self.assertEqual(core.parse_output_name("A_LTX_jasna.mp4", ["LTX_jasna"]), ("A", "LTX"))
+
+
 class Sidecars(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -188,3 +206,64 @@ class Sidecar(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NodeTests(unittest.TestCase):
+    """Bridge URL setting -> nodes, and the scheduler over their loads."""
+
+    def test_empty_setting_is_the_default_single_node(self):
+        nodes, problems = core.parse_nodes("", "http://127.0.0.1:8770/jasna/")
+        self.assertEqual(problems, [])
+        self.assertEqual([(n.name, n.url, n.speed, n.only) for n in nodes],
+                         [("bridge", "http://127.0.0.1:8770/jasna", 1.0, [])])
+
+    def test_one_bare_url_keeps_the_old_behaviour(self):
+        nodes, problems = core.parse_nodes("http://host:8770/jasna/", "x")
+        self.assertEqual(problems, [])
+        self.assertEqual((nodes[0].name, nodes[0].url), ("bridge", "http://host:8770/jasna"))
+
+    def test_named_nodes_with_speed_and_only(self):
+        text = ("debeast = http://127.0.0.1:8770/jasna speed=3;\n"
+                "rtx3060=http://192.168.11.157:8770/jasna only=LTX, LTX hq speed=1")
+        nodes, problems = core.parse_nodes(text, "x")
+        self.assertEqual(problems, [])
+        self.assertEqual([n.name for n in nodes], ["debeast", "rtx3060"])
+        self.assertEqual(nodes[0].speed, 3.0)
+        self.assertEqual(nodes[1].only, ["LTX", "LTX hq"])
+        self.assertTrue(nodes[0].accepts("anything"))
+        self.assertTrue(nodes[1].accepts("ltx hq"))
+        self.assertFalse(nodes[1].accepts("fast"))
+        self.assertEqual(nodes[1].describe(), "http://192.168.11.157:8770/jasna only=LTX, LTX hq")
+
+    def test_bare_urls_among_several_are_named_by_host(self):
+        nodes, problems = core.parse_nodes("http://127.0.0.1:8770/jasna; http://gpu2:8770/jasna", "x")
+        self.assertEqual(problems, [])
+        self.assertEqual([n.name for n in nodes], ["local", "gpu2"])
+
+    def test_bad_entries_are_skipped_and_described(self):
+        text = "x = nope; a = http://a:1 speed=-1; b = http://b:1 foo=1; a = http://a:1; a = http://a:2"
+        nodes, problems = core.parse_nodes(text, "x")
+        self.assertEqual([n.name for n in nodes], ["a"])
+        self.assertEqual(len(problems), 4)
+        self.assertIn("expected a bridge URL", problems[0])
+        self.assertIn("speed must be a positive number", problems[1])
+        self.assertIn("unknown option 'foo'", problems[2])
+        self.assertIn("duplicate node name", problems[3])
+
+    def test_estimate_load_counts_queued_and_the_rest_of_running(self):
+        jobs = [{"state": "queued", "scene_id": "1"},
+                {"state": "running", "scene_id": "2", "progress": {"percent": 75}},
+                {"state": "queued", "scene_id": "unknown"},
+                {"state": "done", "scene_id": "1"}]
+        load = core.estimate_load(jobs, {"1": 3600.0, "2": 4000.0}.get, default_s=600.0)
+        self.assertEqual(load, 3600.0 + 1000.0 + 600.0)
+
+    def test_rank_nodes_divides_by_speed_and_keeps_order_on_a_tie(self):
+        fast, slow = core.Node("fast", "u", speed=3), core.Node("slow", "u")
+        self.assertEqual([n.name for n, _ in core.rank_nodes([(fast, 9000.0), (slow, 3100.0)])], ["fast", "slow"])
+        self.assertEqual([n.name for n, _ in core.rank_nodes([(fast, 9000.0), (slow, 2900.0)])], ["slow", "fast"])
+        self.assertEqual([n.name for n, _ in core.rank_nodes([(slow, 0.0), (fast, 0.0)])], ["slow", "fast"])
+
+    def test_command_sidecar_names_the_node(self):
+        text = core.command_sidecar({"id": "j1", "node": "rtx3060", "node_url": "http://h:8770/jasna"}, None, "0.2.0")
+        self.assertIn("Bridge node      : rtx3060 (http://h:8770/jasna)", text)

@@ -1,6 +1,6 @@
 """jasna_batch_core.py -- the parts of the jasna-batch plugin that need no
-Stash: preset parsing, output naming, the sidecar copy plan, the NFO edits
-and the command sidecar. Pure functions over paths and text, so they are
+Stash: preset parsing, bridge node parsing and scheduling, output naming,
+the sidecar copy plan, the NFO edits and the command sidecar. Pure functions over paths and text, so they are
 testable without a Stash instance (tests/test_core.py).
 
 The NFO edits are a port of clean_nfo_flexible.py (Scott's CLI): strip the
@@ -17,9 +17,10 @@ import os
 import re
 import shlex
 import time
+import urllib.parse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple
 from xml.dom import minidom
 
 VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".wmv", ".mov", ".m4v", ".ts", ".m2ts", ".mpg", ".mpeg", ".flv",
@@ -108,6 +109,129 @@ def parse_presets(text: str) -> Tuple[List[Preset], List[str]]:
 
 
 # ---------------------------------------------------------------------------
+# Bridge nodes: "name = url speed=N only=preset, preset; name2 = url"
+# ---------------------------------------------------------------------------
+
+NODE_NAME_RE = PRESET_NAME_RE
+DEFAULT_NODE_NAME = "bridge"
+# A queued scene whose duration Stash does not know counts as this long.
+DEFAULT_JOB_SECONDS = 2 * 3600.0
+
+
+@dataclass
+class Node:
+    """One stash-jasna-bridge the plugin can send jobs to."""
+    name: str
+    url: str
+    speed: float = 1.0            # relative throughput; 3 = three times the speed of a speed=1 node
+    only: List[str] = field(default_factory=list)   # preset names this node takes; [] = any
+
+    def accepts(self, preset_name: str) -> bool:
+        return not self.only or preset_name.lower() in {o.lower() for o in self.only}
+
+    def describe(self) -> str:
+        extra = []
+        if self.speed != 1.0:
+            extra.append(f"speed={self.speed:g}")
+        if self.only:
+            extra.append("only=" + ", ".join(self.only))
+        return self.url + (" " + " ".join(extra) if extra else "")
+
+
+def _looks_like_url(text: str) -> bool:
+    return "://" in text or text.startswith("/")
+
+
+def parse_nodes(text: str, default_url: str) -> Tuple[List[Node], List[str]]:
+    """Parse the Bridge URL setting into bridge nodes. One bare URL (or an
+    empty setting, which means `default_url`) is the single node "bridge".
+    Several entries are separated by ";" or newlines, each "name = url" with
+    optional "speed=N" (relative throughput, default 1) and "only=A, B"
+    (the presets this node takes) after the URL. A bare URL among several
+    is named after its host. Returns (nodes, problems); a bad entry is
+    skipped and described."""
+    nodes: List[Node] = []
+    problems: List[str] = []
+    entries = [e.strip() for e in re.split(r"[;\n]", text or "") if e.strip()]
+    if not entries:
+        return [Node(DEFAULT_NODE_NAME, default_url.rstrip("/"))], problems
+    seen = set()
+    for entry in entries:
+        name = ""
+        rest = entry
+        m = re.match(r"^([^=]+?)\s*=\s*(\S.*)$", entry)
+        if m and not _looks_like_url(m.group(1).strip()):
+            name, rest = m.group(1).strip(), m.group(2).strip()
+        parts = rest.split(None, 1)
+        url = parts[0].rstrip("/")
+        opts = parts[1].strip() if len(parts) > 1 else ""
+        if not _looks_like_url(url):
+            problems.append(f"{entry!r}: expected a bridge URL (http://host:8770/jasna)")
+            continue
+        if not name:
+            host = urllib.parse.urlsplit(url).hostname or ""
+            name = DEFAULT_NODE_NAME if len(entries) == 1 else (
+                "local" if host in ("127.0.0.1", "localhost", "::1") else host or DEFAULT_NODE_NAME)
+        if not NODE_NAME_RE.match(name):
+            problems.append(f"{name!r}: a node name is 1-40 characters of letters, digits, space, . _ + -")
+            continue
+        if name.lower() in seen:
+            problems.append(f"{name!r}: duplicate node name")
+            continue
+        node = Node(name, url)
+        bad = False
+        for opt in (o for o in re.split(r"\s+(?=\w+=)", opts) if o):
+            key, _, value = opt.partition("=")
+            key, value = key.strip().lower(), value.strip()
+            if key == "speed":
+                try:
+                    node.speed = float(value)
+                    if node.speed <= 0:
+                        raise ValueError
+                except ValueError:
+                    problems.append(f"{name!r}: speed must be a positive number, not {value!r}")
+                    bad = True
+            elif key == "only":
+                node.only = [p.strip() for p in value.split(",") if p.strip()]
+                if not node.only:
+                    problems.append(f"{name!r}: only= needs at least one preset name")
+                    bad = True
+            else:
+                problems.append(f"{name!r}: unknown option {key!r} (speed=, only=)")
+                bad = True
+        if bad:
+            continue
+        seen.add(name.lower())
+        nodes.append(node)
+    return nodes, problems
+
+
+def estimate_load(jobs: Iterable[dict], duration_of: Callable[[str], Optional[float]],
+                  default_s: float = DEFAULT_JOB_SECONDS) -> float:
+    """Seconds of source video a node still has to restore: every queued
+    job's full duration plus what is left of the running one (by the
+    percent the bridge reports for it). `duration_of(scene_id)` answers in
+    seconds or None."""
+    total = 0.0
+    for job in jobs:
+        if job.get("state") not in ("queued", "running"):
+            continue
+        duration = duration_of(str(job.get("scene_id") or "")) or default_s
+        if job.get("state") == "running":
+            percent = (job.get("progress") or {}).get("percent")
+            if isinstance(percent, (int, float)):
+                duration *= max(0.0, 1.0 - float(percent) / 100.0)
+        total += duration
+    return total
+
+
+def rank_nodes(loads: List[Tuple[Node, float]]) -> List[Tuple[Node, float]]:
+    """Nodes in the order a job should try them: least waiting time first
+    (load divided by the node's speed), the setting's order on a tie."""
+    return sorted(loads, key=lambda t: t[1] / t[0].speed)
+
+
+# ---------------------------------------------------------------------------
 # Naming
 # ---------------------------------------------------------------------------
 
@@ -131,6 +255,27 @@ def preset_slug(preset_name: str) -> str:
 
 def output_stem(source_stem: str, preset_name: str) -> str:
     return f"{source_stem}_{preset_slug(preset_name)}_jasna"
+
+
+OUTPUT_NAME_RE = re.compile(r"^(?P<stem>.+)_(?P<preset>[A-Za-z0-9.+-]+)_jasna$")
+
+
+def parse_output_name(filename: str, preset_names: Iterable[str] = ()) -> Optional[Tuple[str, str]]:
+    """Inverse of output_stem: (source stem, preset slug) for a restored
+    file's name, or None for any other file. A configured preset's slug is
+    matched first (longest first), since a slug may hold an underscore;
+    otherwise the last underscore-free run before _jasna is the preset."""
+    base, ext = os.path.splitext(os.path.basename(filename))
+    if ext.lower() != OUTPUT_EXT or not base.endswith("_jasna"):
+        return None
+    body = base[:-len("_jasna")]
+    for slug in sorted({preset_slug(n) for n in preset_names}, key=len, reverse=True):
+        if body.endswith("_" + slug) and len(body) > len(slug) + 1:
+            return body[:-len(slug) - 1], slug
+    m = OUTPUT_NAME_RE.match(base)
+    if not m:
+        return None
+    return m.group("stem"), m.group("preset")
 
 
 @dataclass
@@ -414,6 +559,7 @@ def command_sidecar(job: dict, preset: Optional[Preset], plugin_version: str) ->
         f"Exit code        : {job.get('exit_code')}",
         f"Attempts         : {job.get('attempts')}",
         f"Bridge job id    : {job.get('id')}",
+        f"Bridge node      : {job.get('node') or 'unknown'}" + (f" ({job.get('node_url')})" if job.get("node_url") else ""),
         f"Stash scene id   : {job.get('scene_id')} (the original)",
         "",
         "Command:",

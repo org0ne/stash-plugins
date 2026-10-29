@@ -31,7 +31,11 @@ job runs). When the job finishes the plugin:
 
 The original scene stays where it is. Its tag moves from `Jasna: <preset>`
 to `Jasna: Queued`, `Jasna: Processing`, then `Jasna: Done` (or `Jasna:
-Failed`, with the reason in the Stash log and the bridge's job log).
+Failed`, with the reason in the Stash log and the bridge's job log). On
+success it also gets `Jasna: Restored` (the **Restored tag** setting), which
+the plugin never removes: the status tags change on a re-run or a failed
+retry, this one stays, so a scene filter with "tags exclude `Jasna:
+Restored`" leaves everything already restored out of the next pick.
 
 ## Where things land
 
@@ -91,13 +95,41 @@ and preset `LTX` under target root `/lib/LTX`:
    whether it can run a job (binary, models, activation, scratch space,
    GPU), verifies the target root, the library path and that an NFO parser
    is hooked on scene creation, and creates the tags: `Jasna Batch`
-   (parent), `Jasna: <preset>` per preset, and the four status tags.
+   (parent), `Jasna: <preset>` per preset, the four status tags and
+   `Jasna: Restored`.
 
 Then tag a scene `Jasna: LTX` from its page. The hook fires on the update,
 the tag turns into `Jasna: Queued`, and the Stash log says which job it
 became. Long jobs are normal (an LTX preset can take hours per film); the
 bridge's `journalctl --user -u stash-jasna-bridge` and `/jasna/health`
 show progress.
+
+## Several bridges (one per GPU host)
+
+List them in **Bridge URL** as `name = url` entries separated by `;`, with
+what each node is worth and what it may run:
+
+```
+debeast = http://127.0.0.1:8770/jasna speed=3; rtx3060 = http://192.168.11.157:8770/jasna only=LTX
+```
+
+Each node is a stash-jasna-bridge with `[batch]` enabled on its own GPU
+host. A tagged scene goes to the node with the least waiting time: the
+seconds of source video queued and still running there (Stash knows the
+durations; the running job counts by the percent the bridge reports),
+divided by the node's `speed` (relative throughput, default 1; a 4090
+against a 3060 is about 3). `only=A, B` keeps a node to those presets
+(say, a card without the VRAM for an LTX model). An unreachable node, or
+one whose batch queue is off, is skipped with the reason in the log; a
+scene already queued or running for that preset on any node is not queued
+again. *Sync jobs* walks every node (each bridge's callback runs it; a
+node that is down is reported and skipped), the command sidecar names the
+node, and *Check settings* checks each node and says which presets it
+takes. Every node needs the media and the target root at the same paths
+(or its own `[[paths.map]]`), a `stash.url` that reaches this Stash for
+the callback and scene lookups, and the plugin's Bridge token if it uses
+`auth.mode = token`. The jasna-switch plugin takes the same list (with the
+browser-side addresses) so the live toggle can use the second GPU too.
 
 ## Watching the queue
 
@@ -107,8 +139,9 @@ The bridge serves the queue as a page for a phone or desktop browser at
 time, the queued jobs in order with a Remove button, and the last finished
 ones with duration, size, error and a link to Jasna's log. Scenes are named
 with their Stash titles and link to the scene. The link is shown under the
-**Queue page** setting on Settings > Plugins; set that setting only when
-the bridge is on another origin.
+**Queue page** setting on Settings > Plugins, one per bridge node; set that
+setting only when a bridge is on another origin (`name = url; ...` for
+several).
 
 ## Tasks
 
@@ -121,7 +154,13 @@ the bridge is on another origin.
   (`batch.notify_plugin` / `notify_task` in `bridge.toml`); run it by hand
   to retry an ingestion after fixing its cause (a failed ingestion leaves
   the job unacknowledged on the bridge and the scene `Jasna: Failed`).
-- Both queue and sync have a **dry run** variant.
+- **Tag restored sources** - walk the target root and add the Restored tag
+  to the source scene of every `{stem}_{preset}_jasna.mp4` found there, also
+  for restorations made before this plugin or by hand. The source is the
+  scene outside the target root whose file has that stem; a stem that
+  matches no scene or several is logged and left alone. Run it once after
+  installing, and again after restoring something outside the plugin.
+- Queue, sync and tag restored sources each have a **dry run** variant.
 
 **Stop after** = `prepare` halts the chain after the folder is prepared,
 without scanning, to check the files by hand first.
