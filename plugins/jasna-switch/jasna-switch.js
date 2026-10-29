@@ -29,7 +29,11 @@
 // OFF, scene change and pagehide (sendBeacon). The bridge URL is either an
 // explicit "Bridge URL" setting or, when that is blank, auto-detected by
 // probing "<stash-origin>/jasna" (the reverse-proxied same-origin setup),
-// so the common install needs no plugin configuration at all.
+// so the common install needs no plugin configuration at all. The setting
+// may name several bridges ("name = url; name2 = url"), one per GPU host:
+// toggle ON tries them in that order and moves on from a node that is busy
+// with another viewer or an offline batch job, so a second GPU keeps the
+// toggle usable while the first is taken.
 
 (function () {
   const PluginApi = window.PluginApi;
@@ -41,6 +45,10 @@
   // or "/jasna" relative to the Stash origin), or auto-detected at load. An
   // absolute URL must also be listed under ui.csp.connect-src in the manifest.
   let BRIDGE_URL = "";
+  // Every bridge node, [{name, url}], in the setting's order; BRIDGE_URL is
+  // the first one's URL (presets come from it). A session lives on one node
+  // (state.node) and every call for it goes there.
+  let NODES = [];
   let BRIDGE_TOKEN = "";
   // User-defined presets from the "Custom presets" setting: [{name, flags}].
   // They join the bridge's configured presets in the picker, and a session
@@ -87,8 +95,8 @@
       const mine = (cfg && cfg[PLUGIN_ID]) || {};
       PLUGIN_SETTINGS = { ...mine };
       if (typeof mine.bridgeUrl === "string" && mine.bridgeUrl.trim()) {
-        BRIDGE_URL = mine.bridgeUrl.trim().replace(/\/+$/, "");
-        if (BRIDGE_URL.startsWith("/")) BRIDGE_URL = window.location.origin + BRIDGE_URL;
+        NODES = parseNodes(mine.bridgeUrl);
+        BRIDGE_URL = NODES.length ? NODES[0].url : "";
       }
       if (typeof mine.bridgeToken === "string") BRIDGE_TOKEN = mine.bridgeToken.trim();
       if (typeof mine.customPresets === "string") CUSTOM_PRESETS = parseCustomPresets(mine.customPresets);
@@ -96,7 +104,37 @@
       console.log("[Jasna] WARNING: could not read plugin settings: " + err.message);
     }
     if (!BRIDGE_URL) await autodetectBridge();
-    console.log("[Jasna] Endpoint: " + (BRIDGE_URL ? "bridge " + BRIDGE_URL : "none (no bridge configured or detected)"));
+    console.log("[Jasna] Endpoint: " + (NODES.length > 1
+      ? `${NODES.length} bridge nodes: ` + NODES.map((n) => `${n.name} = ${n.url}`).join("; ")
+      : BRIDGE_URL ? "bridge " + BRIDGE_URL : "none (no bridge configured or detected)"));
+  }
+
+  // The Bridge URL setting: one URL, or several bridges as "name = url"
+  // entries separated by ";" or newlines (a bare URL among several is named
+  // after its host). A relative URL (/jasna) is on the Stash origin. Options
+  // after a URL (speed=, only=) belong to the jasna-batch plugin's setting of
+  // the same shape and are ignored here.
+  function parseNodes(text) {
+    const out = [];
+    const entries = String(text || "").split(/[;\n]/).map((e) => e.trim()).filter(Boolean);
+    for (const entry of entries) {
+      let name = "", rest = entry;
+      const m = entry.match(/^([^=]+?)\s*=\s*(\S.*)$/);
+      if (m && !/:\/\/|^\//.test(m[1].trim())) { name = m[1].trim(); rest = m[2].trim(); }
+      let url = rest.split(/\s+/)[0].replace(/\/+$/, "");
+      if (!/:\/\/|^\//.test(url)) { log(`Bridge URL entry "${entry}" skipped: expected a URL`); continue; }
+      if (url.startsWith("/")) url = window.location.origin + url;
+      if (!name) {
+        if (entries.length === 1) name = "bridge";
+        else { try { name = new URL(url).hostname; } catch (e) { name = "node " + (out.length + 1); } }
+      }
+      if (out.some((n) => n.name.toLowerCase() === name.toLowerCase())) {
+        log(`Bridge URL entry "${entry}" skipped: duplicate node name "${name}"`);
+        continue;
+      }
+      out.push({ name, url });
+    }
+    return out;
   }
 
   // No Bridge URL set: probe the reverse-proxied same-origin location once.
@@ -109,6 +147,7 @@
       const ct = (resp.headers.get("content-type") || "");
       if (resp.ok && /json/i.test(ct)) {
         BRIDGE_URL = candidate;
+        NODES = [{ name: "bridge", url: candidate }];
         log("Auto-detected bridge at " + candidate);
       }
     } catch (err) {
@@ -318,7 +357,7 @@
       const names = state.presets.map((p) => p.name);
       const saved = readSavedPreset();
       state.preset = saved && names.includes(saved) ? saved : (data.default || null);
-      log(`Presets: ${names.join(", ") || "(none)"}; default ${data.default}; warm ${state.warm}`);
+      log(`Presets${NODES.length > 1 ? ` (from ${NODES[0].name})` : ""}: ${names.join(", ") || "(none)"}; default ${data.default}; warm ${state.warm}`);
     } catch (err) {
       log("could not load presets: " + err.message);
     }
@@ -347,6 +386,8 @@
     cancelSwitch: false,
     // bridge mode
     sessionToken: null,
+    node: null,          // the bridge node of the live session ({name, url})
+    takeoverNode: null,  // the node whose busy answer offered a take-over
     heartbeatTimer: null,
     preset: null,        // chosen preset name (bridge mode); null = bridge default
     presets: [],         // [{name, description}] from GET /presets, plus custom ones ({flags, custom: true})
@@ -397,6 +438,11 @@
 
   function setButtonDisabled(disabled) {
     if (uiButtonEl) uiButtonEl.disabled = disabled;
+  }
+
+  // The ON label names the node when there is more than one to tell apart.
+  function onLabel() {
+    return "JASNA: ON" + (NODES.length > 1 && state.node ? ` \u00b7 ${state.node.name}` : "");
   }
 
   // jav-layout tokens with standalone fallbacks, so the badge is themed where
@@ -519,29 +565,28 @@
   // pointed straight at Stash, bypassing the proxy that has the route).
   class BridgeNotRoutedError extends Error {}
 
-  function checkBridgeResponseIsJson(resp, what) {
+  function checkBridgeResponseIsJson(resp, what, base) {
     const ct = (resp.headers.get("content-type") || "").split(";")[0].trim();
     if (/json/i.test(ct)) return;
     throw new BridgeNotRoutedError(
       `bridge ${what} answered HTTP ${resp.status} ${ct || "(no content-type)"} instead of JSON - ` +
-      `${BRIDGE_URL} is not routed to the bridge (proxy/tunnel missing the /jasna location?)`
+      `${base || BRIDGE_URL} is not routed to the bridge (proxy/tunnel missing the /jasna location?)`
     );
   }
 
-  async function bridgeCreateSession(sceneId, time, opts) {
-    opts = opts || {};
-    const payload = { scene_id: sceneId, time };
-    if (state.preset) payload.preset = state.preset;
-    const chosen = state.presets.find((p) => p.name === state.preset);
-    if (chosen && chosen.custom) payload.flags = chosen.flags;
-    if (opts.force) payload.force = true;
-    const resp = await fetch(`${BRIDGE_URL}/session`, {
+  // Ask one node for a session. Throws BridgeBusyError (409),
+  // BridgeNotRoutedError (non-JSON answer) or Error. A named preset the node
+  // does not have (its bridge.toml differs from the first node's) is retried
+  // once on that node's default preset; a custom preset carries its flags
+  // and needs no retry.
+  async function postSessionTo(node, payload) {
+    const resp = await fetch(`${node.url}/session`, {
       method: "POST",
       headers: bridgeHeaders(true),
       credentials: "include",
       body: JSON.stringify(payload),
     });
-    if (resp.ok) checkBridgeResponseIsJson(resp, "/session");
+    if (resp.ok) checkBridgeResponseIsJson(resp, "/session", node.url);
     let body = null;
     try {
       body = await resp.json();
@@ -549,10 +594,58 @@
       // non-JSON error page from a proxy; fall through to the status check
     }
     if (resp.status === 409) throw new BridgeBusyError(body || {});
+    if (resp.status === 400 && body && /^unknown preset/.test(body.error || "") && payload.preset && !payload.flags) {
+      log(`${node.name}: has no preset "${payload.preset}"; using its default preset`);
+      const fallback = { ...payload };
+      delete fallback.preset;
+      return postSessionTo(node, fallback);
+    }
     if (!resp.ok) {
       throw new Error(`bridge /session failed: HTTP ${resp.status}` + (body && body.error ? ` (${body.error})` : ""));
     }
     return body;
+  }
+
+  // Busy answers ranked by what the viewer can do about them: a take-over
+  // offer beats a plain busy, which beats a batch job (nothing to do there).
+  function busyRank(info) {
+    if (info.takeover_available) return 2;
+    if (info.reason === "batch") return 0;
+    return 1;
+  }
+
+  // A session from the first node that gives one, in the setting's order
+  // (opts.node first: for a take-over, the node that offered it). A busy or
+  // unreachable node is skipped; when none is left the most useful busy
+  // answer is thrown, else the last error. The session carries its node.
+  async function bridgeCreateSession(sceneId, time, opts) {
+    opts = opts || {};
+    const payload = { scene_id: sceneId, time };
+    if (state.preset) payload.preset = state.preset;
+    const chosen = state.presets.find((p) => p.name === state.preset);
+    if (chosen && chosen.custom) payload.flags = chosen.flags;
+    if (opts.force) payload.force = true;
+    const order = opts.node && NODES.includes(opts.node)
+      ? [opts.node].concat(NODES.filter((n) => n !== opts.node)) : NODES.slice();
+    let busy = null, lastErr = null;
+    for (const node of order) {
+      try {
+        const session = await postSessionTo(node, payload);
+        session.node = node;
+        return session;
+      } catch (err) {
+        if (err instanceof BridgeBusyError) {
+          err.node = node;
+          if (!busy || busyRank(err.info) > busyRank(busy.info)) busy = err;
+          if (NODES.length > 1) log(`${node.name}: busy (${err.info.reason || "another viewer"}); trying the next node`);
+        } else {
+          lastErr = err;
+          if (NODES.length > 1) log(`${node.name}: ${err.message}; trying the next node`);
+        }
+      }
+    }
+    if (busy) throw busy;
+    throw lastErr || new Error("no bridge node configured");
   }
 
   // sendBeacon is POST-only and header-less, so the bridge accepts
@@ -560,10 +653,12 @@
   // path is the credential, so no auth header is needed on these routes.
   function endBridgeSession(why) {
     const token = state.sessionToken;
-    if (!token) return;
+    const node = state.node;
+    if (!token || !node) return;
     state.sessionToken = null;
+    state.node = null;
     stopHeartbeat();
-    const url = `${BRIDGE_URL}/session/${token}/end`;
+    const url = `${node.url}/session/${token}/end`;
     log(`Ending bridge session (${why})`);
     let sent = false;
     if (why === "pagehide" && navigator.sendBeacon) {
@@ -580,12 +675,14 @@
   // (a live preset change) cannot race ahead of it and get a 409 busy.
   async function endBridgeSessionAwait(why) {
     const token = state.sessionToken;
-    if (!token) return;
+    const node = state.node;
+    if (!token || !node) return;
     state.sessionToken = null;
+    state.node = null;
     stopHeartbeat();
     log(`Ending bridge session (${why})`);
     try {
-      await fetch(`${BRIDGE_URL}/session/${token}`, {
+      await fetch(`${node.url}/session/${token}`, {
         method: "DELETE", credentials: "include", headers: bridgeHeaders(false),
       });
     } catch (err) {
@@ -648,9 +745,10 @@
     stopHeartbeat();
     state.heartbeatTimer = setInterval(async () => {
       const token = state.sessionToken;
-      if (!token || state.source !== "jasna") return;
+      const node = state.node;
+      if (!token || !node || state.source !== "jasna") return;
       try {
-        const resp = await fetch(`${BRIDGE_URL}/session/${token}/heartbeat`, {
+        const resp = await fetch(`${node.url}/session/${token}/heartbeat`, {
           method: "POST",
           headers: bridgeHeaders(true),
           credentials: "include",
@@ -854,7 +952,7 @@
       if (!netAttempts && !mediaAttempts) return;
       log(`hls.js recovered after ${netAttempts} network / ${mediaAttempts} media attempt(s)`);
       netAttempts = mediaAttempts = 0;
-      if (hlsInstance === hls && state.source === "jasna") setButtonLabel("JASNA: ON");
+      if (hlsInstance === hls && state.source === "jasna") setButtonLabel(onLabel());
     });
     hls.on(H.Events.ERROR, (_evt, data) => {
       if (!data || !data.fatal || hlsInstance !== hls || state.source !== "jasna") return;
@@ -1080,11 +1178,14 @@
     };
 
     try {
-      const session = await bridgeCreateSession(state.sceneId, time, { force: opts.force });
+      const session = await bridgeCreateSession(state.sceneId, time,
+        { force: opts.force, node: opts.force ? state.takeoverNode : null });
+      state.node = session.node;
       state.sessionToken = session.token;
+      state.takeoverNode = null;
       state.warm = true; // a live stream is warm for the next toggle
-      const manifestUrl = `${BRIDGE_URL}${session.playlist_path}`;
-      log(`Bridge session ready in ${session.ready_seconds}s` +
+      const manifestUrl = `${session.node.url}${session.playlist_path}`;
+      log(`Bridge session ready in ${session.ready_seconds}s` + (NODES.length > 1 ? ` on ${session.node.name}` : "") +
           (session.reused ? " (stream reused)" : session.cold ? " (cold start)" : session.switched ? " (file switch)" : " (warm)"));
       if (state.cancelSwitch) return await cancelled();
 
@@ -1095,11 +1196,12 @@
       if (state.cancelSwitch) return await cancelled();
       state.source = "jasna";
       startHeartbeat(player);
-      setButtonLabel("JASNA: ON");
+      setButtonLabel(onLabel());
       log("Playback started");
     } catch (err) {
       if (err instanceof BridgeBusyError) {
-        const who = err.info.scene_id ? ` (scene ${err.info.scene_id}, idle ${Math.round(err.info.idle_seconds || 0)}s)` : "";
+        const who = (err.info.scene_id ? ` (scene ${err.info.scene_id}, idle ${Math.round(err.info.idle_seconds || 0)}s)` : "")
+          + (NODES.length > 1 && err.node ? ` on ${err.node.name}` : "");
         if (state.sessionToken) endBridgeSession("error");
         restoreStashSource(player, state.currentTime, state.playing);
         state.source = "stash";
@@ -1119,10 +1221,12 @@
           // offer so a stale "TAKE OVER?" label can't sit there forever.
           log(`Jasna is busy${who}; owner is idle, take-over available`);
           state.canTakeover = true;
+          state.takeoverNode = err.node || null;
           setButtonLabel("JASNA: TAKE OVER?");
           setTimeout(() => {
             if (state.source === "stash" && state.canTakeover) {
               state.canTakeover = false;
+              state.takeoverNode = null;
               setButtonLabel("JASNA: OFF");
             }
           }, 8000);
@@ -1389,7 +1493,7 @@
       badge.appendChild(corner);
       // A rebuild after a player re-render must not show OFF while a stream
       // is live: reflect the current state, not the initial one.
-      if (state.source === "jasna") setButtonLabel("JASNA: ON");
+      if (state.source === "jasna") setButtonLabel(onLabel());
       else if (state.source === "switching") setButtonLabel("JASNA: PREPARING...");
     }
 

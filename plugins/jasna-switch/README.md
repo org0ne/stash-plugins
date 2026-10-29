@@ -35,7 +35,8 @@ reverse-proxied under the Stash domain the plugin **auto-detects** it at
 
 ## Labels
 
-- `JASNA: OFF` / `JASNA: ON` - the two resting states.
+- `JASNA: OFF` / `JASNA: ON` - the two resting states (`JASNA: ON · name`
+  names the bridge node when more than one is configured).
 - `JASNA: STARTING... / PREPARING... Ns` - Jasna is spinning up (cold) or
   rendering the first segment.
 - `JASNA: BUSY` / `JASNA: TAKE OVER?` - another viewer owns Jasna; once that
@@ -116,6 +117,28 @@ URL must also be added to `ui.csp.connect-src` in `jasna-switch.yml`
 (same-origin `/jasna` needs nothing), then reload plugins. **Bridge token**
 is only for the bridge's `auth.mode = token`.
 
+**Several bridges (one per GPU host).** List them in **Bridge URL** as
+`name = url` entries separated by `;`:
+
+```
+debeast = /jasna; rtx3060 = /jasna-3060
+```
+
+Each node is a stash-jasna-bridge of its own with its own Jasna, reached
+through its own reverse-proxy location on the Stash origin (or an absolute
+URL listed in the CSP). Toggle ON asks the nodes in that order and moves on
+from one that answers busy (another viewer, or an offline
+[jasna-batch](../jasna-batch) job on its GPU) or cannot be reached, so a
+second GPU keeps the toggle usable while the first is taken; the label
+reads `JASNA ON · rtx3060` when the stream is not on the first node. When
+every node is busy the most useful answer wins: a take-over offer (which
+then targets the node that made it), else `BUSY`, else `BATCH`. The preset
+pill lists the first node's presets plus the custom ones; a node whose
+`bridge.toml` lacks the chosen preset streams on its own default preset
+(custom presets carry their flags and work on any node that allows them).
+The same `name = url` list, with the server-side addresses, goes into the
+jasna-batch plugin's Bridge URL so both plugins share the nodes.
+
 For development, symlink this folder into Stash's `plugins/` directory and
 reload:
 
@@ -143,8 +166,9 @@ self-signed proxy cert is fine.
 
 ## Notes
 
-- One Jasna session at a time (a single GPU pipeline); the bridge coordinates
-  ownership and takeover between viewers.
+- One Jasna session at a time per bridge (a single GPU pipeline); the bridge
+  coordinates ownership and takeover between viewers, and a second bridge
+  node takes the next viewer.
 - Scenes Stash cannot direct-play (AVI, WMV, anything without a "Direct
   stream" entry) are served as transcodes, and Stash's player keeps its own
   clock for those (a time offset plus start= reloads on seek). The plugin

@@ -5,8 +5,9 @@ name: Jasna Switch
 description: >
   Adds a JASNA ON/OFF toggle to the Stash scene player, allowing
   Jasna-restored playback to be swapped in as an alternate rendition
-  of the current scene without modifying Stash itself.
-version: 0.9.1
+  of the current scene without modifying Stash itself. Several bridges
+  (one per GPU host) can be listed; the toggle moves on from a busy one.
+version: 0.10.0
 
 ui:
   javascript:
@@ -36,7 +37,14 @@ settings:
       reverse-proxied setup: the plugin auto-detects the bridge at
       <stash-origin>/jasna. Set it only to override, e.g. an absolute
       http://host:8770 for a plain-HTTP Stash on another host (its origin
-      must then be in this plugin's CSP connect-src above).
+      must then be in this plugin's CSP connect-src above). Several bridges,
+      one per GPU host, as "name = url" entries separated by ";", e.g.
+      "debeast = /jasna; rtx3060 = /jasna-3060": toggle ON tries them in
+      that order and skips a node that is busy with another viewer or an
+      offline batch job; the ON label then names the node. Presets come
+      from the first node; a node without the chosen preset streams on its
+      own default. Each node needs its own reverse-proxy location (or an
+      absolute URL in the CSP).
     type: STRING
   bridgeToken:
     displayName: Bridge token
