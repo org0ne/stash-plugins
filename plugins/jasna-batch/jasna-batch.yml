@@ -9,7 +9,7 @@ description: >
   follow the job, and a permanent "Jasna: Restored" tag marks every source
   that has been restored. Several bridges (one per GPU host) share the work.
 url: https://github.com/org0ne/stash-plugins
-version: 0.3.0
+version: 0.3.1
 
 exec:
   - python
@@ -18,7 +18,8 @@ interface: raw
 
 ui:
   javascript:
-    # Puts the link to the bridge's queue page into the "Queue page" setting below.
+    # Puts the links to the bridges' queue page (all nodes on one page, and
+    # one per node) into the "Queue page" setting below.
     - jasna-batch-ui.js
 
 hooks:

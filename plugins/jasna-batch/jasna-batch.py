@@ -42,7 +42,7 @@ from stashapi.stashapp import StashInterface
 import jasna_batch_core as core
 
 PLUGIN_ID = "jasna-batch"
-PLUGIN_VERSION = "0.3.0"
+PLUGIN_VERSION = "0.3.1"
 
 PARENT_TAG = "Jasna Batch"
 STATUS_TAGS = {
@@ -200,6 +200,9 @@ class Bridge:
         q = "?unacknowledged=1" if unacknowledged else ""
         return self.call("GET", "/jobs" + q).get("jobs", [])
 
+    def batch_info(self) -> dict:
+        return self.call("GET", "/batch") or {}
+
     def active_jobs(self) -> List[dict]:
         """Queued and running jobs: this node's load."""
         return self.call("GET", "/jobs?state=queued,running", timeout=10).get("jobs", [])
@@ -301,6 +304,7 @@ class Run:
         # as jobs are submitted.
         self._node_jobs: Dict[str, Optional[List[dict]]] = {}
         self._node_errors: Dict[str, str] = {}
+        self._node_paused: Dict[str, bool] = {}
         self._durations: Dict[str, Optional[float]] = {}
 
     @property
@@ -327,6 +331,16 @@ class Run:
                 self._node_jobs[bridge.name] = None
                 self._node_errors[bridge.name] = str(err)
         return self._node_jobs[bridge.name]
+
+    def node_paused(self, bridge: Bridge) -> bool:
+        """True while the node's queue is paused (its queue page's Pause
+        button): new jobs go elsewhere, unless every node is paused."""
+        if bridge.name not in self._node_paused:
+            try:
+                self._node_paused[bridge.name] = bool(bridge.batch_info().get("paused"))
+            except BridgeError:
+                self._node_paused[bridge.name] = False
+        return self._node_paused[bridge.name]
 
     def scene_duration(self, scene_id: str) -> Optional[float]:
         if scene_id not in self._durations:
@@ -356,6 +370,7 @@ class Run:
         waiting divided by its speed; the setting's order on a tie. Also
         returns one line per node for the log."""
         loads: List[Tuple[core.Node, float]] = []
+        paused: List[Tuple[core.Node, float]] = []
         by_name = {b.name: b for b in self.bridges}
         notes: List[str] = []
         for b in self.bridges:
@@ -367,9 +382,14 @@ class Run:
                 notes.append(f"{b.name}: {self._node_errors.get(b.name, 'unavailable')}")
                 continue
             load = core.estimate_load(jobs, self.scene_duration)
-            loads.append((b.node, load))
+            is_paused = self.node_paused(b)
+            (paused if is_paused else loads).append((b.node, load))
             notes.append(f"{b.name}: {len(jobs)} job(s), {load / 3600:.1f}h of video"
-                         + (f" / speed {b.node.speed:g} = {load / b.node.speed / 3600:.1f}h" if b.node.speed != 1 else ""))
+                         + (f" / speed {b.node.speed:g} = {load / b.node.speed / 3600:.1f}h" if b.node.speed != 1 else "")
+                         + (" (paused)" if is_paused else ""))
+        if not loads and paused:
+            notes.append("every node is paused; queueing on the least loaded one anyway")
+            loads = paused
         if not loads:
             return None, notes
         best = core.rank_nodes(loads)[0][0]
@@ -836,7 +856,8 @@ class Run:
                     continue
                 line(f"{prefix}Batch queue", f"{batch.get('queued')} queued, running: "
                      f"{(batch.get('running') or {}).get('id') or 'none'}, "
-                     f"{batch.get('unacknowledged')} unacknowledged")
+                     f"{batch.get('unacknowledged')} unacknowledged"
+                     + (", PAUSED (new jobs go to another node)" if batch.get("paused") else ""))
                 check = bridge.call("GET", "/batch/check", timeout=180)
                 node_info[bridge.name] = check
                 for c in check.get("checks", []):

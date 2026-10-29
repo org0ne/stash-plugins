@@ -139,9 +139,17 @@ The bridge serves the queue as a page for a phone or desktop browser at
 time, the queued jobs in order with a Remove button, and the last finished
 ones with duration, size, error and a link to Jasna's log. Scenes are named
 with their Stash titles and link to the scene. The link is shown under the
-**Queue page** setting on Settings > Plugins, one per bridge node; set that
-setting only when a bridge is on another origin (`name = url; ...` for
-several).
+**Queue page** setting on Settings > Plugins: one page showing every node
+(each with its GPU meter, running and queued jobs, and **Pause** / **Pause
+now** / **Resume** buttons) plus one link per node. Set that setting only
+when a bridge is on another origin (`name = url; ...` for several).
+
+**Pause** lets the running job finish and starts no other on that node;
+**Pause now** also stops the running job and puts it back at the head of
+the queue (Jasna cannot resume a run, so its progress is lost), which frees
+the GPU for other work within seconds. A paused node gets no new jobs from
+this plugin (they go to another node, or wait on the least loaded one when
+every node is paused) until **Resume**. The pause survives a bridge restart.
 
 ## Tasks
 
@@ -167,7 +175,7 @@ without scanning, to check the files by hand first.
 
 ## Requirements
 
-- stash-jasna-bridge with the batch queue (0.3.0+), Jasna 0.11.x with the
+- stash-jasna-bridge with the batch queue (0.4.0+ for pausing), Jasna 0.11.x with the
   models your presets use already downloaded (Jasna's download prompt is
   interactive; a headless job would stop there), and the per-machine
   activation done.
