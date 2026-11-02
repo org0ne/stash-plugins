@@ -5,10 +5,12 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import jasna_batch_core as core  # noqa: E402
+import jasna_batch_upscale as upscale  # noqa: E402
 
 NFO = """<?xml version='1.0' encoding='utf-8'?>
 <movie>
@@ -267,3 +269,48 @@ class NodeTests(unittest.TestCase):
     def test_command_sidecar_names_the_node(self):
         text = core.command_sidecar({"id": "j1", "node": "rtx3060", "node_url": "http://h:8770/jasna"}, None, "0.2.0")
         self.assertIn("Bridge node      : rtx3060 (http://h:8770/jasna)", text)
+
+
+class Upscale(unittest.TestCase):
+    def test_preset_flag(self):
+        presets, problems = core.parse_presets("Plain = --codec hevc; LTX 2x = -upscale --codec hevc")
+        self.assertEqual(problems, [])
+        self.assertEqual([p.upscale for p in presets], [False, True])
+
+    def test_sidecar_names_the_method(self):
+        self.assertNotIn("Upscale", core.command_sidecar({"flags": ["--codec", "hevc"]}, None, "0"))
+        self.assertIn(f"Upscale          : {core.UPSCALE_METHOD}", core.command_sidecar({"flags": ["-upscale"]}, None, "0"))
+
+    def test_jasna_command_swaps_the_input(self):
+        argv = ["jasna", "--input", "a.avi", "--output", "o.mp4", "-upscale", "--cq", "24"]
+        self.assertEqual(upscale.jasna_command(argv, "up.mkv"),
+                         ["jasna", "--input", "up.mkv", "--output", "o.mp4", "--cq", "24"])
+
+    def test_constant_rate_is_read_from_the_timestamps(self):
+        step = 1001 / 30000
+        rate, span = upscale.frame_timing([i * step for i in range(3000)], "30000/1001")
+        self.assertEqual(str(rate), "30000/1001")
+        self.assertAlmostEqual(span, 3000 * step)
+        # a useless container rate does not win
+        self.assertEqual(str(upscale.frame_timing([i * step for i in range(3000)], "0/0")[0]), "30000/1001")
+
+    def test_variable_rate_is_refused(self):
+        times = [i / 30 for i in range(1500)] + [50 + i / 15 for i in range(750)]
+        with self.assertRaisesRegex(upscale.UpscaleError, "variable frame rate"):
+            upscale.frame_timing(times, "25/1")
+
+    def test_no_timestamps_is_refused(self):
+        with self.assertRaises(upscale.UpscaleError):
+            upscale.frame_timing([], "30/1")
+
+    def test_color_follows_the_source(self):
+        self.assertEqual(upscale.source_matrix({"height": 480}), "170m")
+        self.assertEqual(upscale.source_matrix({"height": 720}), "709")
+        self.assertEqual(upscale.source_matrix({"height": 480, "color_space": "bt709"}), "709")
+        self.assertEqual(upscale.color_flags({"height": 480, "color_primaries": "unknown"}), ["-colorspace", "smpte170m"])
+
+    def test_wrapper_check_names_what_is_missing(self):
+        with unittest.mock.patch.object(upscale, "TOOLKIT", "/nonexistent"), \
+                unittest.mock.patch("builtins.print") as printed:
+            self.assertEqual(upscale.check(), 1)
+        self.assertIn("/nonexistent/vs_pipeline.py", printed.call_args[0][0])

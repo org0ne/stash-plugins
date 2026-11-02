@@ -26,6 +26,11 @@ from xml.dom import minidom
 VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".wmv", ".mov", ".m4v", ".ts", ".m2ts", ".mpg", ".mpeg", ".flv",
               ".webm", ".vob", ".iso", ".divx", ".rm", ".rmvb", ".3gp", ".ogv"}
 OUTPUT_EXT = ".mp4"
+# Preset flag that runs a 2x upscale before Jasna. It is not a Jasna flag: the
+# bridge's batch.wrapper (jasna_batch_upscale.py) removes it and does the work.
+UPSCALE_FLAG = "-upscale"
+UPSCALE_METHOD = "qtgmc-compact-2x"
+UPSCALE_MAX_HEIGHT = 720
 # Flags the bridge refuses in a preset (it sets input/output itself); checked
 # here too so Check settings can say so before anything is queued.
 FLAG_DENYLIST = frozenset({
@@ -52,6 +57,10 @@ class Preset:
     @property
     def tag(self) -> str:
         return trigger_tag(self.name)
+
+    @property
+    def upscale(self) -> bool:
+        return UPSCALE_FLAG in self.flags
 
 
 def trigger_tag(preset_name: str) -> str:
@@ -547,6 +556,7 @@ def command_sidecar(job: dict, preset: Optional[Preset], plugin_version: str) ->
         f"Jasna version    : {job.get('jasna_version') or 'unknown'}",
         f"Preset           : {job.get('preset')}" + (f"  # {preset.comment}" if preset and preset.comment else ""),
         f"Preset flags     : {' '.join(job.get('flags') or [])}",
+        *([f"Upscale          : {UPSCALE_METHOD}, before Jasna"] if UPSCALE_FLAG in (job.get("flags") or []) else []),
         f"Source file      : {job.get('stash_source')}",
         f"Source size      : {(job.get('source_bytes') or 0) / 1e9:.2f} GB",
         f"Output file      : {job.get('stash_output')}",

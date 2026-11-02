@@ -104,6 +104,33 @@ became. Long jobs are normal (an LTX preset can take hours per film); the
 bridge's `journalctl --user -u stash-jasna-bridge` and `/jasna/health`
 show progress.
 
+## Upscaling before Jasna
+
+Add `-upscale` to a custom preset to upscale the source 2x first:
+
+```
+LTX 2x = -upscale --restoration-model-name ltx --codec hevc --cq 24
+```
+
+The flag is a plain switch. The method is set in the plugin
+(`UPSCALE_METHOD` in `jasna_batch_core.py`, `METHODS` in
+`jasna_batch_upscale.py`): `qtgmc-compact-2x`, QTGMC deshimmer and the
+2xNomosUni Compact model from
+upscale-toolkit. It runs on the job's GPU turn, so it counts towards the
+job's time on the queue page. The upscaled file is near-lossless H.264 on the
+bridge's local scratch (about 50-80 MB per minute) and is deleted with the
+job's working folder.
+
+- **720p and below.** A taller source is not queued: the scene goes to
+  `Jasna: Failed` and loses its trigger tag.
+- **Variable frame rate sources fail** at the start of the job, because the
+  pipeline writes a constant rate that would drift from the audio.
+- **Bridge setup.** On each node that should upscale, install upscale-toolkit
+  (in `~/Applications/upscale-toolkit`, or set `JASNA_UPSCALE_TOOLKIT` for the
+  bridge's service) and point `batch.wrapper` at this plugin's
+  `jasna_batch_upscale.py`. Nodes without a wrapper are skipped for these
+  presets, and *Check settings* reports whether the wrapper can run.
+
 ## Several bridges (one per GPU host)
 
 List them in **Bridge URL** as `name = url` entries separated by `;`, with

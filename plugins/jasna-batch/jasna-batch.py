@@ -42,7 +42,7 @@ from stashapi.stashapp import StashInterface
 import jasna_batch_core as core
 
 PLUGIN_ID = "jasna-batch"
-PLUGIN_VERSION = "0.3.1"
+PLUGIN_VERSION = "0.4.0"
 
 PARENT_TAG = "Jasna Batch"
 STATUS_TAGS = {
@@ -75,7 +75,7 @@ SCAN_GENERATORS = {"covers": "scanGenerateCovers", "previews": "scanGeneratePrev
                    "phashes": "scanGeneratePhashes", "thumbnails": "scanGenerateThumbnails",
                    "clippreviews": "scanGenerateClipPreviews"}
 PENDING_SCAN = "pending-scan"   # ingest()'s answer while the scan it queued has not run yet
-SCENE_FRAGMENT = "id title tags { id name } files { id path }"
+SCENE_FRAGMENT = "id title tags { id name } files { id path height }"
 KNOWN_SETTINGS = {"bridgeUrl", "bridgeToken", "queuePageUrl", "presets", "targetRoot", "titleMarker",
                   "extraGenres", "cleanHtml", "ignorePatterns", "stopAfter", "scanGenerate", "audioCodec",
                   "restoredTag"}
@@ -304,7 +304,7 @@ class Run:
         # as jobs are submitted.
         self._node_jobs: Dict[str, Optional[List[dict]]] = {}
         self._node_errors: Dict[str, str] = {}
-        self._node_paused: Dict[str, bool] = {}
+        self._node_batch: Dict[str, dict] = {}
         self._durations: Dict[str, Optional[float]] = {}
 
     @property
@@ -332,15 +332,18 @@ class Run:
                 self._node_errors[bridge.name] = str(err)
         return self._node_jobs[bridge.name]
 
+    def node_batch(self, bridge: Bridge) -> dict:
+        if bridge.name not in self._node_batch:
+            try:
+                self._node_batch[bridge.name] = bridge.batch_info()
+            except BridgeError:
+                self._node_batch[bridge.name] = {}
+        return self._node_batch[bridge.name]
+
     def node_paused(self, bridge: Bridge) -> bool:
         """True while the node's queue is paused (its queue page's Pause
         button): new jobs go elsewhere, unless every node is paused."""
-        if bridge.name not in self._node_paused:
-            try:
-                self._node_paused[bridge.name] = bool(bridge.batch_info().get("paused"))
-            except BridgeError:
-                self._node_paused[bridge.name] = False
-        return self._node_paused[bridge.name]
+        return bool(self.node_batch(bridge).get("paused"))
 
     def scene_duration(self, scene_id: str) -> Optional[float]:
         if scene_id not in self._durations:
@@ -376,6 +379,9 @@ class Run:
         for b in self.bridges:
             if not b.node.accepts(preset.name):
                 notes.append(f"{b.name}: does not take preset {preset.name!r}")
+                continue
+            if preset.upscale and not self.node_batch(b).get("wrapper"):
+                notes.append(f"{b.name}: no batch.wrapper, cannot run {core.UPSCALE_FLAG}")
                 continue
             jobs = self.node_jobs(b)
             if jobs is None:
@@ -468,6 +474,13 @@ class Run:
             return
         if len(scene.get("files") or []) > 1:
             log.info(f"{label}: has {len(scene['files'])} files; the primary one is restored")
+        height = (scene["files"][0].get("height") or 0) if preset.upscale else 0
+        if height > core.UPSCALE_MAX_HEIGHT:
+            why = f"{height}p source; {core.UPSCALE_FLAG} takes {core.UPSCALE_MAX_HEIGHT}p and below"
+            log.error(f"{label}: not queued for preset {preset.name!r}: {why}")
+            self.counts["errors"] += 1
+            self.set_status(scene, "failed", [preset.tag], why)
+            return
         plan = core.plan_output(source, self.cfg.target_root, preset.name, self.cfg.marker)
         if os.path.exists(plan.video):
             log.info(f"{label}: {plan.video} already exists; skipped (same scene, same preset)")
@@ -880,6 +893,9 @@ class Run:
             line(p.tag, " ".join(p.flags), "presets", p.comment)
             if self.multi and not any(b.node.accepts(p.name) for b in self.bridges):
                 problems.append(f"preset {p.name!r}: no bridge node takes it (every node's only= excludes it)")
+            if p.upscale and not any(b.node.accepts(p.name) and self.node_batch(b).get("wrapper") for b in self.bridges):
+                problems.append(f"preset {p.name!r}: uses {core.UPSCALE_FLAG} but no bridge node that takes it has "
+                                f"batch.wrapper set to jasna_batch_upscale.py")
         for problem in cfg.preset_problems:
             line("preset problem", problem)
             problems.append(f"preset: {problem}")
