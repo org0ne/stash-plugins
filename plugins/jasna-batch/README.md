@@ -106,13 +106,13 @@ show progress.
 
 ## Upscaling before Jasna
 
-Add `-upscale` to a custom preset to upscale the source 2x first:
+Add `--upscale` to a custom preset to upscale the source 2x first:
 
 ```
-LTX 2x = -upscale --restoration-model-name ltx --codec hevc --cq 24
+LTX 2x = --upscale --restoration-model-name ltx --codec hevc --cq 24
 ```
 
-The flag is a plain switch. The method is set in the plugin
+The flag is a plain switch (`-upscale` works too). The method is set in the plugin
 (`UPSCALE_METHOD` in `jasna_batch_core.py`, `METHODS` in
 `jasna_batch_upscale.py`): `qtgmc-compact-2x`, QTGMC deshimmer and the
 2xNomosUni Compact model from

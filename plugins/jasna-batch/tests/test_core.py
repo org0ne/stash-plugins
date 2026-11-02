@@ -273,18 +273,19 @@ class NodeTests(unittest.TestCase):
 
 class Upscale(unittest.TestCase):
     def test_preset_flag(self):
-        presets, problems = core.parse_presets("Plain = --codec hevc; LTX 2x = -upscale --codec hevc")
+        presets, problems = core.parse_presets("Plain = --codec hevc; A = --upscale --codec hevc; B = -upscale --codec hevc")
         self.assertEqual(problems, [])
-        self.assertEqual([p.upscale for p in presets], [False, True])
+        self.assertEqual([p.upscale for p in presets], [False, True, True])
 
     def test_sidecar_names_the_method(self):
         self.assertNotIn("Upscale", core.command_sidecar({"flags": ["--codec", "hevc"]}, None, "0"))
-        self.assertIn(f"Upscale          : {core.UPSCALE_METHOD}", core.command_sidecar({"flags": ["-upscale"]}, None, "0"))
+        self.assertIn(f"Upscale          : {core.UPSCALE_METHOD}", core.command_sidecar({"flags": ["--upscale"]}, None, "0"))
 
     def test_jasna_command_swaps_the_input(self):
-        argv = ["jasna", "--input", "a.avi", "--output", "o.mp4", "-upscale", "--cq", "24"]
-        self.assertEqual(upscale.jasna_command(argv, "up.mkv"),
-                         ["jasna", "--input", "up.mkv", "--output", "o.mp4", "--cq", "24"])
+        for flag in core.UPSCALE_FLAGS:
+            argv = ["jasna", "--input", "a.avi", "--output", "o.mp4", flag, "--cq", "24"]
+            self.assertEqual(upscale.jasna_command(argv, "up.mkv"),
+                             ["jasna", "--input", "up.mkv", "--output", "o.mp4", "--cq", "24"])
 
     def test_constant_rate_is_read_from_the_timestamps(self):
         step = 1001 / 30000

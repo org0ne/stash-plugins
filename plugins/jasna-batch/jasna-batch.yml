@@ -9,7 +9,7 @@ description: >
   follow the job, and a permanent "Jasna: Restored" tag marks every source
   that has been restored. Several bridges (one per GPU host) share the work.
 url: https://github.com/org0ne/stash-plugins
-version: 0.4.0
+version: 0.4.1
 
 exec:
   - python
@@ -121,7 +121,7 @@ settings:
       its name goes into the output file name ({code}_{name}_jasna.mp4).
       Example: LTX = --restoration-model-name ltx --codec hevc --cq 24 # standard LTX;
       LTX hq = --restoration-model-name ltx-8step --codec av1. Do not pass
-      --input/--output: the bridge sets those. Add -upscale to upscale the
+      --input/--output: the bridge sets those. Add --upscale to upscale the
       source 2x before Jasna (720p and below, on nodes with batch.wrapper).
     type: STRING
   targetRoot:

@@ -7,9 +7,9 @@ The bridge calls this with Jasna's whole command line:
   jasna_batch_upscale.py /path/to/jasna --input SRC --output OUT
       --working-directory WORK ... flags
 
-Without -upscale in the flags it just becomes Jasna. With it, the source is
+Without --upscale in the flags it just becomes Jasna. With it, the source is
 first upscaled into WORK with the method named by core.UPSCALE_METHOD, then
-this process becomes Jasna with -upscale removed and --input pointing at the
+this process becomes Jasna with --upscale removed and --input pointing at the
 upscaled file. The bridge sees one process from start to finish: its GPU lock,
 cancel, pause, timeout, restart adoption and removal of WORK all apply to
 both stages, and the job log holds what happened. Progress lines are shaped
@@ -67,8 +67,8 @@ def option(argv: List[str], name: str) -> Optional[str]:
 
 
 def jasna_command(argv: List[str], new_input: str) -> List[str]:
-    """Jasna's command line with -upscale gone and --input replaced."""
-    out = [a for a in argv if a != core.UPSCALE_FLAG]
+    """Jasna's command line with --upscale gone and --input replaced."""
+    out = [a for a in argv if a not in core.UPSCALE_FLAGS]
     out[out.index("--input") + 1] = new_input
     return out
 
@@ -227,7 +227,7 @@ def main(argv: List[str]) -> int:
     if not argv:
         print("usage: jasna_batch_upscale.py --check | jasna [flags]", file=sys.stderr)
         return 2
-    if core.UPSCALE_FLAG in argv:
+    if core.has_upscale(argv):
         try:
             argv = jasna_command(argv, upscale(argv))
         except UpscaleError as err:
