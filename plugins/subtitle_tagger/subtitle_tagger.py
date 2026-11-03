@@ -73,7 +73,8 @@ MANAGED_PREFIXES = (TRANSCRIPTION_PREFIX, TRANSLATION_PREFIX)
 
 # Flags whose value names the ASR model outright. Pipeline/runtime selectors
 # (--mode, --pass1-pipeline, --asr) are deliberately absent: they pick an engine
-# or preset, not a model, and tagging them buries the real signal.
+# or preset, not a model, and tagging them buries the real signal. The exceptions
+# are listed in PIPELINE_MODELS below.
 TRANSCRIPTION_FLAGS = (
     "model",             # global Whisper override, e.g. large-v2, turbo
     "pass1-model",       # ensemble pass 1, e.g. kotoba-whisper-v2.0
@@ -82,6 +83,13 @@ TRANSCRIPTION_FLAGS = (
     "qwen-model-id",     # --mode qwen
     "crispasr-backend",  # whispercpp | parakeet | cohere - no model-id flag exists
 )
+
+# The few pipelines that are themselves the only record of the model used, as
+# {lowercase pipeline name: tag}. Any other pipeline value is not tagged.
+PIPELINE_FLAGS = ("pass1-pipeline", "pass2-pipeline")
+PIPELINE_MODELS = {
+    "cohere-crispasr": "Cohere-CrispASR",
+}
 
 # Backend names that only imply a model. Consulted when nothing above matched,
 # so "--generator qwen3 --generator-config {model_id: Qwen/...}" tags the real
@@ -247,6 +255,7 @@ TRANSLATION_PATTERNS = tuple(flag_re(f) for f in TRANSLATION_FLAGS)
 TRANSLATION_FALLBACK_PATTERNS = tuple(
     flag_re(f) for f in TRANSLATION_FALLBACK_FLAGS)
 JSON_PATTERNS = tuple(flag_re(f) for f in JSON_TRANSCRIPTION_FLAGS)
+PIPELINE_PATTERNS = tuple(flag_re(f) for f in PIPELINE_FLAGS)
 
 
 def _messages(failures: list[tuple]) -> list[str]:
@@ -687,6 +696,13 @@ def collect(text: str, patterns: tuple[re.Pattern[str], ...]) -> list[str]:
     return found
 
 
+def extract_pipeline_models(text: str) -> list[str]:
+    """Tag names for the pipeline selectors that identify a model."""
+    selected = collect(text, PIPELINE_PATTERNS)
+    return [PIPELINE_MODELS[v.lower()] for v in selected
+            if v.lower() in PIPELINE_MODELS]
+
+
 def extract_models(text: str) -> tuple[list[str], list[str]]:
     """(transcription models, translation models) named in a command file.
 
@@ -699,7 +715,7 @@ def extract_models(text: str) -> tuple[list[str], list[str]]:
     kv_asr, kv_translation = extract_kv_models(text)
 
     asr = collect(text, TRANSCRIPTION_PATTERNS)
-    for value in extract_json_models(text) + kv_asr:
+    for value in extract_pipeline_models(text) + extract_json_models(text) + kv_asr:
         if value not in asr:
             asr.append(value)
     if not asr:

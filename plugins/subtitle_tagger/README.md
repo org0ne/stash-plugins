@@ -15,6 +15,7 @@ Reads sidecars named `*-whisperjav-command.txt` or
 | `--hf-model-id` | `--mode transformers` |
 | `--qwen-model-id` | `--mode qwen` |
 | `--crispasr-backend` | `whispercpp`, `parakeet`, `cohere` |
+| `--pass1-pipeline`, `--pass2-pipeline` | only `cohere-crispasr`, tagged `Cohere-CrispASR` |
 | `--qwen-generator`, `--generator` | fallback only, when no explicit model id is present |
 | `--overrides`, `--passN-params`, `--passN-hf-params`, `--passN-qwen-params`, `--generator-config` | JSON blobs — `model_id` / `model` keys are read from inside |
 
@@ -67,6 +68,8 @@ line in the legacy formats; everything after it is discarded.
 
 Pipeline and runtime selectors (`--mode`, `--passN-pipeline`, `--asr`) are
 deliberately **not** tagged either: they name an engine or preset, not a model.
+The one exception is `--passN-pipeline cohere-crispasr`, which is the only record
+of the model those runs used.
 
 `--qwen-generator anime-whisper` is canonicalised to `litagin/anime-whisper` so
 it collapses with the equivalent `--qwen-model-id`. Placeholder values (`auto`,
