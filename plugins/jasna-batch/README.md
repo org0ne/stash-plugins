@@ -131,6 +131,20 @@ job's working folder.
   `jasna_batch_upscale.py`. Nodes without a wrapper are skipped for these
   presets, and *Check settings* reports whether the wrapper can run.
 
+## Audio an MP4 cannot hold
+
+Jasna copies the source's audio into its MP4 output, so a source with audio
+an MP4 cannot hold, such as WMA Pro in a `.wmv`, fails at the end of the job,
+when Jasna first writes the output. The same wrapper fixes this for every
+preset. Before Jasna starts, it asks ffmpeg whether each audio stream fits in
+an MP4. If one doesn't, it remuxes the source into the job's working folder,
+copying the video and converting that stream to AAC. A 2-hour WMV takes about
+1.5 minutes. Other sources go to Jasna as they are. Upscale presets do the
+conversion in their own mux step.
+
+This only happens on nodes whose `batch.wrapper` points at
+`jasna_batch_upscale.py`; on other nodes these sources still fail.
+
 ## Several bridges (one per GPU host)
 
 List them in **Bridge URL** as `name = url` entries separated by `;`, with

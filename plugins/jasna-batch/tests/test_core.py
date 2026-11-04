@@ -310,6 +310,17 @@ class Upscale(unittest.TestCase):
         self.assertEqual(upscale.source_matrix({"height": 480, "color_space": "bt709"}), "709")
         self.assertEqual(upscale.color_flags({"height": 480, "color_primaries": "unknown"}), ["-colorspace", "smpte170m"])
 
+    def test_only_audio_an_mp4_refuses_is_converted(self):
+        streams = '{"streams": [{"codec_name": "aac", "channels": 2}, {"codec_name": "wmapro", "channels": 6}]}'
+        with unittest.mock.patch.object(upscale, "ffprobe", return_value=streams), \
+                unittest.mock.patch.object(upscale, "fits_mp4", side_effect=lambda p, i: i == 0), \
+                unittest.mock.patch("builtins.print"):
+            self.assertEqual(upscale.audio_args("s.wmv"),
+                             ["-c:a:0", "copy", "-c:a:1", "aac", "-b:a:1", "512k"])
+        with unittest.mock.patch.object(upscale, "ffprobe", return_value=streams), \
+                unittest.mock.patch.object(upscale, "fits_mp4", return_value=True):
+            self.assertIsNone(upscale.audio_args("s.mp4"))
+
     def test_wrapper_check_names_what_is_missing(self):
         with unittest.mock.patch.object(upscale, "TOOLKIT", "/nonexistent"), \
                 unittest.mock.patch("builtins.print") as printed:

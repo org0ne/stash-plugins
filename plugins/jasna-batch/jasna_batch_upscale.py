@@ -7,10 +7,13 @@ The bridge calls this with Jasna's whole command line:
   jasna_batch_upscale.py /path/to/jasna --input SRC --output OUT
       --working-directory WORK ... flags
 
-Without --upscale in the flags it just becomes Jasna. With it, the source is
-first upscaled into WORK with the method named by core.UPSCALE_METHOD, then
-this process becomes Jasna with --upscale removed and --input pointing at the
-upscaled file. The bridge sees one process from start to finish: its GPU lock,
+With --upscale in the flags, the source is first upscaled into WORK with the
+method named by core.UPSCALE_METHOD, then this process becomes Jasna with
+--upscale removed and --input pointing at the upscaled file. Without it, a
+source whose audio an MP4 cannot hold (WMA Pro in a .wmv, seen 2026-11-03:
+Jasna copies the audio and failed at compose, 46 min in) is first remuxed
+into WORK with that audio as AAC and the video copied; any other source goes
+straight to Jasna. The bridge sees one process from start to finish: its GPU lock,
 cancel, pause, timeout, restart adoption and removal of WORK all apply to
 both stages, and the job log holds what happened. Progress lines are shaped
 like Jasna's so the bridge reads them the same way.
@@ -55,8 +58,8 @@ class UpscaleError(Exception):
     pass
 
 
-def log(message: str) -> None:
-    print(f"[upscale] {message}", flush=True)
+def log(message: str, stage: str = "upscale") -> None:
+    print(f"[{stage}] {message}", flush=True)
 
 
 def option(argv: List[str], name: str) -> Optional[str]:
@@ -171,17 +174,72 @@ def run_pipeline(source: str, output: str, rate: Fraction, stream: dict) -> None
         raise UpscaleError("the upscale pipeline failed (see the lines above)")
 
 
-def add_audio(video: str, source: str, output: str, delay: float) -> None:
+def fits_mp4(path: str, index: int) -> bool:
+    """Whether audio stream `index` can be stream-copied into an MP4, as
+    Jasna does with its input's audio. ffmpeg's own muxer answers, so no
+    codec list here goes stale."""
+    done = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", path, "-map", f"0:a:{index}", "-c", "copy",
+                           "-t", "1", "-f", "mp4", "-movflags", "frag_keyframe+empty_moov", "-y", os.devnull],
+                          capture_output=True, text=True)
+    return done.returncode == 0
+
+
+def audio_args(path: str) -> Optional[List[str]]:
+    """ffmpeg audio codec options that make every audio stream MP4-safe:
+    copied when it already is, AAC otherwise (bitrate as the bridge's
+    audio fix-up picks it). None when nothing needs converting."""
+    streams = json.loads(ffprobe("-select_streams", "a", "-show_entries", "stream=codec_name,channels",
+                                 "-of", "json", path)).get("streams") or []
+    args, convert = [], []
+    for i, stream in enumerate(streams):
+        if fits_mp4(path, i):
+            args += [f"-c:a:{i}", "copy"]
+        else:
+            channels = int(stream.get("channels") or 2)
+            args += [f"-c:a:{i}", "aac", f"-b:a:{i}", f"{min(96 * channels, 512)}k"]
+            convert.append(stream.get("codec_name") or "?")
+    if convert:
+        log(f"audio {', '.join(convert)} cannot go in an MP4; converting to AAC", "audio")
+    return args if convert else None
+
+
+def add_audio(video: str, source: str, output: str, delay: float, audio: Optional[List[str]]) -> None:
     """Jasna takes its audio from its input, so put the source's back. delay
     keeps the video where it was relative to the audio."""
     done = subprocess.run(["ffmpeg", "-v", "error", "-y", "-itsoffset", f"{max(delay, 0):.6f}", "-i", video,
-                           "-i", source, "-map", "0:v", "-map", "1:a?", "-c", "copy", output],
+                           "-i", source, "-map", "0:v", "-map", "1:a?", "-c:v", "copy",
+                           *(audio or ["-c:a", "copy"]), output],
                           stdin=subprocess.DEVNULL)
     if done.returncode:
         raise UpscaleError(f"could not mux the source's audio into the upscaled file (ffmpeg {done.returncode})")
 
 
-def upscale(argv: List[str]) -> str:
+def remux_audio(argv: List[str], audio: List[str]) -> str:
+    """The source with its video copied and its audio made MP4-safe, under
+    Jasna's working directory. Returns the new file."""
+    source, work = option(argv, "--input"), option(argv, "--working-directory")
+    if not source or not work:
+        raise UpscaleError("--input and --working-directory are required")
+    folder = os.path.join(work, "audio")
+    os.makedirs(folder, exist_ok=True)
+    need = os.path.getsize(source) * 1.2 / 1e9 + MIN_FREE_AFTER_GB
+    free = shutil.disk_usage(folder).free / 1e9
+    if free < need:
+        raise UpscaleError(f"only {free:.1f} GB free under {folder}; the audio remux may need {need:.1f} GB")
+    output = os.path.join(folder, "input.mkv")
+    done = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", source, "-map", "0:v", "-map", "0:a",
+                           "-map_metadata", "0", "-c:v", "copy", *audio, output], stdin=subprocess.DEVNULL)
+    if done.returncode:
+        raise UpscaleError(f"the audio remux failed (ffmpeg {done.returncode})")
+    durations = [float(ffprobe("-show_entries", "format=duration", "-of", "csv=p=0", p).strip() or 0)
+                 for p in (source, output)]
+    if abs(durations[0] - durations[1]) > MAX_DURATION_ERROR_S:
+        raise UpscaleError(f"the remuxed file runs {durations[1]:.2f}s, the source {durations[0]:.2f}s")
+    log(f"done: {os.path.getsize(output) / 1e9:.2f} GB, {durations[1]:.1f}s", "audio")
+    return output
+
+
+def upscale(argv: List[str], audio: Optional[List[str]]) -> str:
     """Returns the upscaled file. Everything goes under Jasna's working
     directory, which the bridge removes when the job ends."""
     source, work = option(argv, "--input"), option(argv, "--working-directory")
@@ -203,7 +261,7 @@ def upscale(argv: List[str]) -> str:
     if abs(got - span) > MAX_DURATION_ERROR_S:
         raise UpscaleError(f"the upscaled video runs {got:.2f}s, the source {span:.2f}s; it would drift from the audio")
     first = min(times)
-    add_audio(video, source, muxed, first - (_timestamp(str(container.get("start_time"))) or 0.0))
+    add_audio(video, source, muxed, first - (_timestamp(str(container.get("start_time"))) or 0.0), audio)
     os.remove(video)
     log(f"done: {os.path.getsize(muxed) / 1e9:.2f} GB, {got:.1f}s")
     return muxed
@@ -227,12 +285,26 @@ def main(argv: List[str]) -> int:
     if not argv:
         print("usage: jasna_batch_upscale.py --check | jasna [flags]", file=sys.stderr)
         return 2
+    source = option(argv, "--input")
     if core.has_upscale(argv):
         try:
-            argv = jasna_command(argv, upscale(argv))
+            argv = jasna_command(argv, upscale(argv, audio_args(source) if source else None))
         except UpscaleError as err:
             log(f"FAILED: {err}")
             return 1
+    else:
+        try:
+            audio = audio_args(source) if source else None
+        except UpscaleError as err:
+            # Jasna reports an unreadable source better than this probe does.
+            log(f"audio not checked: {err}", "audio")
+            audio = None
+        if audio:
+            try:
+                argv = jasna_command(argv, remux_audio(argv, audio))
+            except UpscaleError as err:
+                log(f"FAILED: {err}", "audio")
+                return 1
     sys.stdout.flush()
     os.execv(argv[0], argv)
 

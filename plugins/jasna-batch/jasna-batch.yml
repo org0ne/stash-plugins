@@ -9,7 +9,7 @@ description: >
   follow the job, and a permanent "Jasna: Restored" tag marks every source
   that has been restored. Several bridges (one per GPU host) share the work.
 url: https://github.com/org0ne/stash-plugins
-version: 0.4.1
+version: 0.4.2
 
 exec:
   - python

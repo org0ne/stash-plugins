@@ -42,7 +42,7 @@ from stashapi.stashapp import StashInterface
 import jasna_batch_core as core
 
 PLUGIN_ID = "jasna-batch"
-PLUGIN_VERSION = "0.4.1"
+PLUGIN_VERSION = "0.4.2"
 
 PARENT_TAG = "Jasna Batch"
 STATUS_TAGS = {
