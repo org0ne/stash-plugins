@@ -4,7 +4,7 @@ Queue scenes for an **offline [Jasna](https://github.com/Kruk2/jasna)
 restoration by tagging them**, and get the result back into Stash as a new
 scene with the original's metadata.
 
-Tag a scene `Jasna: <preset>`. The plugin submits the scene's file to
+Tag a scene `Jasna-Batch Queue: <preset>`. The plugin submits the scene's file to
 [stash-jasna-bridge](https://github.com/org0ne/stash-jasna-bridge), which
 runs `jasna --input ... --output ...` with that preset's flags, one job at a
 time, on the same GPU as the live JASNA ON stream (the
@@ -29,13 +29,45 @@ job runs). When the job finishes the plugin:
    scene from it as the scan creates it: title, performers, studio, date,
    genres as tags, stash ids. This plugin does nothing NFO -> Stash itself.
 
-The original scene stays where it is. Its tag moves from `Jasna: <preset>`
-to `Jasna: Queued`, `Jasna: Processing`, then `Jasna: Done` (or `Jasna:
-Failed`, with the reason in the Stash log and the bridge's job log). On
-success it also gets `Jasna: Restored` (the **Restored tag** setting), which
-the plugin never removes: the status tags change on a re-run or a failed
-retry, this one stays, so a scene filter with "tags exclude `Jasna:
-Restored`" leaves everything already restored out of the next pick.
+The original scene stays where it is. Its tag moves from
+`Jasna-Batch Queue: <preset>` to `Jasna-Batch Status: Queued`,
+`Jasna-Batch Status: Processing`, then `Jasna-Batch Status: Done` (or
+`Jasna-Batch Status: Failed`, with the reason in the Stash log and the
+bridge's job log).
+
+On success the original also gets `Jasna-Batch: Restored - <preset>`. The
+plugin never removes it: the status tags change on a re-run or a failed
+retry, but this one stays. A scene filter that excludes
+`Jasna-Batch: Restored` with sub-tags included leaves everything already
+restored out of the next pick. The new scene gets
+`Jasna-Batch: Output - <preset>`.
+
+## Tags
+
+Every tag the plugin writes starts with `Jasna-Batch`, so it stays apart
+from generic tags such as `Jasna`:
+
+| Tag | On | Set by |
+|---|---|---|
+| `Jasna-Batch` | (parent of all below) | plugin |
+| `Jasna-Batch Queue: <preset>` | source scene | you, to queue it; removed once queued |
+| `Jasna-Batch Status: Queued` / `Processing` / `Done` / `Failed` | source scene | plugin, follows the job |
+| `Jasna-Batch: Restored - <preset>`, under `Jasna-Batch: Restored` | source scene | plugin, permanent |
+| `Jasna-Batch: Output - <preset>`, under `Jasna-Batch: Output` | restored scene | plugin, permanent |
+
+The bare `Jasna-Batch: Restored` and `Jasna-Batch: Output` tags go on a
+scene only when its preset is unknown: the output file name names no
+configured preset, because the preset was renamed or deleted, or the file
+was not made by the plugin.
+
+**Upgrading from 0.4.x.** The tags used to be named `Jasna: <preset>`,
+`Jasna: Queued` and so on, and `Jasna: Restored`, under `Jasna Batch`. The
+plugin's first run renames each to its new name, keeping its id, so its
+scenes and any saved filter that uses it carry over. Run **Tag restored
+sources** once afterwards: it moves each restored source from the bare
+`Jasna-Batch: Restored` tag to the one for its preset, and tags the
+existing output scenes. Saved filters on the Restored tag need "include
+sub-tags" turned on.
 
 ## Where things land
 
@@ -94,12 +126,12 @@ and preset `LTX` under target root `/lib/LTX`:
 4. Run the **Check settings** task (Settings > Tasks). It asks the bridge
    whether it can run a job (binary, models, activation, scratch space,
    GPU), verifies the target root, the library path and that an NFO parser
-   is hooked on scene creation, and creates the tags: `Jasna Batch`
-   (parent), `Jasna: <preset>` per preset, the four status tags and
-   `Jasna: Restored`.
+   is hooked on scene creation, and creates the tags: `Jasna-Batch`
+   (parent), `Jasna-Batch Queue: <preset>` per preset, the four status tags,
+   `Jasna-Batch: Restored` and `Jasna-Batch: Output`.
 
-Then tag a scene `Jasna: LTX` from its page. The hook fires on the update,
-the tag turns into `Jasna: Queued`, and the Stash log says which job it
+Then tag a scene `Jasna-Batch Queue: LTX` from its page. The hook fires on
+the update, the tag turns into `Jasna-Batch Status: Queued`, and the Stash log says which job it
 became. Long jobs are normal (an LTX preset can take hours per film); the
 bridge's `journalctl --user -u stash-jasna-bridge` and `/jasna/health`
 show progress.
@@ -122,7 +154,7 @@ bridge's local scratch (about 50-80 MB per minute) and is deleted with the
 job's working folder.
 
 - **720p and below.** A taller source is not queued: the scene goes to
-  `Jasna: Failed` and loses its trigger tag.
+  `Jasna-Batch Status: Failed` and loses its trigger tag.
 - **Variable frame rate sources fail** at the start of the job, because the
   pipeline writes a constant rate that would drift from the audio.
 - **Bridge setup.** On each node that should upscale, install upscale-toolkit
@@ -202,10 +234,11 @@ every node is paused) until **Resume**. The pause survives a bridge restart.
   finished ones. The bridge runs this itself after every job state change
   (`batch.notify_plugin` / `notify_task` in `bridge.toml`); run it by hand
   to retry an ingestion after fixing its cause (a failed ingestion leaves
-  the job unacknowledged on the bridge and the scene `Jasna: Failed`).
+  the job unacknowledged on the bridge and the scene `Jasna-Batch Status: Failed`).
 - **Tag restored sources** - walk the target root and add the Restored tag
-  to the source scene of every `{stem}_{preset}_jasna.mp4` found there, also
-  for restorations made before this plugin or by hand. The source is the
+  for its preset to the source scene of every `{stem}_{preset}_jasna.mp4`
+  found there, and the Output tag to that file's own scene, also for
+  restorations made before this plugin or by hand. The source is the
   scene outside the target root whose file has that stem; a stem that
   matches no scene or several is logged and left alone. Run it once after
   installing, and again after restoring something outside the plugin.

@@ -1,15 +1,17 @@
 name: Jasna Batch
 description: >
-  Tag a scene "Jasna: <preset>" to queue its file for an offline Jasna
+  Tag a scene "Jasna-Batch Queue: <preset>" to queue its file for an offline Jasna
   restoration on stash-jasna-bridge. When the job finishes, the source
   folder's sidecars, subtitles and artwork are copied next to the restored
   file under its new name, the .nfo gets a title marker and extra genres,
   and the new folder is scanned, so nfoSceneParser fills the new scene from
   the finished NFO as it is created. Status tags on the original scene
-  follow the job, and a permanent "Jasna: Restored" tag marks every source
-  that has been restored. Several bridges (one per GPU host) share the work.
+  follow the job, a permanent "Jasna-Batch: Restored - <preset>" tag marks
+  every source that has been restored, and "Jasna-Batch: Output - <preset>"
+  marks the new scene. Every tag the plugin writes starts with "Jasna-Batch".
+  Several bridges (one per GPU host) share the work.
 url: https://github.com/org0ne/stash-plugins
-version: 0.4.2
+version: 0.5.0
 
 exec:
   - python
@@ -25,9 +27,10 @@ ui:
 hooks:
   - name: Queue on tag
     description: >
-      Runs after every scene update. If the scene carries a "Jasna: <preset>"
-      tag, the job is submitted to the bridge, the trigger tag is removed and
-      "Jasna: Queued" added. Any other update is a no-op.
+      Runs after every scene update. If the scene carries a
+      "Jasna-Batch Queue: <preset>" tag, the job is submitted to the bridge,
+      the trigger tag is removed and "Jasna-Batch Status: Queued" added. Any
+      other update is a no-op.
     triggeredBy:
       - Scene.Update.Post
 
@@ -38,12 +41,13 @@ tasks:
       (binary, models, activation, scratch space, GPU), verify the target
       root, the library path and that an NFO parser is hooked on scene
       creation, and create the plugin's tags (parent, one trigger tag per
-      preset, the status tags, the Restored tag).
+      preset, the status tags, the Restored and Output tags). Tags still under
+      their pre-0.5.0 "Jasna: ..." names are renamed, keeping their scenes.
     defaultArgs:
       mode: check
   - name: Queue tagged scenes
     description: >
-      Submit every scene carrying a "Jasna: <preset>" tag (for scenes tagged
+      Submit every scene carrying a "Jasna-Batch Queue: <preset>" tag (for scenes tagged
       while the bridge was down, or before the hook existed). Same as the
       hook, for all tagged scenes at once.
     defaultArgs:
@@ -69,15 +73,17 @@ tasks:
       dry_run: true
   - name: Tag restored sources
     description: >
-      Walk the target root and add the Restored tag to the source scene of
-      every restoration found there ({stem}_{preset}_jasna.mp4), including
-      ones made before this plugin or by hand. The source is the scene
-      outside the target root whose file has that stem. Nothing else about
-      the scenes changes.
+      Walk the target root and add the Restored tag for its preset to the
+      source scene of every restoration found there ({stem}_{preset}_jasna.mp4),
+      and the Output tag to the restoration's own scene, including ones made
+      before this plugin or by hand. The source is the scene outside the
+      target root whose file has that stem. A file name no configured preset
+      writes gets the bare Restored / Output tag. Nothing else about the
+      scenes changes.
     defaultArgs:
       mode: restored
   - name: Tag restored sources (dry run)
-    description: Log which scenes would get the Restored tag. Nothing is written.
+    description: Log which scenes would get the Restored or Output tag. Nothing is written.
     defaultArgs:
       mode: restored
       dry_run: true
@@ -117,8 +123,9 @@ settings:
     displayName: Presets
     description: >
       Jasna command lines, one per preset, as "name = flags # comment",
-      separated by ";". Each preset gets a "Jasna: name" trigger tag, and
-      its name goes into the output file name ({code}_{name}_jasna.mp4).
+      separated by ";". Each preset gets a "Jasna-Batch Queue: name" trigger
+      tag, and its name goes into the output file name ({code}_{name}_jasna.mp4,
+      spaces as "-"; two presets may not give the same file name).
       Example: LTX = --restoration-model-name ltx --codec hevc --cq 24 # standard LTX;
       LTX hq = --restoration-model-name ltx-8step --codec av1. Do not pass
       --input/--output: the bridge sets those. Add --upscale to upscale the
@@ -136,12 +143,12 @@ settings:
   restoredTag:
     displayName: Restored tag
     description: >
-      Tag added to the source scene once a restoration of it exists (on
-      ingest, or when the output already existed), on top of the status
-      tags. The plugin never removes it, so a filter "tags exclude" this
-      tag leaves restored scenes out of future runs. Default "Jasna:
-      Restored". The "Tag restored sources" task back-fills it from the
-      target root.
+      Parent of the tags added to the source scene once a restoration of it
+      exists (on ingest, or when the output already existed), on top of the
+      status tags: "<this> - <preset>". The plugin never removes them, so a
+      filter "tags exclude" this tag with sub-tags included leaves restored
+      scenes out of future runs. Default "Jasna-Batch: Restored". The "Tag
+      restored sources" task back-fills them from the target root.
     type: STRING
   titleMarker:
     displayName: Title marker

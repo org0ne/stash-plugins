@@ -52,17 +52,24 @@ class Presets(unittest.TestCase):
         self.assertEqual([p.name for p in presets], ["LTX", "LTX hq"])
         self.assertEqual(presets[0].flags, ["--restoration-model-name", "ltx", "--codec", "hevc", "--cq", "24"])
         self.assertEqual(presets[0].comment, "standard")
-        self.assertEqual(presets[0].tag, "Jasna: LTX")
+        self.assertEqual(presets[0].tag, "Jasna-Batch Queue: LTX")
         self.assertEqual(presets[1].flags[-1], "/p/My LUT.cube")
 
     def test_problems(self):
         presets, problems = core.parse_presets(
-            "bad = --output /x; = --cq 3; Done = --cq 3; ok = --cq 3; ok = --cq 4; noflag = cq 3; empty = ")
-        self.assertEqual([p.name for p in presets], ["ok"])
+            "bad = --output /x; = --cq 3; LTX hq = --cq 3; LTX-hq = --cq 3; ok = --cq 3; ok = --cq 4; "
+            "noflag = cq 3; empty = ")
+        self.assertEqual([p.name for p in presets], ["LTX hq", "ok"])
         self.assertEqual(len(problems), 6)
         self.assertTrue(any("--output" in p for p in problems))
-        self.assertTrue(any("reserved" in p for p in problems))
+        self.assertTrue(any("'LTX-hq': names its output files like 'LTX hq'" in p for p in problems))
         self.assertTrue(any("duplicate" in p for p in problems))
+
+    def test_status_names_are_free_for_presets(self):
+        presets, problems = core.parse_presets("Done = --cq 3")
+        self.assertEqual((problems, presets[0].tag), ([], "Jasna-Batch Queue: Done"))
+        self.assertEqual(core.legacy_trigger_tag("LTX"), "Jasna: LTX")
+        self.assertEqual(core.preset_child_tag("Jasna-Batch: Restored", "LTX"), "Jasna-Batch: Restored - LTX")
 
 
 class Naming(unittest.TestCase):

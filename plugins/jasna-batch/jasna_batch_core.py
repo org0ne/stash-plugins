@@ -20,7 +20,7 @@ import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import Callable, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 from xml.dom import minidom
 
 VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".wmv", ".mov", ".m4v", ".ts", ".m2ts", ".mpg", ".mpeg", ".flv",
@@ -42,7 +42,9 @@ FLAG_DENYLIST = frozenset({
     "--post-export-action", "--post-export-command", "--post-export-video-command",
 })
 PRESET_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,39}$")
-RESERVED_PRESET_NAMES = {"queued", "processing", "done", "failed"}
+# Every tag the plugin writes starts with this, so its tags stay apart from
+# generic ones like "Jasna".
+TAG_PREFIX = "Jasna-Batch"
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +71,17 @@ def has_upscale(flags: Iterable[str]) -> bool:
 
 
 def trigger_tag(preset_name: str) -> str:
+    return f"{TAG_PREFIX} Queue: {preset_name}"
+
+
+def legacy_trigger_tag(preset_name: str) -> str:
+    """The trigger tag's name before 0.5.0, renamed in place on first use."""
     return f"Jasna: {preset_name}"
+
+
+def preset_child_tag(parent: str, preset_name: str) -> str:
+    """'Jasna-Batch: Restored' + 'LTX' -> 'Jasna-Batch: Restored - LTX'."""
+    return f"{parent} - {preset_name}"
 
 
 def parse_presets(text: str) -> Tuple[List[Preset], List[str]]:
@@ -80,6 +92,7 @@ def parse_presets(text: str) -> Tuple[List[Preset], List[str]]:
     presets: List[Preset] = []
     problems: List[str] = []
     seen = set()
+    slugs: Dict[str, str] = {}
     for raw in (text or "").split(";"):
         entry = raw.strip()
         if not entry:
@@ -92,11 +105,15 @@ def parse_presets(text: str) -> Tuple[List[Preset], List[str]]:
         if not PRESET_NAME_RE.match(name):
             problems.append(f"{name!r}: a preset name is 1-40 characters of letters, digits, space, . _ + -")
             continue
-        if name.lower() in RESERVED_PRESET_NAMES:
-            problems.append(f"{name!r}: that name is reserved for a status tag")
-            continue
         if name.lower() in seen:
             problems.append(f"{name!r}: duplicate preset name")
+            continue
+        # The output file names carry the slug, so two presets with one slug
+        # would write the same file and could not be told apart afterwards.
+        slug = preset_slug(name).lower()
+        if slug in slugs:
+            problems.append(f"{name!r}: names its output files like {slugs[slug]!r} does "
+                            f"(both become {preset_slug(name)!r}); rename one")
             continue
         try:
             tokens = shlex.split(rest, comments=True)
@@ -118,6 +135,7 @@ def parse_presets(text: str) -> Tuple[List[Preset], List[str]]:
             problems.append(f"{name!r}: {', '.join(bad)} not allowed in a preset (the bridge sets those)")
             continue
         seen.add(name.lower())
+        slugs[slug] = name
         presets.append(Preset(name, tokens, comment))
     return presets, problems
 

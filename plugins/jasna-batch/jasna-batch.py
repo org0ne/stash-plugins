@@ -2,7 +2,7 @@
 """
 jasna-batch.py -- Stash plugin entry point.
 
-Tag a scene "Jasna: <preset>" and it is queued on stash-jasna-bridge for an
+Tag a scene "Jasna-Batch Queue: <preset>" and it is queued on stash-jasna-bridge for an
 offline Jasna restoration with that preset's flags. The bridge runs the
 jobs one at a time on the GPU it shares with the live JASNA ON stream,
 then runs this plugin's "Sync jobs" task after every state change. With
@@ -42,27 +42,44 @@ from stashapi.stashapp import StashInterface
 import jasna_batch_core as core
 
 PLUGIN_ID = "jasna-batch"
-PLUGIN_VERSION = "0.4.2"
+PLUGIN_VERSION = "0.5.0"
 
-PARENT_TAG = "Jasna Batch"
+PARENT_TAG = core.TAG_PREFIX
 STATUS_TAGS = {
-    "queued": "Jasna: Queued",
-    "running": "Jasna: Processing",
-    "done": "Jasna: Done",
-    "failed": "Jasna: Failed",
+    "queued": f"{core.TAG_PREFIX} Status: Queued",
+    "running": f"{core.TAG_PREFIX} Status: Processing",
+    "done": f"{core.TAG_PREFIX} Status: Done",
+    "failed": f"{core.TAG_PREFIX} Status: Failed",
+}
+OUTPUT_TAG = f"{core.TAG_PREFIX}: Output"
+# Names before 0.5.0. A tag found under its old name is renamed in place, so
+# it keeps its id, its scenes and the saved filters that use it.
+LEGACY_TAGS = {
+    PARENT_TAG: "Jasna Batch",
+    STATUS_TAGS["queued"]: "Jasna: Queued",
+    STATUS_TAGS["running"]: "Jasna: Processing",
+    STATUS_TAGS["done"]: "Jasna: Done",
+    STATUS_TAGS["failed"]: "Jasna: Failed",
+    f"{core.TAG_PREFIX}: Restored": "Jasna: Restored",
 }
 TAG_DESCRIPTIONS = {
-    PARENT_TAG: "Tags of the jasna-batch plugin. 'Jasna: <preset>' queues a scene for an offline Jasna "
-                "restoration; the others show where its job is.",
+    PARENT_TAG: f"Tags of the jasna-batch plugin. '{core.trigger_tag('<preset>')}' queues a scene for an offline "
+                f"Jasna restoration; the Status tags show where its job is; Restored and Output mark finished work.",
+    "trigger": "Queue this scene for a Jasna restoration with preset {name!r}: {flags} (jasna-batch).",
     "queued": "Waiting on the bridge's job queue (jasna-batch).",
     "running": "Jasna is restoring this scene's file now (jasna-batch). JASNA ON is unavailable meanwhile.",
     "done": "Restored and ingested: the new scene lives in the target folder (jasna-batch).",
     "failed": "The job or its ingestion failed; the reason is in the Stash log and the bridge's job log. "
               "Fix the cause and run the Sync jobs task to retry ingestion, or re-tag the scene to run again.",
     "restored": "A Jasna restoration of this scene's file exists under the target root (jasna-batch). Added on "
-                "success and never removed by the plugin: filter on it to leave restored scenes out of future runs.",
+                "success and never removed by the plugin; the sub-tags name the preset. Exclude it, sub-tags "
+                "included, to leave restored scenes out of future runs.",
+    "restored_preset": "A Jasna restoration of this scene's file with preset {name!r} exists under the target "
+                       "root (jasna-batch).",
+    "output": "This scene's file is a Jasna restoration made by jasna-batch; the sub-tags name the preset.",
+    "output_preset": "This scene's file is a Jasna restoration made by jasna-batch with preset {name!r}.",
 }
-DEFAULT_RESTORED_TAG = "Jasna: Restored"
+DEFAULT_RESTORED_TAG = f"{core.TAG_PREFIX}: Restored"
 DEFAULT_BRIDGE_URL = "http://127.0.0.1:8770/jasna"
 DEFAULT_MARKER = "[LTX]"
 DEFAULT_GENRES = "LTX, Jasna"
@@ -96,7 +113,7 @@ class Config:
         self.target_root = text("targetRoot").rstrip("/")
         # Permanent mark on a source scene once a restoration of it exists.
         self.restored_tag = text("restoredTag", DEFAULT_RESTORED_TAG)
-        taken = {t.lower() for t in STATUS_TAGS.values()} | {PARENT_TAG.lower()}
+        taken = {t.lower() for t in STATUS_TAGS.values()} | {PARENT_TAG.lower(), OUTPUT_TAG.lower()}
         if self.restored_tag.lower() in taken:
             self.preset_problems.append(f"Restored tag {self.restored_tag!r} is the name of a status tag; "
                                         f"using {DEFAULT_RESTORED_TAG!r}")
@@ -243,8 +260,24 @@ class Tags:
     def get(self, name: str) -> Optional[str]:
         return self._ids.get(name.strip().lower())
 
-    def ensure(self, name: str, description: str = "", parent_id: Optional[str] = None) -> Optional[str]:
+    def ensure(self, name: str, description: str = "", parent_id: Optional[str] = None,
+               legacy: Optional[str] = None) -> Optional[str]:
+        """The tag's id, created if missing. A tag still under its `legacy`
+        name is renamed instead, keeping its id and scenes."""
         tag_id = self.get(name)
+        if not tag_id and legacy and self.get(legacy):
+            tag_id = self.get(legacy)
+            if self.dry_run:
+                log.info(f"[dry-run] would rename tag {legacy!r} to {name!r}")
+            else:
+                update: Dict[str, Any] = {"id": tag_id, "name": name.strip()}
+                if description:
+                    update["description"] = description
+                self.stash.update_tag(update)
+                self.created.append(f"{legacy} -> {name}")
+                log.info(f"renamed tag {legacy!r} to {name!r} (id {tag_id})")
+                del self._ids[legacy.strip().lower()]
+            self._ids[name.strip().lower()] = tag_id
         if tag_id:
             if parent_id and parent_id not in self._parents.get(tag_id, []) and not self.dry_run:
                 parents = self._parents.get(tag_id, []) + [parent_id]
@@ -252,7 +285,9 @@ class Tags:
                 self._parents[tag_id] = parents
             return tag_id
         if self.dry_run:
-            log.info(f"[dry-run] would create tag {name!r}")
+            if name not in self.created:
+                self.created.append(name)
+                log.info(f"[dry-run] would create tag {name!r}")
             return None
         tag_in: Dict[str, Any] = {"name": name.strip()}
         if description:
@@ -404,19 +439,53 @@ class Run:
     # -- tags --------------------------------------------------------------
 
     def ensure_tag_tree(self) -> None:
-        parent = self.tags.ensure(PARENT_TAG, TAG_DESCRIPTIONS[PARENT_TAG])
+        """Create the plugin's tags, renaming any still under a pre-0.5.0
+        name. Makes no Stash call once they all exist."""
+        parent = self.parent_tag()
         for key, name in STATUS_TAGS.items():
-            self.tags.ensure(name, TAG_DESCRIPTIONS[key], parent)
-        self.tags.ensure(self.cfg.restored_tag, TAG_DESCRIPTIONS["restored"], parent)
+            self.tags.ensure(name, TAG_DESCRIPTIONS[key], parent, LEGACY_TAGS.get(name))
+        self.preset_tag("restored", "")
+        self.preset_tag("output", "")
         for p in self.cfg.presets:
-            self.tags.ensure(p.tag, f"Queue this scene for a Jasna restoration with preset {p.name!r}: "
-                                    f"{' '.join(p.flags)}" + (f" ({p.comment})" if p.comment else ""), parent)
+            description = TAG_DESCRIPTIONS["trigger"].format(name=p.name, flags=" ".join(p.flags))
+            self.tags.ensure(p.tag, description + (f" ({p.comment})" if p.comment else ""), parent,
+                             core.legacy_trigger_tag(p.name))
+
+    def parent_tag(self) -> Optional[str]:
+        return self.tags.ensure(PARENT_TAG, TAG_DESCRIPTIONS[PARENT_TAG], legacy=LEGACY_TAGS[PARENT_TAG])
+
+    def preset_tag_name(self, kind: str, preset_name: str) -> str:
+        """kind "restored" (source scene) or "output" (the new scene): the
+        tag for that preset, or the bare parent tag when the preset is ""."""
+        parent = self.cfg.restored_tag if kind == "restored" else OUTPUT_TAG
+        return core.preset_child_tag(parent, preset_name) if preset_name else parent
+
+    def preset_tag(self, kind: str, preset_name: str) -> Optional[str]:
+        """The id of preset_tag_name(kind, preset_name), created (under its
+        parent) on demand: a preset since renamed or deleted keeps its tag."""
+        parent_name = self.preset_tag_name(kind, "")
+        parent = self.tags.ensure(parent_name, TAG_DESCRIPTIONS[kind], self.parent_tag(), LEGACY_TAGS.get(parent_name))
+        if not preset_name:
+            return parent
+        return self.tags.ensure(self.preset_tag_name(kind, preset_name),
+                                TAG_DESCRIPTIONS[f"{kind}_preset"].format(name=preset_name), parent)
+
+    def _with_preset_tag(self, wanted: List[str], kind: str, preset_name: str) -> Tuple[List[str], Optional[str]]:
+        """`wanted` plus the kind's tag for the preset. A preset's tag
+        replaces the bare parent, which only marks work of an unknown preset."""
+        tag = self.preset_tag(kind, preset_name)
+        bare = self.tags.get(self.preset_tag_name(kind, ""))
+        out = [t for t in wanted if not (preset_name and t == bare)]
+        if tag and tag not in out:
+            out.append(tag)
+        return out, tag
 
     def set_status(self, scene: dict, status: Optional[str], drop_triggers: List[str] = (), note: str = "",
-                   restored: bool = False) -> None:
+                   restored: Optional[str] = None) -> None:
         """Replace the scene's jasna-batch status tag with `status` (None =
-        none), drop the named trigger tags and, with `restored`, add the
-        permanent Restored tag. One sceneUpdate, only if something changes."""
+        none), drop the named trigger tags and, with `restored` (the preset's
+        name, "" if unknown), add the permanent Restored tag. One
+        sceneUpdate, only if something changes."""
         status_ids = {self.tags.get(n) for n in STATUS_TAGS.values()} - {None}
         drop_ids = {self.tags.get(n) for n in drop_triggers} - {None}
         current = [t["id"] for t in scene.get("tags") or []]
@@ -426,24 +495,25 @@ class Run:
             if sid and sid not in wanted:
                 wanted.append(sid)
         label = STATUS_TAGS[status] if status else "no status tag"
-        if restored:
-            rid = self.tags.get(self.cfg.restored_tag)
-            if rid and rid not in wanted:
-                wanted.append(rid)
-                label += f" + {self.cfg.restored_tag}"
+        if restored is not None:
+            wanted, tag = self._with_preset_tag(wanted, "restored", restored)
+            if tag and tag not in current:
+                label += f" + {self.preset_tag_name('restored', restored)}"
         self.update_tags(scene, wanted, label, note)
 
-    def mark_restored(self, scene: dict, note: str = "") -> bool:
-        """Add the Restored tag alone, leaving every other tag as it is.
-        True if the scene needed it."""
-        rid = self.tags.get(self.cfg.restored_tag)
+    def add_preset_tag(self, scene: dict, kind: str, preset_name: str, note: str = "") -> bool:
+        """Add the kind's tag for the preset, leaving every other tag as it
+        is (but a bare parent the preset's tag replaces). True if the scene
+        needed it."""
+        name = self.preset_tag_name(kind, preset_name)
         current = [t["id"] for t in scene.get("tags") or []]
-        if rid is None:   # a dry run that would first create the tag
-            log.info(f"[dry-run] {scene_label(scene)}: would set {self.cfg.restored_tag}" + (f" ({note})" if note else ""))
+        wanted, tag = self._with_preset_tag(current, kind, preset_name)
+        if tag is None:   # a dry run that would first create the tag
+            log.info(f"[dry-run] {scene_label(scene)}: would set {name}" + (f" ({note})" if note else ""))
             return True
-        if rid in current:
+        if sorted(wanted) == sorted(current):
             return False
-        self.update_tags(scene, current + [rid], self.cfg.restored_tag, note)
+        self.update_tags(scene, wanted, name, note)
         return True
 
     def update_tags(self, scene: dict, wanted: List[str], label: str, note: str = "") -> None:
@@ -485,7 +555,7 @@ class Run:
         if os.path.exists(plan.video):
             log.info(f"{label}: {plan.video} already exists; skipped (same scene, same preset)")
             self.counts["skipped"] += 1
-            self.set_status(scene, "done", [preset.tag], "output already existed", restored=True)
+            self.set_status(scene, "done", [preset.tag], "output already existed", restored=preset.name)
             return
         existing = self.find_existing(source, preset.name)
         if existing:
@@ -539,6 +609,7 @@ class Run:
         scene = self.stash.find_scene(scene_id, fragment=SCENE_FRAGMENT)
         if not scene:
             return
+        self.ensure_tag_tree()   # no Stash call once the tags exist; renames pre-0.5.0 triggers
         presets = self.triggers_on(scene)
         if not presets:
             return  # every other scene edit: nothing to do
@@ -652,7 +723,12 @@ class Run:
         if new_id == PENDING_SCAN:
             return  # the follow-up Sync behind the scan finishes this job
         self.counts["ingested"] += 1
-        self.set_status(scene, "done", note=f"new scene {new_id}" if new_id else "prepared", restored=True)
+        preset = job.get("preset") or ""
+        self.set_status(scene, "done", note=f"new scene {new_id}" if new_id else "prepared", restored=preset)
+        if new_id:
+            new_scene = self.stash.find_scene(new_id, fragment=SCENE_FRAGMENT)
+            if new_scene:
+                self.add_preset_tag(new_scene, "output", preset, f"made by {ref}")
         self.ack(job, new_id)
 
     def ack(self, job: dict, new_scene_id: Optional[str] = None) -> None:
@@ -683,10 +759,20 @@ class Run:
                 if parsed:
                     outputs.append((os.path.join(dirpath, name), *parsed))
         log.info(f"{len(outputs)} restored file(s) under {root}")
-        c = {"tagged": 0, "already": 0, "missing": 0, "ambiguous": 0}
-        for i, (video, stem, preset) in enumerate(outputs):
+        # The file name holds the preset's slug; a slug no configured preset
+        # has (renamed, deleted, or not made by this plugin) gets the bare
+        # Restored / Output tags.
+        by_slug = {core.preset_slug(p.name).lower(): p.name for p in self.cfg.presets}
+        c = {"tagged": 0, "already": 0, "missing": 0, "ambiguous": 0, "outputs": 0}
+        for i, (video, stem, slug) in enumerate(outputs):
             log.progress(i / max(1, len(outputs)))
             short = os.path.relpath(video, root)
+            preset = by_slug.get(slug.lower(), "")
+            if not preset:
+                log.info(f"{short}: no configured preset writes {slug!r}; tagged without a preset")
+            output_scene = self.find_scene_by_path(video)
+            if output_scene and self.add_preset_tag(output_scene, "output", preset, short):
+                c["outputs"] += 1
             sources = self.find_sources_by_stem(stem)
             if not sources:
                 log.warning(f"{short}: no scene outside the target root has a file named {stem}.*")
@@ -697,12 +783,13 @@ class Run:
                 log.warning(f"{short}: {len(sources)} scenes have a file named {stem}.*; tag one by hand: {ids}")
                 c["ambiguous"] += 1
                 continue
-            if self.mark_restored(sources[0], f"{short}, preset {preset}"):
+            if self.add_preset_tag(sources[0], "restored", preset, short):
                 c["tagged"] += 1
             else:
                 c["already"] += 1
         log.progress(1.0)
         log.info(f"Tag restored sources done: {c['tagged']} tagged, {c['already']} already tagged, "
+                 f"{c['outputs']} output scene(s) tagged, "
                  f"{c['missing']} source(s) not in Stash, {c['ambiguous']} ambiguous"
                  + (" [dry run]" if self.cfg.dry_run else ""))
 
@@ -936,7 +1023,8 @@ class Run:
             except Exception as err:
                 line("Library path", f"could not read ({err})")
         line("Title marker", cfg.marker, "titleMarker", f"folder and <title>: 'A - B' -> 'A - {cfg.marker} B'")
-        line("Restored tag", cfg.restored_tag, "restoredTag", "added to the source scene on success, never removed")
+        line("Restored tag", cfg.restored_tag, "restoredTag",
+             f"'{self.preset_tag_name('restored', '<preset>')}' added to the source scene on success, never removed")
         line("Extra genres", ", ".join(cfg.genres), "extraGenres")
         line("Clean HTML in NFO", cfg.clean_html, "cleanHtml")
         line("Ignore patterns", ", ".join(cfg.ignore_patterns), "ignorePatterns")
@@ -977,13 +1065,23 @@ class Run:
         log.info("Tags")
         self.ensure_tag_tree()
         if self.tags.created:
-            line("Created", ", ".join(self.tags.created))
-        for name in [p.tag for p in cfg.presets] + list(STATUS_TAGS.values()) + [cfg.restored_tag]:
+            line("Created or renamed", ", ".join(self.tags.created))
+        # Restored and Output count their preset sub-tags too.
+        names = [(p.tag, 0) for p in cfg.presets] + [(n, 0) for n in STATUS_TAGS.values()]
+        for kind in ("restored", "output"):
+            names.append((self.preset_tag_name(kind, ""), -1))
+            names += [(self.preset_tag_name(kind, p.name), 0) for p in cfg.presets]
+        for name, depth in names:
             tag_id = self.tags.get(name)
             if tag_id:
                 count = len(self.stash.find_scenes(
-                    f={"tags": {"value": [tag_id], "modifier": "INCLUDES", "depth": 0}}, fragment="id") or [])
-                line(name, f"{count} scene(s)")
+                    f={"tags": {"value": [tag_id], "modifier": "INCLUDES", "depth": depth}}, fragment="id") or [])
+                line(name, f"{count} scene(s)" + (" with sub-tags" if depth else ""))
+        old = [n for n in list(LEGACY_TAGS.values()) + [core.legacy_trigger_tag(p.name) for p in cfg.presets]
+               if self.tags.get(n) and self.tags.get(n) not in {self.tags.get(m) for m, _ in names + [(PARENT_TAG, 0)]}]
+        if old:
+            problems.append(f"tags still under their pre-0.5.0 names next to the new ones: {old}; move their "
+                            f"scenes to the new tag and delete them")
 
         if problems:
             for p in problems:
