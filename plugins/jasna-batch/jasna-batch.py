@@ -42,7 +42,7 @@ from stashapi.stashapp import StashInterface
 import jasna_batch_core as core
 
 PLUGIN_ID = "jasna-batch"
-PLUGIN_VERSION = "0.5.1"
+PLUGIN_VERSION = "0.6.0"
 
 PARENT_TAG = core.TAG_PREFIX
 STATUS_TAGS = {
@@ -415,8 +415,8 @@ class Run:
             if not b.node.accepts(preset.name):
                 notes.append(f"{b.name}: does not take preset {preset.name!r}")
                 continue
-            if preset.upscale and not self.node_batch(b).get("wrapper"):
-                notes.append(f"{b.name}: no batch.wrapper, cannot run {core.UPSCALE_FLAG}")
+            if preset.wrapper_flags and not self.node_batch(b).get("wrapper"):
+                notes.append(f"{b.name}: no batch.wrapper, cannot run {' '.join(preset.wrapper_flags)}")
                 continue
             jobs = self.node_jobs(b)
             if jobs is None:
@@ -980,9 +980,12 @@ class Run:
             line(p.tag, " ".join(p.flags), "presets", p.comment)
             if self.multi and not any(b.node.accepts(p.name) for b in self.bridges):
                 problems.append(f"preset {p.name!r}: no bridge node takes it (every node's only= excludes it)")
-            if p.upscale and not any(b.node.accepts(p.name) and self.node_batch(b).get("wrapper") for b in self.bridges):
-                problems.append(f"preset {p.name!r}: uses {core.UPSCALE_FLAG} but no bridge node that takes it has "
-                                f"batch.wrapper set to jasna_batch_upscale.py")
+            if p.wrapper_flags and not any(b.node.accepts(p.name) and self.node_batch(b).get("wrapper")
+                                           for b in self.bridges):
+                problems.append(f"preset {p.name!r}: uses {' '.join(p.wrapper_flags)} but no bridge node that takes "
+                                f"it has batch.wrapper set to jasna_batch_upscale.py")
+            if p.auto_lut and any(f == "--lut" or f.startswith("--lut=") for f in p.flags):
+                problems.append(f"preset {p.name!r}: has both {core.AUTO_LUT_FLAG} and --lut; use one")
         for problem in cfg.preset_problems:
             line("preset problem", problem)
             problems.append(f"preset: {problem}")

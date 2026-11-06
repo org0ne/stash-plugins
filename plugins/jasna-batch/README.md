@@ -185,6 +185,64 @@ conversion in their own mux step.
 This only happens on nodes whose `batch.wrapper` points at
 `jasna_batch_upscale.py`; on other nodes these sources still fail.
 
+## Per-video colour LUT
+
+Many older titles have a yellow or warm cast. Add `--auto-lut` to a preset
+to give each source its own colour LUT:
+
+```
+LTX auto = --auto-lut --restoration-model-name ltx --codec hevc --cq 24
+```
+
+Before Jasna starts, the wrapper runs `jasna_batch_lut.py` on the source.
+It samples 80 frames, which takes 15-40 seconds, and measures two things:
+
+- **warmth**: how much redder than blue the brightest surfaces are (walls,
+  sheets, clothing), and
+- **skin**: how red the skin already is.
+
+The LUT is Bombadil MIGD-358 blended with no change at all. A neutral source
+(warmth 0.06 or less) gets nothing and a warm one (0.18 or more) gets the
+full LUT. MIGD-358 also adds red to skin, so the blend drops to nothing when
+skin is already red (0.28 full, 0.30 none). These cut-offs were judged by eye
+on 25 videos. A source that needs no LUT goes to Jasna without one.
+Otherwise the flag becomes Jasna's `--lut`, which Jasna applies on the GPU to
+the restored frames before encoding.
+
+Two files go next to the source:
+
+| File | What |
+|---|---|
+| `<stem>.lut.json` | what was measured, the blend, the cut-offs (always) |
+| `<stem>.lut.cube` | the LUT Jasna got (only when the blend is above 0) |
+
+They are sidecars, so ingest copies them next to the restored file under its
+new name (`CODE_LTX-auto_jasna.lut.json`), and the record stays with both
+files.
+
+- **Reviewing and overriding.** An existing `.lut.json` is used as it is, and
+  the source is not measured again. To change one video, set
+  `"manual": true` and a `"blend"` of your own (0 = no LUT, 1 = full
+  MIGD-358) in its `.lut.json`, then queue it again. Delete the
+  `.lut.json` to have it measured again. To look before anything runs,
+  measure ahead on the bridge host:
+  `~/Applications/upscale-toolkit/.venv/bin/python jasna_batch_lut.py VIDEO...`
+  (any Python with numpy works).
+- **Read-only source folders.** The LUT is written to the job's working
+  folder and is used but not kept. The job log says so.
+- **Not with `--lut`.** A preset with both is refused by *Check settings* and
+  by the wrapper.
+- **Bridge setup.** This uses the same `batch.wrapper` as `--upscale`. It
+  also needs a Python with numpy: the wrapper uses `JASNA_LUT_PYTHON` if set,
+  else its own Python if that has numpy, else upscale-toolkit's venv. It
+  needs the base LUT at
+  `~/Applications/JasnaCubemaps/Bombadil_LUTs/Bombadil MIGD-358.cube` (or
+  `JASNA_LUT_BASE`), and a Jasna that has `--lut` (0.12.x does). Nodes
+  without a wrapper are skipped for these presets.
+- **Can be combined with `--upscale`.** The LUT is measured on the original
+  source first, so an unreadable source fails within a minute instead of
+  after the upscale.
+
 ## Several bridges (one per GPU host)
 
 List them in **Bridge URL** as `name = url` entries separated by `;`, with

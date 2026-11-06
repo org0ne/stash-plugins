@@ -11,7 +11,7 @@ description: >
   marks the new scene. Every tag the plugin writes starts with "Jasna-Batch".
   Several bridges (one per GPU host) share the work.
 url: https://github.com/org0ne/stash-plugins
-version: 0.5.1
+version: 0.6.0
 
 exec:
   - python
@@ -129,7 +129,9 @@ settings:
       Example: LTX = --restoration-model-name ltx --codec hevc --cq 24 # standard LTX;
       LTX hq = --restoration-model-name ltx-8step --codec av1. Do not pass
       --input/--output: the bridge sets those. Add --upscale to upscale the
-      source 2x before Jasna (720p and below, on nodes with batch.wrapper).
+      source 2x before Jasna (720p and below, on nodes with batch.wrapper),
+      and --auto-lut for a per-video colour LUT against yellow/warm casts
+      (also batch.wrapper; see the README).
     type: STRING
   targetRoot:
     displayName: Target root

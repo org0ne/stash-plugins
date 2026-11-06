@@ -32,6 +32,15 @@ UPSCALE_FLAG = "--upscale"
 UPSCALE_FLAGS = (UPSCALE_FLAG, "-upscale")   # the one-hyphen spelling also works
 UPSCALE_METHOD = "qtgmc-compact-2x"
 UPSCALE_MAX_HEIGHT = 720
+# Preset flag for a per-video colour LUT (jasna_batch_lut.py). Also not a
+# Jasna flag: the wrapper measures the source, writes <stem>.lut.cube and
+# <stem>.lut.json next to it and passes --lut to Jasna (or nothing, for a
+# source that needs no LUT).
+AUTO_LUT_FLAG = "--auto-lut"
+AUTO_LUT_FLAGS = (AUTO_LUT_FLAG, "-auto-lut")
+# The LUT blended per video (on the bridge host); JASNA_LUT_BASE overrides.
+AUTO_LUT_BASE = os.path.expanduser(os.environ.get("JASNA_LUT_BASE")
+                                   or "~/Applications/JasnaCubemaps/Bombadil_LUTs/Bombadil MIGD-358.cube")
 # Flags the bridge refuses in a preset (it sets input/output itself); checked
 # here too so Check settings can say so before anything is queued.
 FLAG_DENYLIST = frozenset({
@@ -65,9 +74,22 @@ class Preset:
     def upscale(self) -> bool:
         return has_upscale(self.flags)
 
+    @property
+    def auto_lut(self) -> bool:
+        return has_auto_lut(self.flags)
+
+    @property
+    def wrapper_flags(self) -> List[str]:
+        """The flags in this preset only batch.wrapper understands."""
+        return ([UPSCALE_FLAG] if self.upscale else []) + ([AUTO_LUT_FLAG] if self.auto_lut else [])
+
 
 def has_upscale(flags: Iterable[str]) -> bool:
     return any(f in UPSCALE_FLAGS for f in flags)
+
+
+def has_auto_lut(flags: Iterable[str]) -> bool:
+    return any(f in AUTO_LUT_FLAGS for f in flags)
 
 
 def trigger_tag(preset_name: str) -> str:
@@ -580,6 +602,8 @@ def command_sidecar(job: dict, preset: Optional[Preset], plugin_version: str) ->
         f"Preset           : {job.get('preset')}" + (f"  # {preset.comment}" if preset and preset.comment else ""),
         f"Preset flags     : {' '.join(job.get('flags') or [])}",
         *([f"Upscale          : {UPSCALE_METHOD}, before Jasna"] if has_upscale(job.get("flags") or []) else []),
+        *(["Colour LUT       : per video, see the .lut.json next to this file (and the job log)"]
+          if has_auto_lut(job.get("flags") or []) else []),
         f"Source file      : {job.get('stash_source')}",
         f"Source size      : {(job.get('source_bytes') or 0) / 1e9:.2f} GB",
         f"Output file      : {job.get('stash_output')}",

@@ -13,15 +13,19 @@ method named by core.UPSCALE_METHOD, then this process becomes Jasna with
 source whose audio an MP4 cannot hold (WMA Pro in a .wmv, seen 2026-11-03:
 Jasna copies the audio and failed at compose, 46 min in) is first remuxed
 into WORK with that audio as AAC and the video copied; any other source goes
-straight to Jasna. The bridge sees one process from start to finish: its GPU lock,
+straight to Jasna. With --auto-lut, jasna_batch_lut.py first measures the
+source's colour cast and writes <stem>.lut.cube/.lut.json next to it, and the
+flag becomes --lut <that file> (or goes away when the source needs none). The bridge sees one process from start to finish: its GPU lock,
 cancel, pause, timeout, restart adoption and removal of WORK all apply to
 both stages, and the job log holds what happened. Progress lines are shaped
 like Jasna's so the bridge reads them the same way.
 
-"--check" reports whether this host can run the method (bridge /batch/check).
+"--check" reports whether this host can run the method and the LUT step
+(bridge /batch/check).
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -35,6 +39,7 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import jasna_batch_core as core  # noqa: E402
 
 TOOLKIT = os.path.expanduser(os.environ.get("JASNA_UPSCALE_TOOLKIT") or "~/Applications/upscale-toolkit")
+LUT_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), "jasna_batch_lut.py")
 
 # How each method runs in the toolkit. QP 16 stays around 50 dB of lossless at
 # 52-80 MB/min where lossless takes 860-1800 MB/min (measured 2026-11-01).
@@ -300,15 +305,58 @@ def upscale(argv: List[str], audio: Optional[List[str]]) -> str:
     return muxed
 
 
+def lut_python() -> Optional[str]:
+    """A Python with numpy for jasna_batch_lut.py: JASNA_LUT_PYTHON, else
+    this one if it has numpy, else upscale-toolkit's venv."""
+    if os.environ.get("JASNA_LUT_PYTHON"):
+        return os.path.expanduser(os.environ["JASNA_LUT_PYTHON"])
+    if importlib.util.find_spec("numpy"):
+        return sys.executable
+    venv = os.path.join(TOOLKIT, ".venv/bin/python")
+    return venv if os.path.exists(venv) else None
+
+
+def with_auto_lut(argv: List[str]) -> List[str]:
+    """Jasna's command line with --auto-lut replaced by --lut <this source's
+    LUT>, or just gone when the source needs none."""
+    argv = [a for a in argv if a not in core.AUTO_LUT_FLAGS]
+    if any(a == "--lut" or a.startswith("--lut=") for a in argv):
+        raise UpscaleError(f"the preset has both {core.AUTO_LUT_FLAG} and --lut; use one")
+    source, work = option(argv, "--input"), option(argv, "--working-directory")
+    if not source or not work:
+        raise UpscaleError("--input and --working-directory are required")
+    python = lut_python()
+    if not python:
+        raise UpscaleError("no Python with numpy for the LUT step (set JASNA_LUT_PYTHON)")
+    proc = subprocess.Popen([python, LUT_SCRIPT, source, "--fallback-dir", os.path.join(work, "lut")],
+                            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True)
+    result = None
+    for line in proc.stdout:
+        if line.startswith("RESULT "):
+            result = json.loads(line[len("RESULT "):])
+        else:
+            print(line, end="", flush=True)
+    proc.wait()
+    if not result or "error" in result or proc.returncode:
+        raise UpscaleError((result or {}).get("error") or f"the LUT step failed (exit {proc.returncode})")
+    return argv + ["--lut", result["lut"]] if result.get("lut") else argv
+
+
 def check() -> int:
-    """One line for the bridge's check: exit 0 when the method can run here."""
+    """One line for the bridge's check: exit 0 when the upscale method and
+    the --auto-lut step can both run here."""
     needed = [os.path.join(TOOLKIT, p) for p in (".venv/bin/python", "vs_pipeline.py", METHOD["model"])]
     missing = [p for p in needed if not os.path.exists(p)]
     missing += [t for t in ("ffmpeg", "ffprobe") if not shutil.which(t)]
+    python = lut_python()
+    if not python:
+        missing.append(f"a Python with numpy for {core.AUTO_LUT_FLAG} (JASNA_LUT_PYTHON)")
+    if not os.path.exists(core.AUTO_LUT_BASE):
+        missing.append(f"{core.AUTO_LUT_BASE} (JASNA_LUT_BASE)")
     if missing:
         print(f"missing: {', '.join(missing)}")
         return 1
-    print(f"{core.UPSCALE_METHOD} in {TOOLKIT}")
+    print(f"{core.UPSCALE_METHOD} in {TOOLKIT}; {core.AUTO_LUT_FLAG}: {os.path.basename(core.AUTO_LUT_BASE)} via {python}")
     return 0
 
 
@@ -319,6 +367,13 @@ def main(argv: List[str]) -> int:
         print("usage: jasna_batch_upscale.py --check | jasna [flags]", file=sys.stderr)
         return 2
     source = option(argv, "--input")
+    if core.has_auto_lut(argv):
+        # First: a bad source fails here in a minute, not after an upscale.
+        try:
+            argv = with_auto_lut(argv)
+        except (UpscaleError, OSError, ValueError) as err:
+            log(f"FAILED: {err}", "lut")
+            return 1
     if core.has_upscale(argv):
         try:
             argv = jasna_command(argv, upscale(argv, audio_args(source) if source else None))

@@ -1,6 +1,7 @@
 """Tests for jasna_batch_core (no Stash needed):
 python3 -m unittest -v plugins.jasna-batch.tests.test_core  -- or from this
 folder: python3 -m unittest discover -s tests"""
+import json
 import os
 import sys
 import tempfile
@@ -352,3 +353,108 @@ class Upscale(unittest.TestCase):
                 unittest.mock.patch("builtins.print") as printed:
             self.assertEqual(upscale.check(), 1)
         self.assertIn("/nonexistent/vs_pipeline.py", printed.call_args[0][0])
+
+
+class AutoLut(unittest.TestCase):
+    def test_preset_flag(self):
+        presets, _ = core.parse_presets("LTX = --codec hevc; LTX auto = -auto-lut --codec hevc; "
+                                        "LTX 2x auto = --upscale --auto-lut")
+        self.assertEqual([p.auto_lut for p in presets], [False, True, True])
+        self.assertEqual([p.wrapper_flags for p in presets], [[], ["--auto-lut"], ["--upscale", "--auto-lut"]])
+
+    def test_sidecar_points_at_the_lut_record(self):
+        text = core.command_sidecar({"preset": "LTX auto", "flags": ["--auto-lut"], "command": []}, None, "x")
+        self.assertIn(".lut.json", text)
+
+    def test_lut_sidecars_follow_the_restored_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "Src")
+            os.makedirs(src)
+            for n in ("MIGD-100.mkv", "MIGD-100.lut.cube", "MIGD-100.lut.json"):
+                open(os.path.join(src, n), "w").close()
+            plan = core.plan_output(os.path.join(src, "MIGD-100.mkv"), os.path.join(d, "LTX"), "LTX auto", "[LTX]")
+            names = sorted(os.path.basename(b) for _, b in core.plan_sidecars(plan).renames)
+        self.assertEqual(names, ["MIGD-100_LTX-auto_jasna.lut.cube", "MIGD-100_LTX-auto_jasna.lut.json"])
+
+    def run_wrapper_step(self, argv, result):
+        lines = ["[lut] measuring\n", "RESULT " + json.dumps(result) + "\n"]
+        proc = unittest.mock.MagicMock(stdout=iter(lines), returncode=0)
+        with unittest.mock.patch.object(upscale, "lut_python", return_value="/py"), \
+                unittest.mock.patch.object(upscale.subprocess, "Popen", return_value=proc) as popen, \
+                unittest.mock.patch("builtins.print"):
+            out = upscale.with_auto_lut(argv)
+        return out, popen.call_args[0][0]
+
+    ARGV = ["/jasna", "--input", "/lib/A.avi", "--output", "/o.mp4", "--working-directory", "/w", "--auto-lut", "--cq", "24"]
+
+    def test_wrapper_swaps_the_flag_for_the_lut(self):
+        out, cmd = self.run_wrapper_step(self.ARGV, {"lut": "/lib/A.lut.cube", "blend": 1.0})
+        self.assertEqual(out, ["/jasna", "--input", "/lib/A.avi", "--output", "/o.mp4", "--working-directory", "/w",
+                               "--cq", "24", "--lut", "/lib/A.lut.cube"])
+        self.assertEqual(cmd[2:], ["/lib/A.avi", "--fallback-dir", "/w/lut"])
+
+    def test_wrapper_drops_the_flag_when_no_lut_is_needed(self):
+        out, _ = self.run_wrapper_step(self.ARGV, {"lut": None, "blend": 0.0})
+        self.assertNotIn("--auto-lut", out)
+        self.assertNotIn("--lut", out)
+
+    def test_wrapper_fails_on_a_lut_step_error(self):
+        with self.assertRaises(upscale.UpscaleError):
+            self.run_wrapper_step(self.ARGV, {"error": "only 3 of 80 frames could be measured"})
+
+    def test_wrapper_refuses_both_flags(self):
+        with self.assertRaises(upscale.UpscaleError):
+            upscale.with_auto_lut(self.ARGV + ["--lut", "/x.cube"])
+
+
+try:
+    import numpy as np
+    import jasna_batch_lut as lut
+except ImportError:   # the LUT step runs under a Python with numpy; skip its tests elsewhere
+    lut = None
+
+
+@unittest.skipIf(lut is None, "numpy not installed")
+class LutBlend(unittest.TestCase):
+    def test_cutoffs_match_the_videos_judged_by_eye(self):
+        # (warmth, skin R/G) measured 2026-11-06 -> what looked right
+        full = {"EMU-089": (0.290, 0.250), "BBI-147": (0.256, 0.218), "KISD-019": (0.260, 0.274)}
+        none = {"MEYD-057": (0.285, 0.312), "MIDA-817": (0.060, 0.303), "WANZ-322": (0.248, 0.304),
+                "XVSR-552": (0.300, 0.416), "IH-43": (0.061, 0.187)}
+        for name, (w, s) in full.items():
+            self.assertEqual(lut.blend_for(w, s), 1.0, name)
+        for name, (w, s) in none.items():
+            self.assertLess(lut.blend_for(w, s), 0.02, name)
+        self.assertGreater(lut.blend_for(0.240, 0.293), 0, "ONED-913")
+
+    def test_blend_ends(self):
+        base = np.random.default_rng(1).random((4, 4, 4, 3)).astype(np.float32)
+        ident = lut.blend_lut(base, 0.0)
+        self.assertTrue(np.allclose(ident[1, 2, 3], [3 / 3, 2 / 3, 1 / 3]))   # [b][g][r] -> (r, g, b)
+        self.assertTrue(np.allclose(lut.blend_lut(base, 1.0), base))
+
+    def test_cube_round_trip(self):
+        base = np.random.default_rng(2).random((5, 5, 5, 3)).astype(np.float32)
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "x.cube")
+            lut.save_cube(path, base)
+            with open(path) as f:
+                self.assertEqual(f.readline(), "LUT_3D_SIZE 5\n")
+            self.assertTrue(np.allclose(lut.read_cube(path), base, atol=1e-6))
+
+    def test_manual_record_is_applied_without_measuring(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "A.avi")
+            open(src, "w").close()
+            with open(os.path.join(d, "A.lut.json"), "w") as f:
+                json.dump({"blend": 0.4, "manual": True}, f)
+            base = os.path.join(d, "base.cube")
+            lut.save_cube(base, lut.blend_lut(np.zeros((3, 3, 3, 3), np.float32), 0.0))
+            with unittest.mock.patch.object(lut, "BASE_LUT", base), \
+                    unittest.mock.patch.object(lut, "measure") as measure, \
+                    unittest.mock.patch("builtins.print"):
+                result = lut.run(src)
+            measure.assert_not_called()
+            self.assertEqual(result["lut"], os.path.join(d, "A.lut.cube"))
+            with open(os.path.join(d, "A.lut.json")) as f:
+                self.assertEqual(json.load(f)["lut"], "A.lut.cube")
