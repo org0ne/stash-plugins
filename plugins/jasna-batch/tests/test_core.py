@@ -296,11 +296,30 @@ class Upscale(unittest.TestCase):
 
     def test_constant_rate_is_read_from_the_timestamps(self):
         step = 1001 / 30000
-        rate, span = upscale.frame_timing([i * step for i in range(3000)], "30000/1001")
-        self.assertEqual(str(rate), "30000/1001")
-        self.assertAlmostEqual(span, 3000 * step)
+        timing = upscale.frame_timing([i * step for i in range(3000)], "30000/1001")
+        self.assertEqual(str(timing.rate), "30000/1001")
+        self.assertAlmostEqual(timing.span, 3000 * step)
+        self.assertEqual((timing.frames, timing.cfr), (3000, False))
         # a useless container rate does not win
-        self.assertEqual(str(upscale.frame_timing([i * step for i in range(3000)], "0/0")[0]), "30000/1001")
+        self.assertEqual(str(upscale.frame_timing([i * step for i in range(3000)], "0/0").rate), "30000/1001")
+
+    def test_millisecond_timestamps_are_not_vfr(self):
+        # WMV stores 29.97 fps as 33 and 34 ms steps; the median alone says 30.3 fps
+        times = [round(i * 1001 / 30000, 3) for i in range(30000)]
+        timing = upscale.frame_timing(times, "0/0")
+        self.assertEqual(str(timing.rate), "30000/1001")
+        self.assertEqual((timing.frames, timing.cfr), (30000, False))
+
+    def test_dropped_frames_are_placed_by_timestamp(self):
+        # DV-1400: 1 ms timestamps, a frame missing here and there
+        kept = [i for i in range(30000) if i % 2000 != 1000]
+        timing = upscale.frame_timing([round(i * 1001 / 30000, 3) for i in kept], "60000/1001")
+        self.assertEqual(str(timing.rate), "30000/1001")
+        self.assertTrue(timing.cfr)
+        self.assertEqual(timing.frames, 30000)
+        # a single drop already moves every later frame by a whole frame
+        one =[i * 1001 / 30000 for i in range(3000) if i != 1500]
+        self.assertTrue(upscale.frame_timing(one, "30000/1001").cfr)
 
     def test_variable_rate_is_refused(self):
         times = [i / 30 for i in range(1500)] + [50 + i / 15 for i in range(750)]

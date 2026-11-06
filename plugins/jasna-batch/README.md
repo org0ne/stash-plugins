@@ -155,8 +155,16 @@ job's working folder.
 
 - **720p and below.** A taller source is not queued: the scene goes to
   `Jasna-Batch Status: Failed` and loses its trigger tag.
+- **Dropped frames are filled in.** A constant-rate source with frames missing
+  here and there (common in `.wmv`, whose 1 ms timestamps also make 29.97 fps
+  read as alternating 33 and 34 ms steps) is upscaled with frames placed by
+  timestamp: the frame before a gap is repeated, so the audio stays in sync.
+  The job log says how many frames were added. This needs the toolkit's
+  `vs_pipeline.py --cfr`.
 - **Variable frame rate sources fail** at the start of the job, because the
-  pipeline writes a constant rate that would drift from the audio.
+  pipeline writes a constant rate that would drift from the audio. A source
+  counts as variable when more than 1% of its frame steps are not one frame
+  long.
 - **Bridge setup.** On each node that should upscale, install upscale-toolkit
   (in `~/Applications/upscale-toolkit`, or set `JASNA_UPSCALE_TOOLKIT` for the
   bridge's service) and point `batch.wrapper` at this plugin's

@@ -29,7 +29,7 @@ import statistics
 import subprocess
 import sys
 from fractions import Fraction
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import jasna_batch_core as core  # noqa: E402
@@ -49,7 +49,11 @@ METHODS: Dict[str, dict] = {
 }
 METHOD = METHODS[core.UPSCALE_METHOD]
 MIN_FREE_AFTER_GB = 10
-MAX_RATE_ERROR = 0.01       # packets may stray this far from an even spacing before a source counts as VFR
+TICK_JITTER_S = 0.0015      # a frame step may stray this far from the usual one: 1 ms timestamps (WMV) alternate 33/34 ms
+MAX_IRREGULAR = 0.01        # share of frame steps that may be gaps or bursts (dropped frames) before a source counts as VFR
+STANDARD_RATES = [Fraction(24000, 1001), Fraction(24), Fraction(25), Fraction(30000, 1001), Fraction(30),
+                  Fraction(50), Fraction(60000, 1001), Fraction(60)]
+MAX_SNAP_ERROR = 0.002      # how close a measured rate must be to a standard one to take it
 MAX_DURATION_ERROR_S = 0.5  # how far the upscaled video may end from the source's end
 ZIMG_MATRIX = {"bt709": "709", "smpte170m": "170m", "bt470bg": "470bg"}
 
@@ -83,25 +87,49 @@ def _timestamp(text: str) -> Optional[float]:
         return None
 
 
-def frame_timing(times: List[float], avg_rate: str) -> Tuple[Fraction, float]:
-    """(frame rate, span in seconds) from the video packets' timestamps.
-    Raises UpscaleError when they are not evenly spaced: the pipeline writes
-    a constant rate, which would drift from a variable-rate source's audio."""
+class Timing(NamedTuple):
+    rate: Fraction
+    span: float   # seconds from the first frame to the end of the last
+    frames: int   # frames the upscaled video will have
+    cfr: bool     # the pipeline must place frames by timestamp (dropped frames would otherwise pull the audio out of sync)
+
+
+def _snap_rate(step: float, avg_rate: str) -> Fraction:
+    """The frame rate for a measured frame step: a standard rate or the
+    container's when one is that close, else the measurement itself."""
+    try:
+        candidates = [Fraction(avg_rate)] + STANDARD_RATES
+    except (ValueError, ZeroDivisionError):
+        candidates = STANDARD_RATES
+    for rate in candidates:
+        if rate > 0 and abs(float(rate) * step - 1) <= MAX_SNAP_ERROR:
+            return rate
+    return Fraction(1 / step).limit_denominator(1001)
+
+
+def frame_timing(times: List[float], avg_rate: str) -> Timing:
+    """How to upscale a source with these video packet timestamps. Steps of
+    one frame, give or take the timestamps' rounding, set the rate; a few
+    longer or shorter steps (dropped frames) are fine, and make the pipeline
+    place frames by timestamp when they would drift from the audio by half a
+    frame. Raises UpscaleError for a source whose rate really changes."""
     times = sorted(times)
     if len(times) < 2:
         raise UpscaleError("the source has no readable video timestamps")
-    step = statistics.median(b - a for a, b in zip(times, times[1:]))
-    span = times[-1] - times[0] + step
-    if step <= 0 or abs(len(times) * step - span) > span * MAX_RATE_ERROR:
-        raise UpscaleError(f"variable frame rate source ({len(times)} packets over {span:.1f}s, "
-                           f"typical spacing {step * 1000:.2f} ms); upscaling it would drift from the audio")
-    try:
-        rate = Fraction(avg_rate)
-    except (ValueError, ZeroDivisionError):
-        rate = Fraction(0)
-    if abs(float(rate) * step - 1) > MAX_RATE_ERROR:
-        rate = Fraction(1 / step).limit_denominator(1001)
-    return rate, span
+    steps = [b - a for a, b in zip(times, times[1:])]
+    usual = statistics.median(steps)
+    regular = [s for s in steps if abs(s - usual) <= TICK_JITTER_S]
+    if usual <= 0 or len(regular) < len(steps) * (1 - MAX_IRREGULAR):
+        raise UpscaleError(f"variable frame rate source ({len(times)} packets over {times[-1] - times[0]:.1f}s, "
+                           f"{len(steps) - len(regular)} of {len(steps)} frame steps differ from the usual "
+                           f"{usual * 1000:.2f} ms); upscaling it would drift from the audio")
+    rate = _snap_rate(statistics.fmean(regular), avg_rate)
+    period = 1 / float(rate)
+    span = times[-1] - times[0] + period
+    drift = max(abs(t - times[0] - i * period) for i, t in enumerate(times))
+    if drift <= period / 2:
+        return Timing(rate, span, len(times), False)
+    return Timing(rate, span, round(span / period), True)
 
 
 def source_matrix(stream: dict) -> str:
@@ -160,7 +188,7 @@ def check_space(work: str, frames: int, stream: dict) -> None:
         raise UpscaleError(f"only {usage.free / 1e9:.1f} GB free under {work}; the upscale may need {need:.1f} GB")
 
 
-def run_pipeline(source: str, output: str, rate: Fraction, stream: dict) -> None:
+def run_pipeline(source: str, output: str, rate: Fraction, stream: dict, cfr: bool) -> None:
     full_range = stream.get("color_range") == "pc" or str(stream.get("pix_fmt") or "").startswith("yuvj")
     sar = (stream.get("sample_aspect_ratio") or "").replace(":", "/")
     cmd = [os.path.join(TOOLKIT, ".venv/bin/python"), "vs_pipeline.py", "-i", source, "-o", output,
@@ -169,6 +197,8 @@ def run_pipeline(source: str, output: str, rate: Fraction, stream: dict) -> None
            "--encode", " ".join([METHOD["encode"], *color_flags(stream)]), "--progress"]
     if sar and sar not in ("0/1", "1/1"):
         cmd += ["--sar", sar]
+    if cfr:
+        cmd.append("--cfr")
     log(" ".join(cmd))
     if subprocess.run(cmd, cwd=TOOLKIT, stdin=subprocess.DEVNULL).returncode:
         raise UpscaleError("the upscale pipeline failed (see the lines above)")
@@ -249,17 +279,20 @@ def upscale(argv: List[str], audio: Optional[List[str]]) -> str:
     if int(stream["height"]) > core.UPSCALE_MAX_HEIGHT:
         raise UpscaleError(f"source is {stream['height']}p; {core.UPSCALE_FLAG} takes {core.UPSCALE_MAX_HEIGHT}p and below")
     times = packet_times(source)
-    rate, span = frame_timing(times, stream.get("avg_frame_rate") or "")
+    timing = frame_timing(times, stream.get("avg_frame_rate") or "")
     folder = os.path.join(work, "upscale")
     os.makedirs(folder, exist_ok=True)
-    check_space(folder, len(times), stream)
+    check_space(folder, timing.frames, stream)
     video, muxed = os.path.join(folder, "video.mkv"), os.path.join(folder, "input.mkv")
-    log(f"{core.UPSCALE_METHOD}: {stream['width']}x{stream['height']} at {float(rate):.3f} fps, "
-        f"{len(times)} packets, {span:.1f}s")
-    run_pipeline(source, video, rate, stream)
+    log(f"{core.UPSCALE_METHOD}: {stream['width']}x{stream['height']} at {float(timing.rate):.3f} fps, "
+        f"{len(times)} packets, {timing.span:.1f}s")
+    if timing.cfr:
+        log(f"frames dropped in the source; placing them by timestamp ({timing.frames - len(times):+d} frames)")
+    run_pipeline(source, video, timing.rate, stream, timing.cfr)
     got = float(ffprobe("-show_entries", "format=duration", "-of", "csv=p=0", video).strip() or 0)
-    if abs(got - span) > MAX_DURATION_ERROR_S:
-        raise UpscaleError(f"the upscaled video runs {got:.2f}s, the source {span:.2f}s; it would drift from the audio")
+    if abs(got - timing.span) > MAX_DURATION_ERROR_S:
+        raise UpscaleError(f"the upscaled video runs {got:.2f}s, the source {timing.span:.2f}s; "
+                           "it would drift from the audio")
     first = min(times)
     add_audio(video, source, muxed, first - (_timestamp(str(container.get("start_time"))) or 0.0), audio)
     os.remove(video)

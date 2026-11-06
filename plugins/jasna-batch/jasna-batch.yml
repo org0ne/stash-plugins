@@ -11,7 +11,7 @@ description: >
   marks the new scene. Every tag the plugin writes starts with "Jasna-Batch".
   Several bridges (one per GPU host) share the work.
 url: https://github.com/org0ne/stash-plugins
-version: 0.5.0
+version: 0.5.1
 
 exec:
   - python
