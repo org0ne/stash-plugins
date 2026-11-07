@@ -149,9 +149,11 @@ The flag is a plain switch (`-upscale` works too). The method is set in the plug
 `jasna_batch_upscale.py`): `qtgmc-compact-2x`, QTGMC deshimmer and the
 2xNomosUni Compact model from
 upscale-toolkit. It runs on the job's GPU turn, so it counts towards the
-job's time on the queue page. The upscaled file is near-lossless H.264 on the
-bridge's local scratch (about 50-80 MB per minute) and is deleted with the
-job's working folder.
+job's time on the queue page. The upscaled file is near-lossless HEVC (QP 20)
+on the bridge's local scratch, about 15-30 MB per minute of video (6 GB for
+three hours of 720p), and is deleted with the job's working folder. The job
+fails at the start if the scratch disk may not hold it, estimated
+pessimistically from the frame count and output size.
 
 - **720p and below.** A taller source is not queued: the scene goes to
   `Jasna-Batch Status: Failed` and loses its trigger tag.

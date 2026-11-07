@@ -41,15 +41,17 @@ import jasna_batch_core as core  # noqa: E402
 TOOLKIT = os.path.expanduser(os.environ.get("JASNA_UPSCALE_TOOLKIT") or "~/Applications/upscale-toolkit")
 LUT_SCRIPT = os.path.join(os.path.dirname(os.path.realpath(__file__)), "jasna_batch_lut.py")
 
-# How each method runs in the toolkit. QP 16 stays around 50 dB of lossless at
-# 52-80 MB/min where lossless takes 860-1800 MB/min (measured 2026-11-01).
+# How each method runs in the toolkit. HEVC QP 20 stays around 49 dB of
+# lossless at 16-30 MB/min, 0.005-0.008 GB per output gigapixel; H.264 QP 16
+# took 2.4-2.7x that for under 1 dB more. After Jasna's own CQ 25 encode the
+# two differ by 0.5 dB (measured 2026-11-07 on 480p and 720p sources).
 METHODS: Dict[str, dict] = {
     "qtgmc-compact-2x": {
         "scale": 2,
         "mode": "deshimmer",
         "model": "models/2xNomosUni_compact_multijpg_ldl.safetensors",
-        "encode": "-c:v h264_nvenc -preset p5 -tune hq -rc constqp -qp 16 -pix_fmt yuv420p",
-        "gb_per_gigapixel": 0.06,   # twice the noisiest sample, for the free-space check
+        "encode": "-c:v hevc_nvenc -preset p5 -tune hq -rc constqp -qp 20 -pix_fmt yuv420p",
+        "gb_per_gigapixel": 0.02,   # 2.5x the noisiest sample, for the free-space check
     },
 }
 METHOD = METHODS[core.UPSCALE_METHOD]
