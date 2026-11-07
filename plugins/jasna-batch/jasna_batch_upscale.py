@@ -285,6 +285,9 @@ def upscale(argv: List[str], audio: Optional[List[str]]) -> str:
     stream, container = probe(source)
     if int(stream["height"]) > core.UPSCALE_MAX_HEIGHT:
         raise UpscaleError(f"source is {stream['height']}p; {core.UPSCALE_FLAG} takes {core.UPSCALE_MAX_HEIGHT}p and below")
+    # The queue page's first upscale step; vs_pipeline carries it on while
+    # BestSource indexes the file (both read the whole source once).
+    print("Upscale 1/2 read:   0%| source file", flush=True)
     times = packet_times(source)
     timing = frame_timing(times, stream.get("avg_frame_rate") or "")
     folder = os.path.join(work, "upscale")
