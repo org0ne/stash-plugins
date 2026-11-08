@@ -195,7 +195,7 @@ def check_space(work: str, frames: int, stream: dict) -> None:
         raise UpscaleError(f"only {usage.free / 1e9:.1f} GB free under {work}; the upscale may need {need:.1f} GB")
 
 
-def run_pipeline(source: str, output: str, rate: Fraction, stream: dict, cfr: bool) -> None:
+def run_pipeline(source: str, output: str, rate: Fraction, stream: dict, cfr: bool, frames: int) -> None:
     full_range = stream.get("color_range") == "pc" or str(stream.get("pix_fmt") or "").startswith("yuvj")
     sar = (stream.get("sample_aspect_ratio") or "").replace(":", "/")
     cmd = [os.path.join(TOOLKIT, ".venv/bin/python"), "vs_pipeline.py", "-i", source, "-o", output,
@@ -206,6 +206,11 @@ def run_pipeline(source: str, output: str, rate: Fraction, stream: dict, cfr: bo
         cmd += ["--sar", sar]
     if cfr:
         cmd.append("--cfr")
+    else:
+        # Regular packets can still decode to fewer frames (damaged ones,
+        # MPEG-4 not-coded frames in AVI); the pipeline then places frames by
+        # timestamp itself, which only the decoder can tell.
+        cmd += ["--expect-frames", str(frames)]
     log(" ".join(cmd))
     if subprocess.run(cmd, cwd=TOOLKIT, stdin=subprocess.DEVNULL).returncode:
         raise UpscaleError("the upscale pipeline failed (see the lines above)")
@@ -298,7 +303,7 @@ def upscale(argv: List[str], audio: Optional[List[str]]) -> str:
         f"{len(times)} packets, {timing.span:.1f}s")
     if timing.cfr:
         log(f"frames dropped in the source; placing them by timestamp ({timing.frames - len(times):+d} frames)")
-    run_pipeline(source, video, timing.rate, stream, timing.cfr)
+    run_pipeline(source, video, timing.rate, stream, timing.cfr, timing.frames)
     got = float(ffprobe("-show_entries", "format=duration", "-of", "csv=p=0", video).strip() or 0)
     if abs(got - timing.span) > MAX_DURATION_ERROR_S:
         raise UpscaleError(f"the upscaled video runs {got:.2f}s, the source {timing.span:.2f}s; "

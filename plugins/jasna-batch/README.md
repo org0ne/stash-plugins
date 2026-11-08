@@ -163,6 +163,13 @@ pessimistically from the frame count and output size.
   timestamp: the frame before a gap is repeated, so the audio stays in sync.
   The job log says how many frames were added. This needs the toolkit's
   `vs_pipeline.py --cfr`.
+- **Damaged and not-coded frames are filled in too.** A file can have a packet
+  for every frame and still decode to fewer frames, from damaged frames or
+  from MPEG-4's "not coded" placeholders in `.avi`. The wrapper passes the
+  packet count, and `vs_pipeline.py --expect-frames` switches to placing
+  frames by timestamp when the decoded count differs (the log says
+  "decodes to N of M frames"). Before 0.6.3 such a job ran the whole upscale
+  and then failed with "the upscaled video runs ...s, the source ...s".
 - **Variable frame rate sources fail** at the start of the job, because the
   pipeline writes a constant rate that would drift from the audio. A source
   counts as variable when more than 1% of its frame steps are not one frame
