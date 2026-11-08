@@ -206,11 +206,11 @@ def run_pipeline(source: str, output: str, rate: Fraction, stream: dict, cfr: bo
         cmd += ["--sar", sar]
     if cfr:
         cmd.append("--cfr")
-    else:
-        # Regular packets can still decode to fewer frames (damaged ones,
-        # MPEG-4 not-coded frames in AVI); the pipeline then places frames by
-        # timestamp itself, which only the decoder can tell.
-        cmd += ["--expect-frames", str(frames)]
+    # Regular packets can still decode to fewer frames (damaged ones, MPEG-4
+    # not-coded frames in AVI); only the decoder can tell, so the pipeline
+    # places frames by timestamp itself then. Either way it stops before
+    # upscaling when the count would still leave the audio behind.
+    cmd += ["--expect-frames", str(frames)]
     log(" ".join(cmd))
     if subprocess.run(cmd, cwd=TOOLKIT, stdin=subprocess.DEVNULL).returncode:
         raise UpscaleError("the upscale pipeline failed (see the lines above)")

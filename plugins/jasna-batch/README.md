@@ -170,6 +170,12 @@ pessimistically from the frame count and output size.
   frames by timestamp when the decoded count differs (the log says
   "decodes to N of M frames"). Before 0.6.3 such a job ran the whole upscale
   and then failed with "the upscaled video runs ...s, the source ...s".
+- **A length mismatch fails in seconds, not after the run.** Since 0.6.4 the
+  pipeline compares the frames it is about to upscale with the count the
+  source should give, once BestSource has read the file and before
+  any upscaling, and stops when they would end more than 0.5 s apart
+  ("the source gives N frames ... the upscale would drift from the audio").
+  The check of the finished file stays as a backstop.
 - **Variable frame rate sources fail** at the start of the job, because the
   pipeline writes a constant rate that would drift from the audio. A source
   counts as variable when more than 1% of its frame steps are not one frame
