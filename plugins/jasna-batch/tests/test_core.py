@@ -295,41 +295,28 @@ class Upscale(unittest.TestCase):
             self.assertEqual(upscale.jasna_command(argv, "up.mkv"),
                              ["jasna", "--input", "up.mkv", "--output", "o.mp4", "--cq", "24"])
 
-    def test_constant_rate_is_read_from_the_timestamps(self):
-        step = 1001 / 30000
-        timing = upscale.frame_timing([i * step for i in range(3000)], "30000/1001")
-        self.assertEqual(str(timing.rate), "30000/1001")
-        self.assertAlmostEqual(timing.span, 3000 * step)
-        self.assertEqual((timing.frames, timing.cfr), (3000, False))
-        # a useless container rate does not win
-        self.assertEqual(str(upscale.frame_timing([i * step for i in range(3000)], "0/0").rate), "30000/1001")
+    def test_container_rate_skips_clock_ticks(self):
+        self.assertEqual(str(upscale.source_rate({"avg_frame_rate": "30000/1001", "r_frame_rate": "60/1"})), "30000/1001")
+        # HPK-004.avi: the average is a 1 ms clock, the base rate is right
+        self.assertEqual(str(upscale.source_rate({"avg_frame_rate": "1000/1", "r_frame_rate": "30000/1001"})), "30000/1001")
+        # WMV: no average, a 1 ms base
+        self.assertIsNone(upscale.source_rate({"avg_frame_rate": "0/0", "r_frame_rate": "1000/1"}))
+        self.assertIsNone(upscale.source_rate({}))
 
-    def test_millisecond_timestamps_are_not_vfr(self):
-        # WMV stores 29.97 fps as 33 and 34 ms steps; the median alone says 30.3 fps
-        times = [round(i * 1001 / 30000, 3) for i in range(30000)]
-        timing = upscale.frame_timing(times, "0/0")
-        self.assertEqual(str(timing.rate), "30000/1001")
-        self.assertEqual((timing.frames, timing.cfr), (30000, False))
+    def test_space_estimate_counts_the_filled_gaps(self):
+        # DJSK-004.wmv: 1626 packets over 180 s become 5400 frames
+        times = [i * 0.1107 for i in range(1626)]
+        self.assertGreaterEqual(upscale.estimate_frames(times, None), 5390)
+        self.assertEqual(upscale.estimate_frames([i / 30 for i in range(300)], None), 300)
 
-    def test_dropped_frames_are_placed_by_timestamp(self):
-        # DV-1400: 1 ms timestamps, a frame missing here and there
-        kept = [i for i in range(30000) if i % 2000 != 1000]
-        timing = upscale.frame_timing([round(i * 1001 / 30000, 3) for i in kept], "60000/1001")
-        self.assertEqual(str(timing.rate), "30000/1001")
-        self.assertTrue(timing.cfr)
-        self.assertEqual(timing.frames, 30000)
-        # a single drop already moves every later frame by a whole frame
-        one =[i * 1001 / 30000 for i in range(3000) if i != 1500]
-        self.assertTrue(upscale.frame_timing(one, "30000/1001").cfr)
-
-    def test_variable_rate_is_refused(self):
-        times = [i / 30 for i in range(1500)] + [50 + i / 15 for i in range(750)]
-        with self.assertRaisesRegex(upscale.UpscaleError, "variable frame rate"):
-            upscale.frame_timing(times, "25/1")
-
-    def test_no_timestamps_is_refused(self):
-        with self.assertRaises(upscale.UpscaleError):
-            upscale.frame_timing([], "30/1")
+    def test_pipeline_retimes_from_decoded_frame_times(self):
+        stream = {"avg_frame_rate": "30000/1001", "height": 480, "sample_aspect_ratio": "8:9"}
+        cmd = upscale.pipeline_command("in.avi", "out.mkv", stream, 900, "r.json")
+        for flag, value in (("--fps", "auto"), ("--expect-frames", "900"), ("--report", "r.json"),
+                            ("--source-rate", "30000/1001"), ("--sar", "8/9")):
+            self.assertEqual(cmd[cmd.index(flag) + 1], value)
+        self.assertIn("--retime", cmd); self.assertNotIn("--cfr", cmd)
+        self.assertNotIn("--source-rate", upscale.pipeline_command("in.wmv", "o.mkv", {"height": 400}, 9, "r"))
 
     def test_color_follows_the_source(self):
         self.assertEqual(upscale.source_matrix({"height": 480}), "170m")

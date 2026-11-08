@@ -29,11 +29,10 @@ import importlib.util
 import json
 import os
 import shutil
-import statistics
 import subprocess
 import sys
 from fractions import Fraction
-from typing import Dict, List, NamedTuple, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import jasna_batch_core as core  # noqa: E402
@@ -56,12 +55,8 @@ METHODS: Dict[str, dict] = {
 }
 METHOD = METHODS[core.UPSCALE_METHOD]
 MIN_FREE_AFTER_GB = 10
-TICK_JITTER_S = 0.0015      # a frame step may stray this far from the usual one: 1 ms timestamps (WMV) alternate 33/34 ms
-MAX_IRREGULAR = 0.01        # share of frame steps that may be gaps or bursts (dropped frames) before a source counts as VFR
-STANDARD_RATES = [Fraction(24000, 1001), Fraction(24), Fraction(25), Fraction(30000, 1001), Fraction(30),
-                  Fraction(50), Fraction(60000, 1001), Fraction(60)]
-MAX_SNAP_ERROR = 0.002      # how close a measured rate must be to a standard one to take it
-MAX_DURATION_ERROR_S = 0.5  # how far the upscaled video may end from the source's end
+MAX_DURATION_ERROR_S = 0.5  # how far the encoded upscale may end from the length the pipeline planned
+MAX_SANE_RATE = 120         # a container "rate" above this is a clock tick (WMV's 1000/1), not a frame rate
 ZIMG_MATRIX = {"bt709": "709", "smpte170m": "170m", "bt470bg": "470bg"}
 
 
@@ -94,49 +89,27 @@ def _timestamp(text: str) -> Optional[float]:
         return None
 
 
-class Timing(NamedTuple):
-    rate: Fraction
-    span: float   # seconds from the first frame to the end of the last
-    frames: int   # frames the upscaled video will have
-    cfr: bool     # the pipeline must place frames by timestamp (dropped frames would otherwise pull the audio out of sync)
-
-
-def _snap_rate(step: float, avg_rate: str) -> Fraction:
-    """The frame rate for a measured frame step: a standard rate or the
-    container's when one is that close, else the measurement itself."""
-    try:
-        candidates = [Fraction(avg_rate)] + STANDARD_RATES
-    except (ValueError, ZeroDivisionError):
-        candidates = STANDARD_RATES
-    for rate in candidates:
-        if rate > 0 and abs(float(rate) * step - 1) <= MAX_SNAP_ERROR:
+def source_rate(stream: dict) -> Optional[Fraction]:
+    """The container's frame rate as ffprobe reads it: the average, else the
+    base rate, skipping 0/0 and clock ticks (WMV and some AVIs say 1000/1).
+    vs_pipeline snaps to it and uses it for files without frame times."""
+    for key in ("avg_frame_rate", "r_frame_rate"):
+        try:
+            rate = Fraction(stream.get(key) or "")
+        except (ValueError, ZeroDivisionError):
+            continue
+        if 1 <= rate <= MAX_SANE_RATE:
             return rate
-    return Fraction(1 / step).limit_denominator(1001)
+    return None
 
 
-def frame_timing(times: List[float], avg_rate: str) -> Timing:
-    """How to upscale a source with these video packet timestamps. Steps of
-    one frame, give or take the timestamps' rounding, set the rate; a few
-    longer or shorter steps (dropped frames) are fine, and make the pipeline
-    place frames by timestamp when they would drift from the audio by half a
-    frame. Raises UpscaleError for a source whose rate really changes."""
-    times = sorted(times)
-    if len(times) < 2:
-        raise UpscaleError("the source has no readable video timestamps")
-    steps = [b - a for a, b in zip(times, times[1:])]
-    usual = statistics.median(steps)
-    regular = [s for s in steps if abs(s - usual) <= TICK_JITTER_S]
-    if usual <= 0 or len(regular) < len(steps) * (1 - MAX_IRREGULAR):
-        raise UpscaleError(f"variable frame rate source ({len(times)} packets over {times[-1] - times[0]:.1f}s, "
-                           f"{len(steps) - len(regular)} of {len(steps)} frame steps differ from the usual "
-                           f"{usual * 1000:.2f} ms); upscaling it would drift from the audio")
-    rate = _snap_rate(statistics.fmean(regular), avg_rate)
-    period = 1 / float(rate)
-    span = times[-1] - times[0] + period
-    drift = max(abs(t - times[0] - i * period) for i, t in enumerate(times))
-    if drift <= period / 2:
-        return Timing(rate, span, len(times), False)
-    return Timing(rate, span, round(span / period), True)
+def estimate_frames(times: List[float], rate: Optional[Fraction]) -> int:
+    """Frames the upscale may have, for the free-space check: one per
+    packet, or the packets' span at the container's rate when that is more
+    (gaps are filled by repeating a frame; DJSK-004.wmv: 1626 packets over
+    180 s, 5400 frames)."""
+    span = max(times) - min(times) if times else 0.0
+    return max(len(times), int(span * float(rate or 30)) + 1)
 
 
 def source_matrix(stream: dict) -> str:
@@ -179,7 +152,7 @@ def packet_times(path: str) -> List[float]:
 
 def probe(path: str) -> Tuple[dict, dict]:
     info = json.loads(ffprobe("-select_streams", "v:0", "-show_entries",
-                              "stream=width,height,pix_fmt,sample_aspect_ratio,avg_frame_rate,color_space,"
+                              "stream=width,height,pix_fmt,sample_aspect_ratio,avg_frame_rate,r_frame_rate,color_space,"
                               "color_primaries,color_transfer,color_range:format=start_time", "-of", "json", path))
     if not info.get("streams"):
         raise UpscaleError("the source has no video stream")
@@ -195,25 +168,35 @@ def check_space(work: str, frames: int, stream: dict) -> None:
         raise UpscaleError(f"only {usage.free / 1e9:.1f} GB free under {work}; the upscale may need {need:.1f} GB")
 
 
-def run_pipeline(source: str, output: str, rate: Fraction, stream: dict, cfr: bool, frames: int) -> None:
+def pipeline_command(source: str, output: str, stream: dict, packets: int, report: str) -> List[str]:
+    """vs_pipeline with --retime: every frame goes in the slot its decoded
+    time says, at the rate those times step at (the toolkit's retime.py:
+    gaps repeat the frame before, frames stamped a slot off move, a section
+    at a higher rate drops its extras, a hole over 30 s fails at once). The
+    packet count checks files without frame times (packed B-frames in AVI),
+    which are taken in order at the container's rate."""
     full_range = stream.get("color_range") == "pc" or str(stream.get("pix_fmt") or "").startswith("yuvj")
     sar = (stream.get("sample_aspect_ratio") or "").replace(":", "/")
+    rate = source_rate(stream)
     cmd = [os.path.join(TOOLKIT, ".venv/bin/python"), "vs_pipeline.py", "-i", source, "-o", output,
-           "--model", METHOD["model"], "--mode", METHOD["mode"], "--fps", str(rate),
+           "--model", METHOD["model"], "--mode", METHOD["mode"], "--fps", "auto", "--retime",
+           "--expect-frames", str(packets), "--report", report,
            "--matrix", source_matrix(stream), "--range", "full" if full_range else "limited",
            "--encode", " ".join([METHOD["encode"], *color_flags(stream)]), "--progress"]
+    if rate:
+        cmd += ["--source-rate", str(rate)]
     if sar and sar not in ("0/1", "1/1"):
         cmd += ["--sar", sar]
-    if cfr:
-        cmd.append("--cfr")
-    # Regular packets can still decode to fewer frames (damaged ones, MPEG-4
-    # not-coded frames in AVI); only the decoder can tell, so the pipeline
-    # places frames by timestamp itself then. Either way it stops before
-    # upscaling when the count would still leave the audio behind.
-    cmd += ["--expect-frames", str(frames)]
+    return cmd
+
+
+def run_pipeline(cmd: List[str], report: str) -> dict:
+    """Runs vs_pipeline; returns its --report (rate, frames, first frame time)."""
     log(" ".join(cmd))
     if subprocess.run(cmd, cwd=TOOLKIT, stdin=subprocess.DEVNULL).returncode:
         raise UpscaleError("the upscale pipeline failed (see the lines above)")
+    with open(report) as fh:
+        return json.load(fh)
 
 
 def fits_mp4(path: str, index: int) -> bool:
@@ -294,21 +277,24 @@ def upscale(argv: List[str], audio: Optional[List[str]]) -> str:
     # BestSource indexes the file (both read the whole source once).
     print("Upscale 1/2 read:   0%| source file", flush=True)
     times = packet_times(source)
-    timing = frame_timing(times, stream.get("avg_frame_rate") or "")
+    if not times:
+        raise UpscaleError("the source has no readable video packets")
     folder = os.path.join(work, "upscale")
     os.makedirs(folder, exist_ok=True)
-    check_space(folder, timing.frames, stream)
+    check_space(folder, estimate_frames(times, source_rate(stream)), stream)
     video, muxed = os.path.join(folder, "video.mkv"), os.path.join(folder, "input.mkv")
-    log(f"{core.UPSCALE_METHOD}: {stream['width']}x{stream['height']} at {float(timing.rate):.3f} fps, "
-        f"{len(times)} packets, {timing.span:.1f}s")
-    if timing.cfr:
-        log(f"frames dropped in the source; placing them by timestamp ({timing.frames - len(times):+d} frames)")
-    run_pipeline(source, video, timing.rate, stream, timing.cfr, timing.frames)
+    report = os.path.join(folder, "retime.json")
+    log(f"{core.UPSCALE_METHOD}: {stream['width']}x{stream['height']}, {len(times)} packets over "
+        f"{max(times) - min(times):.1f}s")
+    plan = run_pipeline(pipeline_command(source, video, stream, len(times), report), report)
+    want = plan["frames"] / float(Fraction(plan["output_fps"]))
     got = float(ffprobe("-show_entries", "format=duration", "-of", "csv=p=0", video).strip() or 0)
-    if abs(got - timing.span) > MAX_DURATION_ERROR_S:
-        raise UpscaleError(f"the upscaled video runs {got:.2f}s, the source {timing.span:.2f}s; "
+    if abs(got - want) > MAX_DURATION_ERROR_S:
+        raise UpscaleError(f"the upscaled video runs {got:.2f}s, the pipeline planned {want:.2f}s; "
                            "it would drift from the audio")
-    first = min(times)
+    # The first frame's time, from the decoder when it has one: an MP4's edit
+    # list can start the video after packets it does not show.
+    first = plan["first_s"] if plan.get("first_s") is not None else min(times)
     add_audio(video, source, muxed, first - (_timestamp(str(container.get("start_time"))) or 0.0), audio)
     os.remove(video)
     log(f"done: {os.path.getsize(muxed) / 1e9:.2f} GB, {got:.1f}s")

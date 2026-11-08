@@ -157,29 +157,35 @@ pessimistically from the frame count and output size.
 
 - **720p and below.** A taller source is not queued: the scene goes to
   `Jasna-Batch Status: Failed` and loses its trigger tag.
-- **Dropped frames are filled in.** A constant-rate source with frames missing
-  here and there (common in `.wmv`, whose 1 ms timestamps also make 29.97 fps
-  read as alternating 33 and 34 ms steps) is upscaled with frames placed by
-  timestamp: the frame before a gap is repeated, so the audio stays in sync.
-  The job log says how many frames were added. This needs the toolkit's
-  `vs_pipeline.py --cfr`.
-- **Damaged and not-coded frames are filled in too.** A file can have a packet
-  for every frame and still decode to fewer frames, from damaged frames or
-  from MPEG-4's "not coded" placeholders in `.avi`. The wrapper passes the
-  packet count, and `vs_pipeline.py --expect-frames` switches to placing
-  frames by timestamp when the decoded count differs (the log says
-  "decodes to N of M frames"). Before 0.6.3 such a job ran the whole upscale
-  and then failed with "the upscaled video runs ...s, the source ...s".
-- **A length mismatch fails in seconds, not after the run.** Since 0.6.4 the
-  pipeline compares the frames it is about to upscale with the count the
-  source should give, once BestSource has read the file and before
-  any upscaling, and stops when they would end more than 0.5 s apart
-  ("the source gives N frames ... the upscale would drift from the audio").
-  The check of the finished file stays as a backstop.
-- **Variable frame rate sources fail** at the start of the job, because the
-  pipeline writes a constant rate that would drift from the audio. A source
-  counts as variable when more than 1% of its frame steps are not one frame
-  long.
+- **Every frame goes where its time says.** The upscale writes a constant
+  frame rate and Jasna takes the audio from the source, so since 0.7.0 the
+  pipeline (`vs_pipeline.py --retime`, the toolkit's `retime.py`) reads each
+  decoded frame's time from BestSource and puts the frame in its nearest
+  slot, at the rate the frames step at:
+  - a slot with no frame shows the frame before again: dropped frames,
+    damaged frames and MPEG-4 "not coded" frames in `.avi`, which decode to
+    nothing (BUR-144.avi);
+  - a frame whose slot is taken moves one slot. Many `.wmv` files stamp
+    some frames a slot late, in steps of 0, 33, 100, 100 ms at 30 fps
+    (ARKJ-009.wmv); every frame is kept;
+  - a frame that would land more than one slot late is dropped. This only
+    happens in a section at a higher rate than the file's usual one, such as
+    60 fps parts in a 30 fps file;
+  - 24 fps sections in a 29.97 fps file get the frame repeats an NTSC DVD
+    has.
+
+  The job log says how many frames were repeated, moved and dropped. The
+  rate is read from the frame times: the mean step over 30-frame runs
+  without a gap, snapped to the container's rate or a standard one when
+  within 0.2%, the closest of those (30 and 29.97 are 0.1% apart). Files
+  BestSource has no frame times for (packed B-frames in `.avi`) are taken in
+  order at the container's rate, checked against the packet count.
+- **Broken files fail in seconds, not after the run.** A gap of more than
+  30 s with no frame, which would repeat one frame for minutes, or a clock
+  that jumps back more than 1 s, stops the job right after BestSource reads
+  the file and before any upscaling. A file without frame times whose frame
+  count would end more than 0.5 s from its packet count stops there too. The
+  check of the finished file stays as a backstop.
 - **Bridge setup.** On each node that should upscale, install upscale-toolkit
   (in `~/Applications/upscale-toolkit`, or set `JASNA_UPSCALE_TOOLKIT` for the
   bridge's service) and point `batch.wrapper` at this plugin's
