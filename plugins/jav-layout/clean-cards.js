@@ -255,7 +255,7 @@
           id code date
           performers { id name disambiguation image_path }
           play_count play_duration resume_time
-          files { path }
+          files { path size }
         }
       `).join('\n')}
     }`;
@@ -496,6 +496,7 @@
       if (scene.code) codeSpan.title = scene.code.trim(); else codeSpan.removeAttribute('title');
     }
     if (dateSpan) dateSpan.textContent = scene.date ? scene.date.slice(0, 10) : "—";
+    if (card._stashSizeSpan) card._stashSizeSpan.textContent = formatFileSize(scene.files?.[0]?.size);
 
     if (perf) {
       perf.textContent = "";
@@ -557,7 +558,8 @@
         check.setAttribute('title', 'Watched');
         check.setAttribute('aria-label', 'Watched');
         check.appendChild(makeWatchedCheckIcon());
-        if (WATCHED_CHECK_HOST === 'code') group.appendChild(check);
+        // Before the file size, so the check stays beside the code.
+        if (WATCHED_CHECK_HOST === 'code') group.insertBefore(check, card._stashSizeSpan);
         else group.insertBefore(check, card._stashDateSpan);
       }
     }
@@ -586,6 +588,16 @@
     path.setAttribute('stroke-linejoin', 'round');
     svg.appendChild(path);
     return svg;
+  }
+
+  /* Primary file's size for the card bar and the scene page's info row, 1024-based like stash's own
+   * File Info pane: "734 MB", "1.4 GB". Empty when the scene has no file. */
+  function formatFileSize(bytes) {
+    if (!(bytes > 0)) return '';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let v = bytes, i = 0;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return `${i >= 3 && v < 100 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
   }
 
   /* One definition of "watched", shared with the sidebar badge: played at
@@ -634,7 +646,13 @@
   function requestScenePath(sceneId, callback) {
     requestSceneData(String(sceneId), scene => callback(scene?.files?.[0]?.path ?? null), true);
   }
-  window.JLSceneData = { isWatched: isSceneWatched, fetch: fetchSceneWatchData, checkIcon: makeWatchedCheckIcon, path: requestScenePath };
+  /* Formatted primary-file size for the scene page's info row
+   * (scene-dashboard.js), through the same batch and cache as the cards, so
+   * both read "1.4 GB" the same way. Resolves '' when there is no file. */
+  function requestSceneFileSize(sceneId, callback) {
+    requestSceneData(String(sceneId), scene => callback(formatFileSize(scene?.files?.[0]?.size)), true);
+  }
+  window.JLSceneData = { isWatched: isSceneWatched, fetch: fetchSceneWatchData, checkIcon: makeWatchedCheckIcon, path: requestScenePath, fileSize: requestSceneFileSize };
 
   /* ============================
    *  CLIPBOARD
@@ -800,6 +818,12 @@
 
     codeGroup.appendChild(copyBtn);
 
+    // File size, just right of the code; the watched check, when it comes,
+    // goes in before it (applySceneDataToCard).
+    const sizeSpan = document.createElement("span");
+    sizeSpan.className = "size";
+    codeGroup.appendChild(sizeSpan);
+
     const dateSpan = document.createElement("span");
     dateSpan.className = "date";
     dateSpan.textContent = "…";
@@ -835,6 +859,7 @@
     card._stashDateSpan = dateSpan;
     card._stashDateGroup = dateGroup;
     card._stashCodeGroup = codeGroup;
+    card._stashSizeSpan  = sizeSpan;
     card._stashPerf     = perf;
 
     visibilityObserver.observe(card);

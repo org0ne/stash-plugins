@@ -430,7 +430,7 @@
     setStyle(backdrop, 'marginBottom', `-${height}px`);
   }
 
-  /* Badge block: one combined "Resolution | fps | Duration | Director" line, above a
+  /* Badge block: one combined "Resolution | Size | fps | Duration | Director" line, above a
    * second line holding just the collection-colors badge slot — both in
    * Metadata's column at order 40, the position the collection-colors
    * plugin's own pill used to occupy on its own, back when that plugin
@@ -474,6 +474,7 @@
    * Reuses `subheader`'s already-queried `.frame-rate`/`.resolution` and
    * `metaCol`'s already-labeled Director `<h6>` — both already computed
    * by the caller a few lines up — rather than re-querying independently. */
+  const fileSizes = new Map();   // sceneId → formatted size ('' while pending / no file)
   function buildSceneBadgeRow(metaCol, subheader, fileinfo) {
     let block = metaCol.querySelector(':scope > .jl-scene-badges');
     if (!block) {
@@ -494,6 +495,19 @@
     const durationCell = durationLabel && durationLabel.nextElementSibling;
     const duration = durationCell && durationCell.tagName === 'DD' ? durationCell.textContent.trim() : '';
     const directorSource = metaCol.querySelector(':scope > h6[data-jl-label="Director"] a');
+    // File size comes from clean-cards.js's batched scene fetch (same "1.4 GB"
+    // formatting as the card bar), not the File Info pane: async, so the first
+    // pass for a scene asks for it and the answer queues another run(), which
+    // lands here again with the value cached. Added 2026-11-13.
+    const sceneId = location.pathname.match(/^\/scenes\/(\d+)/)?.[1];
+    if (sceneId && !fileSizes.has(sceneId) && window.JLSceneData?.fileSize) {
+      fileSizes.set(sceneId, '');
+      window.JLSceneData.fileSize(sceneId, size => {
+        fileSizes.set(sceneId, size);
+        if (size) queueRun();
+      });
+    }
+    const fileSize = (sceneId && fileSizes.get(sceneId)) || '';
 
     let infoRow = block.querySelector(':scope > .jl-scene-info-row');
     if (!infoRow) {
@@ -501,12 +515,13 @@
       infoRow.className = 'jl-scene-info-row';
       block.insertBefore(infoRow, block.firstChild);
     }
-    const sig = JSON.stringify([resolution || '', frameRate || '', duration || '', directorSource ? directorSource.href + '|' + directorSource.textContent : '']);
+    const sig = JSON.stringify([resolution || '', fileSize, frameRate || '', duration || '', directorSource ? directorSource.href + '|' + directorSource.textContent : '']);
     if (infoRow.dataset.jlInfoSig !== sig) {
       infoRow.dataset.jlInfoSig = sig;
       infoRow.replaceChildren();
       const segments = [];
       if (resolution) segments.push(document.createTextNode(resolution));
+      if (fileSize) segments.push(document.createTextNode(fileSize));
       if (frameRate) segments.push(document.createTextNode(frameRate));
       if (duration) segments.push(document.createTextNode(duration));
       if (directorSource) {
@@ -1476,14 +1491,18 @@
   }
 
   let queued = false;
-  const observer = new MutationObserver(muts => {
+  function queueRun() {
     if (queued) return;
-    if (!touchesSidebar(muts)) return;
     queued = true;
     requestAnimationFrame(() => {
       queued = false;
       try { run(); } catch (e) { console.error('[SceneDashboard]', e); }
     });
+  }
+  const observer = new MutationObserver(muts => {
+    if (queued) return;
+    if (!touchesSidebar(muts)) return;
+    queueRun();
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
