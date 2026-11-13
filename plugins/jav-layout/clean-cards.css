@@ -143,6 +143,20 @@
   overflow: hidden !important;
   text-overflow: ellipsis !important;
 }
+/* Card file size, right of the code: secondary to it, so lighter weight, a step
+   smaller, and the muted label colour rather than the accent. Never shrinks
+   or wraps — a long code ellipsises first. */
+.stash-code-date .size {
+  color: var(--jl-muted) !important;
+  font-family: var(--jl-font-mono) !important;
+  font-weight: 400 !important;
+  font-size: 0.85em !important;
+  letter-spacing: 0 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  margin-left: 8px !important;
+}
+.stash-code-date .size:empty { display: none !important; }
 .stash-code-date .stash-code-copy,
 .stash-code-date .stash-watched-check { flex-shrink: 0 !important; }
 /* Right half of the bar: the date, with the watched check in front of it

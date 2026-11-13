@@ -3054,6 +3054,20 @@ ln -s /path/to/jav-layout /path/to/stash/config/plugins/jav-layout
   strip between Original Title and Toolbar; see the reverted-mirroring note
   in the Layout section above. This parenthetical previously described the
   mirrored-into-Metadata version, which was reverted.)
+- **File size (2026-11-13, v2.5.0)** — the primary file's size
+  (`files[0].size`, 1024-based, "734 MB" / "1.4 GB", `formatFileSize()` in
+  clean-cards.js). On cards it sits just right of the studio code
+  (`.stash-code-date .size`, in the code group after the copy button; the
+  watched check is inserted *before* it so the check stays beside the
+  code) — lighter: weight 400, 0.85em, `--jl-muted`, never shrinks, so a
+  long code ellipsises first. On the scene page it was first put in the
+  Code/Date bar the same way, then moved the same day on request into the
+  info row, now Resolution | Size | fps | Duration | Director. The batched
+  query selects `files { path size }`; the scene page reads it through
+  `window.JLSceneData.fileSize`, which is async, so `buildSceneBadgeRow()`
+  asks once per scene (`fileSizes` map), the answer calls `queueRun()`
+  (the observer's rAF scheduler, factored out), and the next pass picks
+  the cached value up; the size is part of `jlInfoSig`.
 - **Duration joined the info row (2026-09-12, v2.4.1)** — the row is now
   Resolution | fps | Duration | Director, in that order on request.
   Duration isn't in `.scene-subheader` (only date/fps/resolution are);
