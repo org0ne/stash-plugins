@@ -76,8 +76,10 @@ def option(argv: List[str], name: str) -> Optional[str]:
 
 
 def jasna_command(argv: List[str], new_input: str) -> List[str]:
-    """Jasna's command line with --upscale gone and --input replaced."""
-    out = [a for a in argv if a not in core.UPSCALE_FLAGS]
+    """Jasna's command line with the wrapper's --upscale gone and --input
+    replaced. Jasna's own `--upscale <model>` stays."""
+    ours = set(core.wrapper_upscale_at(argv))
+    out = [a for i, a in enumerate(argv) if i not in ours]
     out[out.index("--input") + 1] = new_input
     return out
 

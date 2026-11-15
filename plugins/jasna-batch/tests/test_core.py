@@ -285,6 +285,13 @@ class Upscale(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual([p.upscale for p in presets], [False, True, True])
 
+    def test_jasnas_own_upscale_is_left_alone(self):
+        presets, _ = core.parse_presets("J = --upscale span --upscale-height 1080; Both = --upscale --upscale span")
+        self.assertEqual([p.upscale for p in presets], [False, True])
+        argv = ["jasna", "--input", "a.avi", "--upscale", "--upscale", "span", "--cq", "24"]
+        self.assertEqual(upscale.jasna_command(argv, "up.mkv"),
+                         ["jasna", "--input", "up.mkv", "--upscale", "span", "--cq", "24"])
+
     def test_sidecar_names_the_method(self):
         self.assertNotIn("Upscale", core.command_sidecar({"flags": ["--codec", "hevc"]}, None, "0"))
         self.assertIn(f"Upscale          : {core.UPSCALE_METHOD}", core.command_sidecar({"flags": ["--upscale"]}, None, "0"))

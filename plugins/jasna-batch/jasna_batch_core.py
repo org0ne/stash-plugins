@@ -26,8 +26,10 @@ from xml.dom import minidom
 VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".wmv", ".mov", ".m4v", ".ts", ".m2ts", ".mpg", ".mpeg", ".flv",
               ".webm", ".vob", ".iso", ".divx", ".rm", ".rmvb", ".3gp", ".ogv"}
 OUTPUT_EXT = ".mp4"
-# Preset flag that runs a 2x upscale before Jasna. It is not a Jasna flag: the
-# bridge's batch.wrapper (jasna_batch_upscale.py) removes it and does the work.
+# Preset flag that runs a 2x upscale before Jasna. Bare, it is not a Jasna
+# flag: the bridge's batch.wrapper (jasna_batch_upscale.py) removes it and does
+# the work. Followed by a value (`--upscale span`) it is Jasna's own upscale
+# after restore (0.12.3 and later), and passes through untouched.
 UPSCALE_FLAG = "--upscale"
 UPSCALE_FLAGS = (UPSCALE_FLAG, "-upscale")   # the one-hyphen spelling also works
 UPSCALE_METHOD = "qtgmc-compact-2x"
@@ -84,8 +86,15 @@ class Preset:
         return ([UPSCALE_FLAG] if self.upscale else []) + ([AUTO_LUT_FLAG] if self.auto_lut else [])
 
 
+def wrapper_upscale_at(flags: List[str]) -> List[int]:
+    """Positions of the wrapper's bare --upscale: one not followed by a value,
+    which would make it Jasna's own --upscale."""
+    return [i for i, f in enumerate(flags)
+            if f in UPSCALE_FLAGS and (i + 1 == len(flags) or flags[i + 1].startswith("-"))]
+
+
 def has_upscale(flags: Iterable[str]) -> bool:
-    return any(f in UPSCALE_FLAGS for f in flags)
+    return bool(wrapper_upscale_at(list(flags)))
 
 
 def has_auto_lut(flags: Iterable[str]) -> bool:

@@ -155,6 +155,11 @@ three hours of 720p), and is deleted with the job's working folder. The job
 fails at the start if the scratch disk may not hold it, estimated
 pessimistically from the frame count and output size.
 
+Jasna 0.12.3 has an `--upscale` of its own, which takes a model and runs
+after restore: `--upscale span --upscale-height 1080`. Followed by a value
+the flag is Jasna's and goes to Jasna unchanged; only the bare switch is
+this plugin's. A preset can use both.
+
 - **720p and below.** A taller source is not queued: the scene goes to
   `Jasna-Batch Status: Failed` and loses its trigger tag.
 - **Every frame goes where its time says.** The upscale writes a constant
