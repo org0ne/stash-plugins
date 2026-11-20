@@ -20,7 +20,7 @@ from it as the scan creates it; this plugin does nothing NFO -> Stash.
 
 Invoked by Stash with a JSON payload on stdin:
   {"server_connection": {...},
-   "args": {"mode": "check"|"queue"|"sync", "dry_run": bool, "job_id": str}
+   "args": {"mode": "check"|"queue"|"sync"|"refresh"|"restored", "dry_run": bool, "job_id": str}
         or {"hookContext": {"id": ..., "type": "Scene.Update.Post", ...}}}
 
 Everything that needs no Stash lives in jasna_batch_core.py.
@@ -42,7 +42,7 @@ from stashapi.stashapp import StashInterface
 import jasna_batch_core as core
 
 PLUGIN_ID = "jasna-batch"
-PLUGIN_VERSION = "0.7.1"
+PLUGIN_VERSION = "0.8.0"
 
 PARENT_TAG = core.TAG_PREFIX
 STATUS_TAGS = {
@@ -227,6 +227,12 @@ class Bridge:
     def job(self, job_id: str) -> dict:
         return self.call("GET", f"/jobs/{job_id}")["job"]
 
+    def cancel(self, job_id: str) -> dict:
+        return self.call("DELETE", f"/jobs/{job_id}")
+
+    def move(self, job_id: str, before: str) -> None:
+        self.call("POST", f"/jobs/{job_id}/move", {"before": before})
+
     def ack(self, job_id: str, scene_id: Optional[str] = None) -> None:
         # scene_id = the Stash scene made from the output; the queue page links the done job to it
         self.call("POST", f"/jobs/{job_id}/ack", {"scene_id": str(scene_id)} if scene_id else None)
@@ -341,6 +347,7 @@ class Run:
         self._node_errors: Dict[str, str] = {}
         self._node_batch: Dict[str, dict] = {}
         self._durations: Dict[str, Optional[float]] = {}
+        self._active_scenes: set = set()   # Sync: scenes with a queued or running job
 
     @property
     def multi(self) -> bool:
@@ -668,6 +675,7 @@ class Run:
         if not jobs:
             log.info("No unacknowledged jobs on " + ("any bridge node." if self.multi else "the bridge."))
             return
+        self._active_scenes = {str(j.get("scene_id")) for j in jobs if j.get("state") in ("queued", "running")}
         for i, job in enumerate(jobs):
             log.progress(i / len(jobs))
             try:
@@ -698,7 +706,21 @@ class Run:
             self.set_status(scene, state, note=ref)
             return
         if state == "cancelled":
-            self.set_status(scene, None, note=f"{ref} cancelled")
+            # A scene with another job queued or running keeps that job's
+            # status: Refresh queued jobs replaces a job, and this Sync can
+            # run after the replacement is queued; or another preset is.
+            if str(job.get("scene_id")) not in self._active_scenes:
+                self.set_status(scene, None, note=f"{ref} cancelled")
+            self.ack(job)
+            return
+        output = job.get("stash_output") or ""
+        if state == "failed" and output and os.path.exists(output):
+            # Another job for this scene and preset made the file (BUR-144,
+            # 2026-11-20: a retried job whose redo had been ingested on 11-10).
+            # The scene has its restoration; this failure is not news.
+            log.warning(f"{scene_label(scene)}: {ref} failed ({job.get('error')}), but {output} already exists "
+                        f"from another job; marked done")
+            self.set_status(scene, "done", note=f"{ref}: output already existed", restored=job.get("preset") or "")
             self.ack(job)
             return
         if state == "failed":
@@ -918,6 +940,85 @@ class Run:
 
     # -- check -------------------------------------------------------------
 
+    # -- refresh -----------------------------------------------------------
+
+    def stale_jobs(self, bridge: Bridge) -> List[Tuple[dict, Optional[core.Preset]]]:
+        """This node's queued jobs whose flags are not their preset's flags
+        now (a job keeps the flags it was queued with), with that preset;
+        None for a preset no longer configured. In queue order."""
+        out = []
+        for job in self.node_jobs(bridge) or []:
+            if job.get("state") != "queued":
+                continue
+            preset = self.cfg.preset(job.get("preset") or "")
+            if preset is None or list(job.get("flags") or []) != preset.flags:
+                out.append((job, preset))
+        return out
+
+    def refresh(self) -> None:
+        """Queue every stale queued job again with its preset's current
+        flags, in the same place in its node's queue. The bridge cannot
+        edit a job, so: cancel it, submit the same file, preset and output,
+        and move the new job before the one that followed the old."""
+        found = 0
+        for bridge in self.bridges:
+            jobs = self.node_jobs(bridge)
+            if jobs is None:
+                log.warning(f"{bridge.name}: {self._node_errors.get(bridge.name)}; its jobs are skipped this run")
+                continue
+            order = [j["id"] for j in jobs if j.get("state") == "queued"]
+            # Last first, so the job each one goes before is already the new one.
+            for job, preset in reversed(self.stale_jobs(bridge)):
+                found += 1
+                ref = f"{self.job_ref({**job, 'node': bridge.name})} ({os.path.basename(job.get('stash_source') or '')})"
+                if preset is None:
+                    log.warning(f"{ref}: preset {job.get('preset')!r} is no longer configured; left as it is")
+                    continue
+                old, new = " ".join(job.get("flags") or []), " ".join(preset.flags)
+                at = order.index(job["id"])
+                after = order[at + 1] if at + 1 < len(order) else None
+                if self.cfg.dry_run:
+                    log.info(f"[dry-run] {ref}: would requeue at position {at + 1} with {new} (was {old})")
+                    continue
+                self.requeue(bridge, job, preset, ref, after, order, at)
+        log.info(f"Refresh done: {found} stale queued job(s), {self.counts['queued']} requeued, "
+                 f"{self.counts['errors']} error(s)" + (" [dry run]" if self.cfg.dry_run else ""))
+
+    def requeue(self, bridge: Bridge, job: dict, preset: core.Preset, ref: str, after: Optional[str],
+                order: List[str], at: int) -> None:
+        try:
+            if bridge.job(job["id"]).get("state") != "queued":
+                log.info(f"{ref}: no longer queued; left as it is")
+                return
+            bridge.cancel(job["id"])
+        except BridgeError as err:
+            log.error(f"{ref}: could not cancel: {err}")
+            self.counts["errors"] += 1
+            return
+        scene = self.stash.find_scene(job["scene_id"], fragment=SCENE_FRAGMENT)
+        try:
+            result = bridge.submit(job["scene_id"], job["stash_source"], job["stash_output"], preset,
+                                   job.get("audio") or "")
+        except BridgeError as err:
+            log.error(f"{ref}: cancelled, but the bridge refused it again: {err}; tag the scene "
+                      f"{preset.tag!r} to queue it once the cause is fixed")
+            self.counts["errors"] += 1
+            if scene:
+                self.set_status(scene, "failed", note=str(err)[:80])
+            return
+        new_id = result["job"]["id"]
+        order[at] = new_id
+        if after:
+            try:
+                bridge.move(new_id, before=after)
+            except BridgeError as err:
+                log.warning(f"{ref}: requeued as job {new_id} at the end of the queue; could not move it back "
+                            f"to position {at + 1}: {err}")
+        log.info(f"{ref}: requeued as job {new_id} with preset {preset.name!r}'s current flags")
+        self.counts["queued"] += 1
+        if scene:
+            self.set_status(scene, "queued", note=f"job {new_id}")
+
     def check(self) -> None:
         cfg, raw = self.cfg, self.cfg.raw
         problems: List[str] = []
@@ -967,6 +1068,14 @@ class Run:
             except BridgeError as err:
                 line(f"{prefix}Bridge", f"UNREACHABLE: {err}")
                 problems.append(f"{prefix}bridge: {err}")
+            stale = self.stale_jobs(bridge)
+            for job, preset in stale:
+                line(f"{prefix}Stale job", f"{job.get('id')} {os.path.basename(job.get('stash_source') or '')} "
+                     f"({job.get('preset')})", None,
+                     "preset no longer configured" if preset is None else "queued with flags its preset no longer has")
+            if stale:
+                problems.append(f"{prefix}{len(stale)} queued job(s) carry flags their preset no longer has; "
+                                f"run 'Refresh queued jobs'")
             if self.multi:
                 takes = [p.name for p in cfg.presets if bridge.node.accepts(p.name)]
                 line(f"{prefix}Takes presets", ", ".join(takes) or "NONE of the configured ones")
@@ -1116,6 +1225,8 @@ def main() -> None:
             run.queue()
         elif cfg.mode == "sync":
             run.sync()
+        elif cfg.mode == "refresh":
+            run.refresh()
         elif cfg.mode == "restored":
             run.tag_restored()
         else:

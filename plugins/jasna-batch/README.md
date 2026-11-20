@@ -211,6 +211,23 @@ conversion in their own mux step.
 This only happens on nodes whose `batch.wrapper` points at
 `jasna_batch_upscale.py`; on other nodes these sources still fail.
 
+## Options a newer Jasna renamed
+
+A queued job keeps the flags its preset had when it was queued, so a job
+queued before a Jasna upgrade can carry an option the new Jasna rejects.
+DV-1400 failed this way on 2026-11-20 with `--experimental-ltx-less-overlap`,
+which 0.12.2 replaced with `--ltx-overlap`. Before any other step, the
+wrapper reads the installed Jasna's `--help` (about 2 seconds):
+
+- an option listed in `RENAMED_FLAGS` in `jasna_batch_core.py` is rewritten
+  (`--experimental-ltx-less-overlap` becomes `--ltx-overlap 17`), and the
+  job log says so;
+- any other option that Jasna does not take fails the job at once, before
+  an upscale or audio conversion has spent time on it.
+
+Add a line to `RENAMED_FLAGS` when a Jasna release renames an option.
+Then fix the presets and run *Refresh queued jobs*.
+
 ## Per-video colour LUT
 
 Many older titles have a yellow or warm cast. Add `--auto-lut` to a preset
@@ -327,6 +344,13 @@ every node is paused) until **Resume**. The pause survives a bridge restart.
   (`batch.notify_plugin` / `notify_task` in `bridge.toml`); run it by hand
   to retry an ingestion after fixing its cause (a failed ingestion leaves
   the job unacknowledged on the bridge and the scene `Jasna-Batch Status: Failed`).
+- **Refresh queued jobs** - a job keeps the flags its preset had when it
+  was queued. This requeues every queued job whose flags differ from its
+  preset's current ones (after a preset edit, or a Jasna upgrade that
+  renamed an option) with the current flags, in the same place in its
+  node's queue: the bridge cannot edit a job, so it cancels the job,
+  submits it again and moves the new one back. Check settings lists these
+  jobs as a problem.
 - **Tag restored sources** - walk the target root and add the Restored tag
   for its preset to the source scene of every `{stem}_{preset}_jasna.mp4`
   found there, and the Output tag to that file's own scene, also for
@@ -334,7 +358,11 @@ every node is paused) until **Resume**. The pause survives a bridge restart.
   scene outside the target root whose file has that stem; a stem that
   matches no scene or several is logged and left alone. Run it once after
   installing, and again after restoring something outside the plugin.
-- Queue, sync and tag restored sources each have a **dry run** variant.
+- Queue, sync, refresh and tag restored sources each have a **dry run** variant.
+
+Sync marks a failed job's scene done, not failed, when the job's output
+file already exists: another job for the same scene and preset made it,
+for example a retry from the queue page of a job that had been redone.
 
 **Stop after** = `prepare` halts the chain after the folder is prepared,
 without scanning, to check the files by hand first.

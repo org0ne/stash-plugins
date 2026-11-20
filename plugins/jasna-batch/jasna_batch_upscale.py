@@ -20,6 +20,10 @@ cancel, pause, timeout, restart adoption and removal of WORK all apply to
 both stages, and the job log holds what happened. Progress lines are shaped
 like Jasna's so the bridge reads them the same way.
 
+Every job first has its flags checked against this Jasna's --help: an
+option a newer Jasna renamed (core.RENAMED_FLAGS) is rewritten, and one it
+does not take at all fails the job in seconds, not after an upscale.
+
 "--check" reports whether this host can run the method and the LUT step
 (bridge /batch/check).
 """
@@ -340,6 +344,34 @@ def with_auto_lut(argv: List[str]) -> List[str]:
     return argv + ["--lut", result["lut"]] if result.get("lut") else argv
 
 
+def jasna_options(binary: str) -> Optional[set]:
+    """The options this Jasna takes, from its --help (about 2 s); None when
+    it cannot say, and the flags then go to Jasna unchecked."""
+    try:
+        out = subprocess.run([binary, "--help"], capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as err:
+        log(f"cannot list Jasna's options ({err}); flags not checked", "flags")
+        return None
+    known = core.help_options(out.stdout)
+    if out.returncode != 0 or "--input" not in known:
+        log(f"jasna --help exited {out.returncode} without its options; flags not checked", "flags")
+        return None
+    return known
+
+
+def with_current_flags(argv: List[str]) -> List[str]:
+    """First, before any slow step: argv with options renamed since the job
+    was queued rewritten, or UpscaleError naming an option this Jasna does
+    not take, so a stale job fails in seconds instead of after an upscale."""
+    flags, notes, unknown = core.update_flags(argv[1:], jasna_options(argv[0]))
+    for note in notes:
+        log(note, "flags")
+    if unknown:
+        raise UpscaleError(f"this Jasna does not take {', '.join(unknown)}; fix the preset, then run "
+                           f"'Refresh queued jobs' (or re-tag the scene)")
+    return argv[:1] + flags
+
+
 def check() -> int:
     """One line for the bridge's check: exit 0 when the upscale method and
     the --auto-lut step can both run here."""
@@ -364,6 +396,11 @@ def main(argv: List[str]) -> int:
     if not argv:
         print("usage: jasna_batch_upscale.py --check | jasna [flags]", file=sys.stderr)
         return 2
+    try:
+        argv = with_current_flags(argv)
+    except UpscaleError as err:
+        log(f"FAILED: {err}", "flags")
+        return 1
     source = option(argv, "--input")
     if core.has_auto_lut(argv):
         # First: a bad source fails here in a minute, not after an upscale.

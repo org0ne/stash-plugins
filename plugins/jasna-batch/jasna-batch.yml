@@ -11,7 +11,7 @@ description: >
   marks the new scene. Every tag the plugin writes starts with "Jasna-Batch".
   Several bridges (one per GPU host) share the work.
 url: https://github.com/org0ne/stash-plugins
-version: 0.7.1
+version: 0.8.0
 
 exec:
   - python
@@ -70,6 +70,20 @@ tasks:
     description: Log what Sync would do (tags, files to copy). Nothing is written or acknowledged.
     defaultArgs:
       mode: sync
+      dry_run: true
+  - name: Refresh queued jobs
+    description: >
+      A job keeps the flags its preset had when it was queued. Requeue every
+      queued job whose flags are not its preset's current ones (after a
+      preset edit, or a Jasna upgrade that renamed an option) with the
+      current flags, in the same place in the queue. Check settings lists
+      these jobs.
+    defaultArgs:
+      mode: refresh
+  - name: Refresh queued jobs (dry run)
+    description: Log which queued jobs would be requeued and with which flags. Nothing is changed.
+    defaultArgs:
+      mode: refresh
       dry_run: true
   - name: Tag restored sources
     description: >

@@ -52,6 +52,14 @@ FLAG_DENYLIST = frozenset({
     "--license-email", "--license-key", "--license-code", "--activation-key", "--machine-key",
     "--post-export-action", "--post-export-command", "--post-export-video-command",
 })
+# Jasna options a newer Jasna renamed or dropped. A job keeps the flags its
+# preset had when it was queued, so a job queued before an upgrade can carry
+# one (DV-1400, 2026-11-20: "unrecognized arguments"); the wrapper rewrites it
+# before Jasna starts. Old option -> the flags that replace it ([] = drop it).
+RENAMED_FLAGS: Dict[str, List[str]] = {
+    # 0.12.2: the switch became a choice; 17 is the less-overlap mode (33 the old default)
+    "--experimental-ltx-less-overlap": ["--ltx-overlap", "17"],
+}
 PRESET_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,39}$")
 # Every tag the plugin writes starts with this, so its tags stay apart from
 # generic ones like "Jasna".
@@ -99,6 +107,47 @@ def has_upscale(flags: Iterable[str]) -> bool:
 
 def has_auto_lut(flags: Iterable[str]) -> bool:
     return any(f in AUTO_LUT_FLAGS for f in flags)
+
+
+_OPTION_RE = re.compile(r"^--?[A-Za-z][\w-]*")
+
+
+def option_name(arg: str) -> Optional[str]:
+    """'--lut=/x.cube' -> '--lut'; None for a value ('ltx', '-0.5')."""
+    m = _OPTION_RE.match(arg)
+    return m.group(0) if m else None
+
+
+def help_options(help_text: str) -> set:
+    """Every option `jasna --help` lists."""
+    return {m.group(1) for m in re.finditer(r"(?<![\w-])(--?[A-Za-z][\w-]*)", help_text)}
+
+
+def update_flags(flags: List[str], known: Optional[set] = None) -> Tuple[List[str], List[str], List[str]]:
+    """Flags with every RENAMED_FLAGS option replaced, one line per change,
+    and the options `known` (help_options of the Jasna about to run; None =
+    not checked) does not take. A rename is skipped when that Jasna still
+    takes the old option, and adds nothing the flags already have. The
+    wrapper's own flags are never unknown."""
+    out: List[str] = []
+    notes: List[str] = []
+    for arg in flags:
+        new = RENAMED_FLAGS.get(arg)
+        if new is None or (known is not None and arg in known):
+            out.append(arg)
+            continue
+        added = [] if new and new[0] in flags else new
+        out += added
+        notes.append(f"{arg} -> {' '.join(added) or 'removed'} (renamed in a newer Jasna)")
+    unknown: List[str] = []
+    if known is not None:
+        ours = set(AUTO_LUT_FLAGS) | {out[i] for i in wrapper_upscale_at(out)}
+        for arg in out:
+            name = option_name(arg)
+            # argparse also takes an unambiguous prefix of an option
+            if name and name not in ours and not any(k.startswith(name) for k in known) and name not in unknown:
+                unknown.append(name)
+    return out, notes, unknown
 
 
 def trigger_tag(preset_name: str) -> str:

@@ -349,6 +349,51 @@ class Upscale(unittest.TestCase):
         self.assertIn("/nonexistent/vs_pipeline.py", printed.call_args[0][0])
 
 
+class StaleFlags(unittest.TestCase):
+    HELP = """usage: jasna [-h] [--input INPUT] [--output OUTPUT]
+  --ltx-overlap {17,25,33,41,49}
+                        ltx: frames shared between chunks. (default: 17)
+  --upscale {span,full}  upscale after restore
+  --cq CQ, -q CQ        quality; -0.5 is not an option"""
+
+    def test_help_lists_the_options(self):
+        self.assertEqual(core.help_options(self.HELP),
+                         {"-h", "--input", "--output", "--ltx-overlap", "--upscale", "--cq", "-q"})
+
+    def test_renamed_option_is_rewritten(self):
+        known = core.help_options(self.HELP)
+        flags = ["--input", "a", "--cq", "25", "--experimental-ltx-less-overlap", "--auto-lut"]
+        out, notes, unknown = core.update_flags(flags, known)
+        self.assertEqual(out, ["--input", "a", "--cq", "25", "--ltx-overlap", "17", "--auto-lut"])
+        self.assertEqual(len(notes), 1); self.assertEqual(unknown, [])
+        # unchecked: the rename still applies; one already there is not added twice
+        out, _, _ = core.update_flags(["--ltx-overlap", "33", "--experimental-ltx-less-overlap"])
+        self.assertEqual(out, ["--ltx-overlap", "33"])
+        # a Jasna that still takes the old option keeps it
+        out, notes, _ = core.update_flags(["--experimental-ltx-less-overlap"], known | {"--experimental-ltx-less-overlap"})
+        self.assertEqual((out, notes), (["--experimental-ltx-less-overlap"], []))
+
+    def test_unknown_options_are_named(self):
+        known = core.help_options(self.HELP)
+        _, _, unknown = core.update_flags(["--input", "a", "--bogus", "1", "--lut=/x.cube", "--cq", "-0.5",
+                                           "--ltx-over", "17", "--upscale", "--auto-lut"], known)
+        # a value is not an option, a prefix is (argparse takes it), the wrapper's flags are ours
+        self.assertEqual(unknown, ["--bogus", "--lut"])
+
+    def test_wrapper_fails_fast_on_an_unknown_option(self):
+        argv = ["/jasna", "--input", "a.wmv", "--experimental-ltx-less-overlap", "--cq", "25"]
+        known = core.help_options(self.HELP)
+        with unittest.mock.patch.object(upscale, "jasna_options", return_value=known), \
+                unittest.mock.patch("builtins.print"):
+            self.assertEqual(upscale.with_current_flags(argv),
+                             ["/jasna", "--input", "a.wmv", "--ltx-overlap", "17", "--cq", "25"])
+            with self.assertRaises(upscale.UpscaleError):
+                upscale.with_current_flags(argv + ["--gone"])
+        with unittest.mock.patch.object(upscale, "jasna_options", return_value=None), \
+                unittest.mock.patch("builtins.print"):
+            self.assertEqual(upscale.with_current_flags(argv + ["--gone"])[-1], "--gone")   # unchecked
+
+
 class AutoLut(unittest.TestCase):
     def test_preset_flag(self):
         presets, _ = core.parse_presets("LTX = --codec hevc; LTX auto = -auto-lut --codec hevc; "
