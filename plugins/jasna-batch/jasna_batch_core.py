@@ -1,6 +1,6 @@
 """jasna_batch_core.py -- the parts of the jasna-batch plugin that need no
 Stash: preset parsing, bridge node parsing and scheduling, output naming,
-the sidecar copy plan, the NFO edits and the command sidecar. Pure functions over paths and text, so they are
+the sidecar copy plan, the archive move plan, the NFO edits and the command sidecar. Pure functions over paths and text, so they are
 testable without a Stash instance (tests/test_core.py).
 
 The NFO edits are a port of clean_nfo_flexible.py (Scott's CLI): strip the
@@ -475,6 +475,77 @@ def plan_sidecars(plan: OutputPlan, ignore_patterns: Iterable[str] = ()) -> Side
             continue
         out.copies.append((src, os.path.join(plan.dest_dir, name)))
     return out
+
+
+# ---------------------------------------------------------------------------
+# Archive (moving a restored source's folder)
+# ---------------------------------------------------------------------------
+
+def clean_dir(path: str) -> str:
+    """A folder path compared by prefix: one leading '/', no trailing one
+    (Stash keeps a library as '//storage/.../Uncensored/' if typed so)."""
+    path = path.strip()
+    if not path:
+        return ""
+    return ("/" + path.lstrip("/")).rstrip("/") or "/"
+
+
+def is_under(path: str, root: str) -> bool:
+    """True if `path` is `root` or inside it."""
+    path, root = clean_dir(path), clean_dir(root)
+    return bool(root) and (path == root or path.startswith(root + "/"))
+
+
+def archive_destination(folder: str, libraries: Iterable[str], archive_root: str,
+                        target_root: str = "") -> Tuple[Optional[str], str]:
+    """Where a source folder goes in the archive: {archive_root}/{library
+    folder name}/{path inside the library}, so folders from different
+    libraries cannot collide and the old place stays readable from the new.
+    (None, why) for a folder that is not moved: already archived, a
+    restoration folder, outside every library, or a library's top folder."""
+    folder = clean_dir(folder)
+    if is_under(folder, archive_root):
+        return None, "already in the archive"
+    if target_root and is_under(folder, target_root):
+        return None, "a restoration folder under the target root"
+    covering = [clean_dir(lib) for lib in libraries if is_under(folder, lib)]
+    if not covering:
+        return None, "not under any Stash library path"
+    library = max(covering, key=len)
+    if folder == library:
+        return None, f"the top folder of the library {library}; only a scene's own folder is moved"
+    rel = folder[len(library) + 1:]
+    return os.path.join(clean_dir(archive_root), os.path.basename(library), rel), ""
+
+
+def plan_archive(folder: str, dest: str) -> Tuple[List[Tuple[str, str]], List[str]]:
+    """Every file under `folder` with its place under `dest`, and the ones
+    whose place is taken (nothing is overwritten). `dest` may exist: a run
+    stopped half way is finished by the next one."""
+    moves: List[Tuple[str, str]] = []
+    taken: List[str] = []
+    for dirpath, dirs, files in os.walk(folder):
+        dirs.sort()
+        rel = os.path.relpath(dirpath, folder)
+        for name in sorted(files):
+            dst = os.path.normpath(os.path.join(dest, rel, name))
+            moves.append((os.path.join(dirpath, name), dst))
+            if os.path.lexists(dst):
+                taken.append(os.path.relpath(dst, dest))
+    return moves, taken
+
+
+def remove_empty_dirs(folder: str) -> List[str]:
+    """Remove `folder` and the folders under it that are empty (deepest
+    first). Returns what is left behind, relative to `folder`."""
+    left: List[str] = []
+    for dirpath, _dirs, files in os.walk(folder, topdown=False):
+        left += [os.path.relpath(os.path.join(dirpath, f), folder) for f in files]
+        try:
+            os.rmdir(dirpath)
+        except OSError:
+            pass
+    return sorted(left)
 
 
 # ---------------------------------------------------------------------------

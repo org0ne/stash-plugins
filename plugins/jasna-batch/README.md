@@ -29,7 +29,8 @@ job runs). When the job finishes the plugin:
    scene from it as the scan creates it: title, performers, studio, date,
    genres as tags, stash ids. This plugin does nothing NFO -> Stash itself.
 
-The original scene stays where it is. Its tag moves from
+The original scene stays where it is (unless you archive it, see
+[Archiving restored sources](#archiving-restored-sources)). Its tag moves from
 `Jasna-Batch Queue: <preset>` to `Jasna-Batch Status: Queued`,
 `Jasna-Batch Status: Processing`, then `Jasna-Batch Status: Done` (or
 `Jasna-Batch Status: Failed`, with the reason in the Stash log and the
@@ -286,6 +287,65 @@ files.
   source first, so an unreadable source fails within a minute instead of
   after the upscale.
 
+## Archiving restored sources
+
+Tags keep restored sources out of the next pick, but you may also want them
+out of the way on disk. Set **Archive root** to a folder under a Stash
+library path, say `/storage/pool/.pr0n/Sorted/Archived`, and the source
+scene's whole folder (video, NFO, subtitles, artwork, `extrafanart/`, ...)
+moves there:
+
+```
+{archiveRoot}/{library folder name}/{path inside the library}
+```
+
+```
+/lib/Censored/Censored HD/MIGD-100 Rio Hamasaki - Title (2008-02-01)/
+  -> /lib/Archived/Censored/Censored HD/MIGD-100 Rio Hamasaki - Title (2008-02-01)/
+```
+
+The library's name is kept, so folders from two libraries cannot collide,
+and the old place can be read from the new one.
+
+Folders move at two times:
+
+- **Archive after restore** on: Sync moves the folder as soon as the
+  restoration has been ingested.
+- **Archive restored sources** task: moves every source scene carrying a
+  Restored tag at once, whenever you run it. Run its dry run first.
+  Use this to archive what was restored before you set the option, or with
+  the option off if you would rather tidy up now and then.
+
+A folder moves only when:
+
+- **every video in it is restored.** In a multi-part folder where one part
+  is still to do, the folder waits and the log names the part. A video that
+  is not a Stash scene keeps the folder where it is too;
+- **no job for a file in it is queued or running** on any node, since moving
+  the file would break that job. If a node cannot be asked, nothing moves
+  that run;
+- it is a scene's own folder, not a library's top folder (a video sitting
+  directly in a library path is left where it is), and not already under the
+  archive root or the target root;
+- **nothing in the destination has the same name.** A clash stops that folder
+  and the log names the files. Nothing is overwritten.
+
+**Scenes keep their ids.** Each video moves through Stash's `moveFiles`, so
+the scene keeps its id, tags, play history and markers. The plugin checks
+on disk that each file arrived. The other files are then moved after it and
+the emptied folder is removed. If a step fails, what has moved stays in the
+archive and the rest stays put; run the task again to finish.
+
+- Artwork Stash knows as images (in a library that includes images) is
+  moved as a file, so Stash's image records point at the old path until
+  the next **Clean**, or until a scan of an archive library that includes
+  images finds them by fingerprint.
+- *Check settings* verifies that the archive root is writable, that a
+  library path covers it, and that it is not inside the target root or the
+  other way round.
+- Queueing an archived scene again works; its output still goes to the
+  target root, named after the folder.
+
 ## Several bridges (one per GPU host)
 
 List them in **Bridge URL** as `name = url` entries separated by `;`, with
@@ -358,7 +418,9 @@ every node is paused) until **Resume**. The pause survives a bridge restart.
   scene outside the target root whose file has that stem; a stem that
   matches no scene or several is logged and left alone. Run it once after
   installing, and again after restoring something outside the plugin.
-- Queue, sync, refresh and tag restored sources each have a **dry run** variant.
+- **Archive restored sources** - move the folder of every restored source
+  to the Archive root (see above).
+- Queue, sync, refresh, tag restored sources and archive each have a **dry run** variant.
 
 Sync marks a failed job's scene done, not failed, when the job's output
 file already exists: another job for the same scene and preset made it,
@@ -379,7 +441,8 @@ without scanning, to check the files by hand first.
 
 ## Notes
 
-- Nothing is deleted or overwritten: the source stays, an existing output
+- Nothing is deleted or overwritten: the source stays (it only moves, whole,
+  when an Archive root is set), an existing output
   is never replaced (the bridge fails the job and keeps its result in its
   scratch folder), and sidecars are copied only when missing or of a
   different size.

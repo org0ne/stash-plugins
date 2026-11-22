@@ -20,7 +20,7 @@ from it as the scan creates it; this plugin does nothing NFO -> Stash.
 
 Invoked by Stash with a JSON payload on stdin:
   {"server_connection": {...},
-   "args": {"mode": "check"|"queue"|"sync"|"refresh"|"restored", "dry_run": bool, "job_id": str}
+   "args": {"mode": "check"|"queue"|"sync"|"refresh"|"restored"|"archive", "dry_run": bool, "job_id": str}
         or {"hookContext": {"id": ..., "type": "Scene.Update.Post", ...}}}
 
 Everything that needs no Stash lives in jasna_batch_core.py.
@@ -42,7 +42,7 @@ from stashapi.stashapp import StashInterface
 import jasna_batch_core as core
 
 PLUGIN_ID = "jasna-batch"
-PLUGIN_VERSION = "0.8.0"
+PLUGIN_VERSION = "0.9.0"
 
 PARENT_TAG = core.TAG_PREFIX
 STATUS_TAGS = {
@@ -95,7 +95,7 @@ PENDING_SCAN = "pending-scan"   # ingest()'s answer while the scan it queued has
 SCENE_FRAGMENT = "id title tags { id name } files { id path height }"
 KNOWN_SETTINGS = {"bridgeUrl", "bridgeToken", "queuePageUrl", "presets", "targetRoot", "titleMarker",
                   "extraGenres", "cleanHtml", "ignorePatterns", "stopAfter", "scanGenerate", "audioCodec",
-                  "restoredTag"}
+                  "restoredTag", "archiveRoot", "archiveOnRestore"}
 
 
 class Config:
@@ -122,6 +122,10 @@ class Config:
             if p.tag.lower() == self.restored_tag.lower():
                 self.preset_problems.append(f"{p.name!r}: its trigger tag is the Restored tag; preset skipped")
                 self.presets.remove(p)
+        # Restored sources' folders move under here ("" = never), by the
+        # Archive task or, with archive_on_restore, by Sync as they finish.
+        self.archive_root = core.clean_dir(text("archiveRoot"))
+        self.archive_on_restore = bool(settings.get("archiveOnRestore"))
         self.marker = text("titleMarker", DEFAULT_MARKER)
         self.genres = [g.strip() for g in text("extraGenres", DEFAULT_GENRES).split(",") if g.strip()]
         self.clean_html = bool(settings.get("cleanHtml"))
@@ -266,6 +270,9 @@ class Tags:
     def get(self, name: str) -> Optional[str]:
         return self._ids.get(name.strip().lower())
 
+    def children(self, tag_id: str) -> List[str]:
+        return [t for t, parents in self._parents.items() if tag_id in parents]
+
     def ensure(self, name: str, description: str = "", parent_id: Optional[str] = None,
                legacy: Optional[str] = None) -> Optional[str]:
         """The tag's id, created if missing. A tag still under its `legacy`
@@ -332,6 +339,10 @@ class IngestError(Exception):
     pass
 
 
+class ArchiveError(Exception):
+    pass
+
+
 class Run:
     def __init__(self, stash: StashInterface, cfg: Config):
         self.stash = stash
@@ -348,6 +359,8 @@ class Run:
         self._node_batch: Dict[str, dict] = {}
         self._durations: Dict[str, Optional[float]] = {}
         self._active_scenes: set = set()   # Sync: scenes with a queued or running job
+        self._restored_now: List[dict] = []   # Sync: source scenes marked restored this run
+        self._libraries: Optional[List[str]] = None
 
     @property
     def multi(self) -> bool:
@@ -684,6 +697,8 @@ class Run:
                 log.error(f"job {job.get('id')}: {err}")
                 self.counts["errors"] += 1
         log.progress(1.0)
+        if self._restored_now and self.cfg.archive_on_restore and self.cfg.archive_root:
+            self.archive_scenes(self._restored_now, progress=False)
         c = self.counts
         log.info(f"Sync done: {c['ingested']} ingested, {c['tagged']} scene(s) re-tagged, {c['errors']} error(s)"
                  + (" [dry run]" if self.cfg.dry_run else ""))
@@ -721,6 +736,7 @@ class Run:
             log.warning(f"{scene_label(scene)}: {ref} failed ({job.get('error')}), but {output} already exists "
                         f"from another job; marked done")
             self.set_status(scene, "done", note=f"{ref}: output already existed", restored=job.get("preset") or "")
+            self._restored_now.append(scene)
             self.ack(job)
             return
         if state == "failed":
@@ -747,6 +763,7 @@ class Run:
         self.counts["ingested"] += 1
         preset = job.get("preset") or ""
         self.set_status(scene, "done", note=f"new scene {new_id}" if new_id else "prepared", restored=preset)
+        self._restored_now.append(scene)
         if new_id:
             new_scene = self.stash.find_scene(new_id, fragment=SCENE_FRAGMENT)
             if new_scene:
@@ -827,6 +844,158 @@ class Run:
                     out.append(scene)
                     break
         return out
+
+    # -- archive -----------------------------------------------------------
+
+    def archive(self) -> None:
+        """Move the folder of every restored source scene into the archive
+        root. Run by hand from Settings > Tasks; with archiveOnRestore, Sync
+        does the same for the scenes it has just marked restored."""
+        if not self.cfg.archive_root:
+            raise SystemExit("Archive root is not set (Settings > Plugins > Jasna Batch).")
+        self.ensure_tag_tree()
+        parent = self.tags.get(self.cfg.restored_tag)
+        scenes = []
+        if parent:
+            scenes = self.stash.find_scenes(
+                f={"tags": {"value": [parent], "modifier": "INCLUDES", "depth": -1}}, fragment=SCENE_FRAGMENT) or []
+        log.info(f"{len(scenes)} scene(s) tagged {self.cfg.restored_tag!r} (sub-tags included)")
+        self.archive_scenes(scenes)
+
+    def archive_scenes(self, scenes: List[dict], progress: bool = True) -> None:
+        """Archive the folders these scenes' files are in, each once every
+        video in it is restored and none has a job queued or running."""
+        folders = sorted({os.path.dirname(p) for p in map(scene_primary_path, scenes) if p})
+        active = self.active_sources()
+        if active is None:
+            down = "; ".join(f"{n}: {e}" for n, e in self._node_errors.items())
+            log.warning(f"Archive: nothing moved, a bridge node cannot say which jobs are queued ({down})")
+            return
+        parent = self.tags.get(self.cfg.restored_tag)
+        restored = {parent, *self.tags.children(parent)} if parent else set()
+        c = {"moved": 0, "waiting": 0, "already": 0, "skipped": 0, "errors": 0}
+        for i, folder in enumerate(folders):
+            if progress:
+                log.progress(i / max(1, len(folders)))
+            try:
+                c[self.archive_folder(folder, restored, active)] += 1
+            except Exception as err:  # keep going through the list
+                log.error(f"{folder}: not archived: {err}")
+                c["errors"] += 1
+        if progress:
+            log.progress(1.0)
+        self.counts["errors"] += c["errors"]
+        log.info(f"Archive done: {c['moved']} folder(s) moved to {self.cfg.archive_root}, {c['waiting']} waiting "
+                 f"for other videos or jobs, {c['already']} already archived, {c['skipped']} not movable, "
+                 f"{c['errors']} error(s)" + (" [dry run]" if self.cfg.dry_run else ""))
+
+    def archive_folder(self, folder: str, restored: set, active: List[str]) -> str:
+        """Move one source folder, whole, to its place in the archive. The
+        counter it counts towards: moved, waiting, already, skipped, errors."""
+        dest, why = core.archive_destination(folder, self.library_paths(), self.cfg.archive_root,
+                                             self.cfg.target_root)
+        name = os.path.basename(folder)
+        if dest is None:
+            if core.is_under(folder, self.cfg.archive_root) or core.is_under(folder, self.cfg.target_root):
+                return "already"
+            log.info(f"{folder}: not archived: {why}")
+            return "skipped"
+        if not os.path.isdir(folder):
+            log.warning(f"{folder}: not archived: the folder is not there (is the share mounted?)")
+            return "skipped"
+        # Every video in the folder has to be a restored scene's file: a part
+        # not restored yet keeps the whole folder where it is.
+        files = self.stash_files_under(folder)
+        waiting = []
+        for dirpath, _dirs, names in os.walk(folder):
+            for video in filter(core.is_video, sorted(names)):
+                path = os.path.join(dirpath, video)
+                rel = os.path.relpath(path, folder)
+                if path not in files:
+                    waiting.append(f"{rel} (not a scene in Stash)")
+                elif not restored & {t["id"] for t in files[path][1].get("tags") or []}:
+                    waiting.append(f"{rel} (scene {files[path][1]['id']}, not restored)")
+        if waiting:
+            log.info(f"{name}: not archived yet, waiting for {', '.join(waiting)}")
+            return "waiting"
+        busy = [os.path.basename(s) for s in active if s and core.is_under(s, folder)]
+        if busy:
+            log.info(f"{name}: not archived yet, {', '.join(busy)} has a job queued or running")
+            return "waiting"
+        moves, taken = core.plan_archive(folder, dest)
+        if taken:
+            log.error(f"{name}: not archived: {dest} already has {', '.join(taken[:5])}"
+                      + (f" and {len(taken) - 5} more" if len(taken) > 5 else "") + " (nothing is overwritten)")
+            return "errors"
+        videos = sum(1 for src, _ in moves if src in files)
+        if self.cfg.dry_run:
+            log.info(f"[dry-run] {name}: would move to {dest} ({videos} video(s) through Stash, "
+                     f"{len(moves) - videos} other file(s))")
+            return "moved"
+        try:
+            self.move_folder(folder, dest, moves, files)
+        except Exception as err:
+            core.remove_empty_dirs(dest)   # only folders this left empty
+            log.error(f"{name}: archiving stopped: {err}. What moved is in {dest}, the rest in {folder}; "
+                      f"fix the cause and run 'Archive restored sources' to finish.")
+            return "errors"
+        log.info(f"{name}: archived to {dest} ({videos} video(s), {len(moves) - videos} other file(s))")
+        return "moved"
+
+    def move_folder(self, folder: str, dest: str, moves: List[Tuple[str, str]],
+                    files: Dict[str, Tuple[str, dict]]) -> None:
+        """Videos go through Stash's moveFiles, which moves the file and its
+        record together, so each scene keeps its id, history and markers.
+        The other files (NFO, subtitles, artwork; Stash at most knows them as
+        images) are renamed after them, and the emptied folder is removed."""
+        by_dir: Dict[str, List[str]] = {}
+        for src, dst in moves:
+            if src in files:
+                by_dir.setdefault(os.path.dirname(dst), []).append(src)
+        for dst_dir, sources in sorted(by_dir.items()):
+            os.makedirs(dst_dir, exist_ok=True)
+            self.stash.call_GQL("mutation MoveFiles($input: MoveFilesInput!) { moveFiles(input: $input) }",
+                                {"input": {"ids": [files[s][0] for s in sources], "destination_folder": dst_dir}})
+            for src in sources:
+                dst = os.path.join(dst_dir, os.path.basename(src))
+                if os.path.lexists(src) or not os.path.exists(dst):
+                    raise ArchiveError(f"Stash's moveFiles did not move {os.path.basename(src)} to {dst_dir}")
+        for src, dst in moves:
+            if src not in files:
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                shutil.move(src, dst)   # a rename on one filesystem
+        left = core.remove_empty_dirs(folder)
+        if left:
+            log.warning(f"  {folder} kept: {', '.join(left[:5])} appeared there during the move")
+
+    def stash_files_under(self, folder: str) -> Dict[str, Tuple[str, dict]]:
+        """Path -> (file id, scene) for every scene file under the folder."""
+        found = self.stash.find_scenes(
+            f={"path": {"value": folder.rstrip("/") + "/", "modifier": "INCLUDES"}}, fragment=SCENE_FRAGMENT) or []
+        out: Dict[str, Tuple[str, dict]] = {}
+        for scene in found:
+            for f in scene.get("files") or []:
+                if f.get("path") and core.is_under(f["path"], folder):
+                    out[f["path"]] = (f["id"], scene)
+        return out
+
+    def active_sources(self) -> Optional[List[str]]:
+        """The source file of every queued or running job on every node;
+        None when a node cannot be asked."""
+        out: List[str] = []
+        for bridge in self.bridges:
+            jobs = self.node_jobs(bridge)
+            if jobs is None:
+                return None
+            out += [j.get("stash_source") or "" for j in jobs]
+        return out
+
+    def library_paths(self) -> List[str]:
+        if self._libraries is None:
+            stashes = (self.stash.get_configuration("general { stashes { path } }") or {}) \
+                .get("general", {}).get("stashes", [])
+            self._libraries = [s["path"] for s in stashes if s.get("path")]
+        return self._libraries
 
     # -- ingestion ---------------------------------------------------------
 
@@ -1153,6 +1322,32 @@ class Run:
                             f"known: {', '.join(SCAN_GENERATORS)}")
         line("Stop after", cfg.stop_after or "(full chain)", "stopAfter")
 
+        log.info("Archive")
+        if not cfg.archive_root:
+            line("Archive root", "not set (restored sources stay where they are)", "archiveRoot")
+            if cfg.archive_on_restore:
+                problems.append("Archive after restore is on, but Archive root is not set")
+        else:
+            ok = os.path.isdir(cfg.archive_root) and os.access(cfg.archive_root, os.W_OK)
+            line("Archive root", cfg.archive_root, "archiveRoot",
+                 "writable" if ok else "NOT a writable directory on the Stash host")
+            if not ok:
+                problems.append(f"archive root {cfg.archive_root} is not a writable directory on the Stash host")
+            if cfg.target_root and (core.is_under(cfg.archive_root, cfg.target_root)
+                                    or core.is_under(cfg.target_root, cfg.archive_root)):
+                problems.append("the archive root and the target root may not be inside one another")
+            try:
+                covered = [p for p in self.library_paths() if core.is_under(cfg.archive_root, p)]
+                line("Archive library", max(covered, key=len) if covered else "NONE covers the archive root", None,
+                     "" if covered else "Stash moves files only into a library path")
+                if not covered:
+                    problems.append("no Stash library path covers the archive root")
+            except Exception as err:
+                line("Archive library", f"could not read ({err})")
+        line("Archive after restore", cfg.archive_on_restore, "archiveOnRestore",
+             "Sync moves a source folder once its last video is restored" if cfg.archive_on_restore
+             else "only the 'Archive restored sources' task moves folders")
+
         log.info("Ingestion")
         # The NFO -> Stash step is not this plugin's: it is whatever parser
         # runs on scene creation. Say which one that is, or that none does.
@@ -1229,6 +1424,8 @@ def main() -> None:
             run.refresh()
         elif cfg.mode == "restored":
             run.tag_restored()
+        elif cfg.mode == "archive":
+            run.archive()
         else:
             raise SystemExit(f"Unknown task mode {cfg.mode!r}.")
     except SystemExit as exc:

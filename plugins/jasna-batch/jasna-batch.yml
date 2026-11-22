@@ -11,7 +11,7 @@ description: >
   marks the new scene. Every tag the plugin writes starts with "Jasna-Batch".
   Several bridges (one per GPU host) share the work.
 url: https://github.com/org0ne/stash-plugins
-version: 0.8.0
+version: 0.9.0
 
 exec:
   - python
@@ -101,6 +101,20 @@ tasks:
     defaultArgs:
       mode: restored
       dry_run: true
+  - name: Archive restored sources
+    description: >
+      Move the whole folder of every source scene carrying a Restored tag to
+      the Archive root, as {archive root}/{library folder}/{path inside the
+      library}. A folder moves only when every video in it is restored and
+      none has a job queued or running; the scenes keep their ids, history
+      and tags. Nothing is overwritten.
+    defaultArgs:
+      mode: archive
+  - name: Archive restored sources (dry run)
+    description: Log which folders would move where, and which wait for what. Nothing is moved.
+    defaultArgs:
+      mode: archive
+      dry_run: true
 
 settings:
   bridgeUrl:
@@ -166,6 +180,25 @@ settings:
       scenes out of future runs. Default "Jasna-Batch: Restored". The "Tag
       restored sources" task back-fills them from the target root.
     type: STRING
+  archiveRoot:
+    displayName: Archive root
+    description: >
+      Folder that restored sources' folders are moved to, e.g.
+      /storage/pool/.pr0n/Sorted/Archived. Must be (under) a Stash library
+      path. A folder lands at {archive root}/{library folder name}/{path
+      inside the library}: .../Censored/Censored HD/MIGD-100 .../ goes to
+      .../Archived/Censored/Censored HD/MIGD-100 .../. Empty (default): never
+      move anything. The "Archive restored sources" task moves every
+      restored source at once.
+    type: STRING
+  archiveOnRestore:
+    displayName: Archive after restore
+    description: >
+      Have Sync move a source's folder to the Archive root as soon as its
+      restoration is ingested (once every video in the folder is restored
+      and none has a job left). Off: folders move only when you run the
+      "Archive restored sources" task.
+    type: BOOLEAN
   titleMarker:
     displayName: Title marker
     description: >

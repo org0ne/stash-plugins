@@ -154,6 +154,52 @@ class Sidecars(unittest.TestCase):
         self.assertFalse(core.stem_bound("fanart.jpg", "CODE-1"))
 
 
+class Archive(unittest.TestCase):
+    LIBS = ["/lib/Sorted/Censored", "//lib/Sorted/Uncensored/", "/lib/Sorted/Archived", "/lib/Sorted/LTX"]
+
+    def test_destination_mirrors_library_and_path(self):
+        dest, why = core.archive_destination("/lib/Sorted/Censored/Censored HD/MIGD-100 Rio - Title",
+                                             self.LIBS, "/lib/Sorted/Archived/", "/lib/Sorted/LTX")
+        self.assertEqual(dest, "/lib/Sorted/Archived/Censored/Censored HD/MIGD-100 Rio - Title")
+        # a library stored as '//.../Uncensored/' still matches
+        dest, _ = core.archive_destination("/lib/Sorted/Uncensored/ABC-1", self.LIBS, "/lib/Sorted/Archived")
+        self.assertEqual(dest, "/lib/Sorted/Archived/Uncensored/ABC-1")
+
+    def test_folders_that_are_not_moved(self):
+        def why(folder):
+            dest, reason = core.archive_destination(folder, self.LIBS, "/lib/Sorted/Archived", "/lib/Sorted/LTX")
+            self.assertIsNone(dest)
+            return reason
+        self.assertEqual(why("/lib/Sorted/Archived/Censored/X"), "already in the archive")
+        self.assertIn("target root", why("/lib/Sorted/LTX/X - [LTX] Y"))
+        self.assertIn("top folder", why("/lib/Sorted/Censored"))
+        self.assertIn("not under any", why("/elsewhere/X"))
+        # a prefix that is not a parent folder does not count
+        self.assertIn("not under any", why("/lib/Sorted/Censored2/X"))
+
+    def test_plan_and_cleanup(self):
+        tmp = tempfile.mkdtemp()
+        src, dest = os.path.join(tmp, "src", "MIGD-100"), os.path.join(tmp, "dest", "MIGD-100")
+        os.makedirs(os.path.join(src, "extrafanart"))
+        os.makedirs(dest)
+        for rel in ["MIGD-100.mkv", "MIGD-100.nfo", "extrafanart/fanart1.jpg"]:
+            with open(os.path.join(src, rel), "w") as fh:
+                fh.write(rel)
+        with open(os.path.join(dest, "MIGD-100.nfo"), "w") as fh:
+            fh.write("already there")
+        moves, taken = core.plan_archive(src, dest)
+        self.assertEqual([os.path.relpath(d, dest) for _, d in moves],
+                         ["MIGD-100.mkv", "MIGD-100.nfo", os.path.join("extrafanart", "fanart1.jpg")])
+        self.assertEqual(taken, ["MIGD-100.nfo"])
+        os.remove(os.path.join(src, "MIGD-100.mkv"))
+        os.remove(os.path.join(src, "extrafanart", "fanart1.jpg"))
+        self.assertEqual(core.remove_empty_dirs(src), ["MIGD-100.nfo"])
+        self.assertFalse(os.path.exists(os.path.join(src, "extrafanart")))
+        os.remove(os.path.join(src, "MIGD-100.nfo"))
+        self.assertEqual(core.remove_empty_dirs(src), [])
+        self.assertFalse(os.path.exists(src))
+
+
 class Nfo(unittest.TestCase):
     def test_edit(self):
         r = core.edit_nfo(NFO, "[LTX]", ["LTX", "Jasna"])
