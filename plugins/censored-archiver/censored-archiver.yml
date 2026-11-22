@@ -1,0 +1,75 @@
+name: Censored Archiver
+description: >
+  Moves every censored scene that also exists in a reference library
+  (restored versions such as LTX or Jasna DL, matched by studio code) into
+  an archive folder, scene folder and sidecars included, through Stash's own
+  moveFiles so each scene keeps its id and metadata and no scan is needed.
+url: https://github.com/org0ne/stash-plugins
+version: 0.1.0
+
+exec:
+  - python
+  - "{pluginDir}/censored-archiver.py"
+interface: raw
+
+tasks:
+  - name: Check settings
+    description: >
+      Log the effective roots, whether each exists on the Stash host and how
+      many scenes it holds, and whether the archive root is writable and
+      inside a Stash library. Moves nothing.
+    defaultArgs:
+      mode: check
+  - name: Archive censored scenes with a reference version (dry run)
+    description: >
+      Log every censored scene folder that would move, with its code and the
+      reference library it matched. Moves nothing.
+    defaultArgs:
+      mode: archive
+      dry_run: true
+  - name: Archive censored scenes with a reference version
+    description: >
+      Move each matching censored scene folder, whole, into the archive root.
+      Nothing is overwritten or deleted; the run stops at the first error
+      and every moved folder is recorded in the undo log.
+    defaultArgs:
+      mode: archive
+
+settings:
+  censoredRoots:
+    displayName: Censored roots
+    description: >
+      Comma-separated folders holding the censored scenes to archive, e.g.
+      "/storage/pool/.pr0n/Sorted/Censored, /storage/pool/.pr0n/Sorted/Web Censored".
+      Paths as the Stash host sees them.
+    type: STRING
+  referenceRoots:
+    displayName: Reference roots
+    description: >
+      Comma-separated folders holding the restored versions. A censored scene
+      is archived when a scene with a file under one of these has the same
+      studio code (trimmed, case ignored), e.g.
+      "/storage/pool/.pr0n/Sorted/LTX, /storage/pool/.pr0n/Sorted/Jasna DL".
+    type: STRING
+  archiveRoot:
+    displayName: Archive root
+    description: >
+      Where folders go, mirroring the tree: {archive root}/{censored root's
+      folder name}/{path inside it}, so .../Censored/Censored HD/ABP-984 .../
+      lands at {archive root}/Censored/Censored HD/ABP-984 .../. Must be
+      inside a Stash library path.
+    type: STRING
+  logFile:
+    displayName: Undo log
+    description: >
+      JSONL file that every moved folder is appended to (scene and file ids,
+      old and new paths of the videos and of every other file). Blank =
+      .censored-archiver.jsonl in the archive root.
+    type: STRING
+  cleanAfter:
+    displayName: Clean afterwards
+    description: >
+      Queue a Clean of the old folders once a run has moved something, so the
+      folder records and any images Stash indexed there (fanart, .actors/)
+      go away now instead of at the next Clean.
+    type: BOOLEAN

@@ -18,6 +18,7 @@ Stash will list every plugin in this repo, ready to install with one click.
 
 | Plugin | Description |
 | --- | --- |
+| [censored-archiver](plugins/censored-archiver) | Moves every censored scene that also exists in a reference library (restored versions such as LTX or Jasna DL, matched by studio code) into an archive folder that mirrors the original tree, sidecars included. Videos go through Stash's `moveFiles`, so scenes keep their id and metadata and no scan is needed; nothing is overwritten or deleted, and every move is written to an undo log. |
 | [collection-colors](plugins/collection-colors) | Adds an identifying "Pill" to the scene cards and scene details. Uses the parent Library folder, which is auto-discovered — no hardcoded paths. Useful if you have Censored, Uncensored, Decensored, etc parent folders in your JAV Library |
 | [copy-buttons](plugins/copy-buttons) | Click-to-copy buttons for performer names, performer disambiguations, and studio codes. |
 | [jasna-batch](plugins/jasna-batch) | Tag a scene `Jasna: <preset>` to queue its file for an offline Jasna restoration on [stash-jasna-bridge](https://github.com/org0ne/stash-jasna-bridge). When the job is done the source folder's sidecars, subtitles and artwork are copied beside the restored file under its new name, the `.nfo` gets a title marker and extra genres, and the new folder is scanned so nfoSceneParser fills the new scene on creation. Status tags on the original scene follow the job. |

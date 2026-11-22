@@ -1,0 +1,3 @@
+# Install into the Python that Stash runs plugins with (Settings -> System
+# -> Python path), e.g.:  /srv/stash/.venv/bin/pip install -r requirements.txt
+stashapp-tools>=0.2.50
