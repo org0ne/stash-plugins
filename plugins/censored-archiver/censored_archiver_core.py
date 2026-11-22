@@ -6,6 +6,7 @@ are tested without a server (tests/test_core.py).
 """
 from __future__ import annotations
 
+import csv
 import os
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
@@ -45,12 +46,20 @@ def is_under(path: str, root: str) -> bool:
     return bool(root) and (path == root or path.startswith(root + "/"))
 
 
+def unquote(text: str) -> str:
+    """A setting typed as "/path/with spaces" or '/path' means the path."""
+    text = (text or "").strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1].strip()
+    return text
+
+
 def parse_roots(text: str) -> List[str]:
-    """A comma-separated list of folders (names may contain spaces, not
-    commas), cleaned and de-duplicated in order."""
+    """A comma-separated list of folders, cleaned and de-duplicated in
+    order. Each may be quoted, and a quoted one may contain commas."""
     out: List[str] = []
-    for part in (text or "").split(","):
-        path = clean_dir(part)
+    for part in next(csv.reader([text or ""], skipinitialspace=True), []):
+        path = clean_dir(unquote(part))
         if path and path not in out:
             out.append(path)
     return out

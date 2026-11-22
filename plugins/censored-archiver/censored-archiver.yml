@@ -5,7 +5,7 @@ description: >
   an archive folder, scene folder and sidecars included, through Stash's own
   moveFiles so each scene keeps its id and metadata and no scan is needed.
 url: https://github.com/org0ne/stash-plugins
-version: 0.1.0
+version: 0.1.1
 
 exec:
   - python

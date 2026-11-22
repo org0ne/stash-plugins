@@ -35,7 +35,7 @@ from stashapi.stashapp import StashInterface
 import censored_archiver_core as core
 
 PLUGIN_ID = "censored-archiver"
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "0.1.1"
 
 LOG_NAME = ".censored-archiver.jsonl"
 SCENE_FRAGMENT = "id code files { id path }"
@@ -49,10 +49,10 @@ class Config:
 
         self.censored_roots = core.parse_roots(text("censoredRoots"))
         self.reference_roots = core.parse_roots(text("referenceRoots"))
-        self.archive_root = core.clean_dir(text("archiveRoot"))
+        self.archive_root = core.clean_dir(core.unquote(text("archiveRoot")))
         # The undo log lives with the archive by default: plugin folders are
         # replaced when the plugin is updated from its source.
-        self.log_file = text("logFile") or (os.path.join(self.archive_root, LOG_NAME) if self.archive_root else "")
+        self.log_file = core.unquote(text("logFile")) or (os.path.join(self.archive_root, LOG_NAME) if self.archive_root else "")
         self.clean_after = bool(settings.get("cleanAfter"))
         self.mode = (args.get("mode") or "check").strip().lower()
         self.dry_run = bool(args.get("dry_run"))

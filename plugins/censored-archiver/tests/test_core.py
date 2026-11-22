@@ -22,6 +22,11 @@ class Paths(unittest.TestCase):
         self.assertEqual(core.parse_roots(" /a/Web Censored/ , //b,, /a/Web Censored"), ["/a/Web Censored", "/b"])
         self.assertEqual(core.parse_roots(""), [])
 
+    def test_parse_roots_quoted(self):
+        self.assertEqual(core.parse_roots('"/a/Censored","/a/Web Censored"'), ["/a/Censored", "/a/Web Censored"])
+        self.assertEqual(core.parse_roots("'/a/x', \"/a/b, c\""), ["/a/x", "/a/b, c"])
+        self.assertEqual(core.unquote(' "/a/Archived" '), "/a/Archived")
+
     def test_destination_mirrors_tree(self):
         folder = f"{R}/Censored/Censored HD/ABP-984 A - T (2020-06-12)"
         dest, why = core.archive_destination(folder, CEN, f"{R}/Archived")
