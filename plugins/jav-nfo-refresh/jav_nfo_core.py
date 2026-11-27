@@ -27,6 +27,7 @@ import os
 import re
 import time
 import shutil
+import tempfile
 import logging
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -58,7 +59,7 @@ JAVSTASH_DEFAULT_ENDPOINT = "https://javstash.org/graphql"
 # Short label written into <stashid endpoint="..."> -- update this if you
 # ever point --endpoint at a different stash-box instance.
 JAVSTASH_ENDPOINT_NAME = "javstash"
-DEFAULT_SEARCH_LIMIT = 5     # how many fuzzy searchScene candidates to pull
+DEFAULT_SEARCH_LIMIT = 5     # how many queryScenes candidates to pull per code form
 
 LIBREDMM_DEFAULT_BASE_URL = "https://www.libredmm.com"
 PROCESSING_WAIT_SOLE_SOURCE = 30  # --processing-wait default when libredmm is the first selected source
@@ -106,9 +107,15 @@ GENRE_SKIP = {
     "数量限定",               # limited quantity
 }
 
-SEARCH_SCENE_QUERY = """
-query SearchScene($term: String!, $limit: Int) {
-  searchScene(term: $term, limit: $limit) {
+# javstash's API rules: identify the client in User-Agent, use queryScenes
+# rather than searchScene(s), and stay under 60 requests a minute.
+USER_AGENT = "jav-nfo-refresh/1.5.0 (Stash plugin; personal, non-commercial; +https://github.com/org0ne/stash-plugins)"
+JAVSTASH_MIN_DELAY = 1.0     # seconds: 60 requests/minute, shared by every process
+
+QUERY_SCENES_QUERY = """
+query QueryScenes($code: String!, $limit: Int!) {
+  queryScenes(input: {code: {value: $code, modifier: INCLUDES}, per_page: $limit}) {
+    scenes {
     id
     title
     details
@@ -118,6 +125,7 @@ query SearchScene($term: String!, $limit: Int) {
     studio { name }
     urls { url }
     tags { name category { name } }
+    }
   }
 }
 """
@@ -442,6 +450,37 @@ class Throttle:
         self._last = time.monotonic()
 
 
+class SharedThrottle(Throttle):
+    """A Throttle every process on this machine shares, through a locked
+    timestamp file, so two runs at once still keep the combined gap."""
+
+    def __init__(self, delay: float, path: str):
+        super().__init__(delay)
+        self.path = path
+
+    def wait(self) -> None:
+        try:
+            import fcntl
+            fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o644)
+        except (ImportError, OSError) as exc:
+            log.debug("shared throttle unavailable (%s); throttling this process only", exc)
+            return super().wait()
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                last = float(os.read(fd, 64) or 0)
+            except ValueError:
+                last = 0.0
+            remaining = self.delay - (time.time() - last)
+            if 0 < remaining <= self.delay:     # a clock jump never stalls a run
+                time.sleep(remaining)
+            os.lseek(fd, 0, os.SEEK_SET)
+            os.ftruncate(fd, 0)
+            os.write(fd, repr(time.time()).encode())
+        finally:
+            os.close(fd)
+
+
 def retry_after_seconds(resp: requests.Response) -> float:
     """Retry-After for a 429 -- seconds if it's a plain integer, else a
     conservative 30s (HTTP-date form isn't worth parsing)."""
@@ -461,9 +500,15 @@ class JavstashClient:
         self.session.headers.update({
             "Content-Type": "application/json",
             "ApiKey": api_key,
+            "User-Agent": USER_AGENT,
         })
         self.timeout = timeout
-        self.throttle = Throttle(delay)
+        if delay < JAVSTASH_MIN_DELAY:
+            log.info("javstash allows 60 requests/minute: using a %.0fs request delay, not %gs",
+                     JAVSTASH_MIN_DELAY, delay)
+        self.throttle = SharedThrottle(
+            max(delay, JAVSTASH_MIN_DELAY),
+            os.path.join(tempfile.gettempdir(), "jav-nfo-refresh-javstash.throttle"))
 
     def _post(self, query: str, variables: Dict[str, Any]) -> Dict[str, Any]:
         last_exc = None
@@ -504,14 +549,14 @@ class JavstashClient:
         raise RuntimeError(f"javstash call failed after {MAX_RETRIES} attempts: {last_exc}")
 
     def _search_candidates(self, term: str, limit: int) -> List[Dict[str, Any]]:
-        data = self._post(SEARCH_SCENE_QUERY, {"term": term, "limit": limit})
-        return data.get("searchScene") or []
+        data = self._post(QUERY_SCENES_QUERY, {"code": term, "limit": limit})
+        return (data.get("queryScenes") or {}).get("scenes") or []
 
     def find_scene_by_code(self, code: str, limit: int) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
-        searchScene is a fuzzy text search -- there is no exact "code ="
-        filter available on this API, so we pull a handful of candidates
-        and require a normalized-code match ourselves. Every alternate
+        queryScenes filters on the code case-insensitively as a substring
+        (INCLUDES), so SONE-054 also finds SONE-0541: we pull a handful of
+        candidates and require a normalized-code match ourselves. Every alternate
         form of the code (see acceptable_code_forms) is both a search term
         and an acceptable match, since javstash sometimes stores a code
         with its numeric prefix or uncensored site suffix stripped.
@@ -538,10 +583,10 @@ class JavstashClient:
             seen_codes = [c.get("code") for c in all_candidates]
             detail = (
                 f"no code match (accepted forms: {acceptable_codes}) among "
-                f"{len(all_candidates)} fuzzy result(s); candidate codes: {seen_codes}"
+                f"{len(all_candidates)} result(s); candidate codes: {seen_codes}"
             )
         else:
-            detail = f"searchScene returned zero candidates for {acceptable_codes}"
+            detail = f"queryScenes returned zero candidates for {acceptable_codes}"
         return None, detail
 
 
@@ -582,7 +627,7 @@ class LibredmmClient:
         self.session = requests.Session()
         self.session.headers.update({
             "Accept": "application/json",
-            "User-Agent": "jav_nfo_refresh_unified/1.0",
+            "User-Agent": USER_AGENT,
         })
         self.timeout = timeout
         self.throttle = Throttle(delay)
@@ -855,7 +900,7 @@ class Jav321Client:
         self.session = requests.Session()
         self.session.headers.update({
             "Accept": "text/html",
-            "User-Agent": "jav_nfo_refresh_unified/1.0",
+            "User-Agent": USER_AGENT,
         })
         self.timeout = timeout
         self.throttle = Throttle(delay)

@@ -131,7 +131,7 @@ its URLs are merged rather than replacing the list.
 | Remove trigger tag when done | off | Removed after any terminal outcome; kept on source errors so the next run retries. |
 | Sources | all | Comma-separated subset of `javstash`, `libredmm`, `jav321`. Priority order is fixed. |
 | javstash API key | stash-box key | |
-| Request delay | 1 s | Per source, every HTTP call. |
+| Request delay | 1 s | Per source, every HTTP call. javstash never goes below 1 s: its rules allow 60 requests a minute, and the gap is shared by every run on the machine. |
 | libredmm processing wait | 30 s / 0 s | 30 when libredmm is the first selected source, else 0. |
 | Update release date | off | Scene date + NFO `premiered`/`releasedate`. |
 | Disable translation | off | Also skips genre tags, which are only written translated. |

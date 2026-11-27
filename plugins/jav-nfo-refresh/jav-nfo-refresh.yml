@@ -6,7 +6,7 @@ description: >
   genres as tags, and the same data mirrored into the .nfo sidecar next to
   the video file.
 url: https://github.com/org0ne/stash-plugins
-version: 1.4.1
+version: 1.5.0
 
 exec:
   - python
@@ -113,7 +113,7 @@ settings:
     type: STRING
   requestDelay:
     displayName: Request delay (seconds)
-    description: Minimum gap between consecutive requests to each source. Default 1.
+    description: Minimum gap between consecutive requests to each source. Default 1. javstash never goes below 1 (its 60 requests/minute limit, shared by every run).
     type: NUMBER
   libredmmProcessingWait:
     displayName: libredmm processing wait (seconds)
